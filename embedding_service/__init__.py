@@ -1,0 +1,1 @@
+# this file makes embedding_service a Python package

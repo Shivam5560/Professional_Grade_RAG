@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  embedding-service:
+    build: .
+    container_name: embedding-reranking-service
+    ports:
+      - "8001:8001"
+    environment:
+      - OLLAMA_MODEL=embeddinggemma
+      - RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+      - OLLAMA_HOST=http://localhost:11434
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    # Optional: Mount volume for Ollama models to persist
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:

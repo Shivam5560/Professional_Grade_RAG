@@ -1,0 +1,25 @@
+# this file describes your deployment on the lightning platform.
+name: embedding-service
+# select the compute resources for your deployment. t4-small provides 1 t4 gpu.
+# if you need different compute, check our docs for other options.
+compute: t4-small
+
+build:
+  # the context specifies the directory for building the docker image.
+  # the dockerfile should be located inside this directory or specified otherwise.
+  context: .
+  # optional: specify a custom dockerfile if it's not named 'Dockerfile' or is in a different location
+  # dockerfile: Dockerfile
+
+# the command to run your service.
+# this sequence starts ollama, pulls the model, and then starts your uvicorn server.
+command: |
+  ollama serve &
+  sleep 10
+  ollama pull embeddinggemma
+  uvicorn embedding_service.main:app --host 0.0.0.0 --port 8001
+
+# specify the ports your service exposes.
+# your uvicorn server runs on port 8001.
+ports:
+  - 8001
