@@ -44,18 +44,22 @@ class DocumentProcessor:
             chunk_overlap=self.chunk_overlap,
         )
     
-    def _generate_document_id(self, content: str, filename: str) -> str:
+    def _generate_document_id(self, content: str, filename: str, user_id: Optional[int] = None) -> str:
         """
-        Generate a unique document ID based on content hash.
+        Generate a unique document ID based on content hash and user_id.
+        This prevents collisions when different users upload the same file.
         
         Args:
             content: Document content
             filename: Document filename
+            user_id: User ID to ensure uniqueness across users
             
         Returns:
             Unique document identifier
         """
-        content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+        # Include user_id in hash to prevent collisions between different users
+        hash_input = f"{content}{filename}{user_id}" if user_id else content
+        content_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
         return f"doc_{content_hash}"
     
     async def extract_text_from_file(
@@ -130,14 +134,20 @@ class DocumentProcessor:
         Args:
             text: Raw text content
             filename: Source filename
-            metadata: Additional metadata
+            metadata: Additional metadata (must include user_id)
             
         Returns:
             Tuple of (document_id, list of TextNode objects)
         """
         try:
-            # Generate document ID
-            document_id = self._generate_document_id(text, filename)
+            # Ensure user_id is in metadata
+            if not metadata or "user_id" not in metadata:
+                raise ValueError("user_id is required in metadata for document processing")
+            
+            user_id = metadata.get("user_id")
+            
+            # Generate document ID with user_id to prevent collisions
+            document_id = self._generate_document_id(text, filename, user_id)
             
             # Create LlamaIndex Document
             doc_metadata = {
@@ -167,6 +177,7 @@ class DocumentProcessor:
                         "chunk_index": idx,
                     },
                     id_=f"{document_id}_chunk_{idx}",
+                    ref_doc_id=document_id,  # Set ref_doc_id during initialization
                 )
                 text_nodes.append(text_node)
             
@@ -176,6 +187,7 @@ class DocumentProcessor:
                 filename=filename,
                 num_chunks=len(text_nodes),
                 text_length=len(text),
+                user_id=metadata.get("user_id"),
             )
             
             return document_id, text_nodes
@@ -256,7 +268,7 @@ class DocumentProcessor:
     
     async def delete_document(self, document_id: str) -> bool:
         """
-        Delete a document and all its chunks.
+        Delete a document and all its chunks from both vector store and BM25 index.
         
         Args:
             document_id: Document identifier
@@ -269,15 +281,24 @@ class DocumentProcessor:
             vector_store = get_vector_store_service()
             vector_store.delete_document(document_id)
             
-            # Note: BM25 deletion would require rebuilding the index
-            # For now, we'll just log it
-            logger.warning(
-                "bm25_deletion_not_implemented",
-                document_id=document_id,
-                note="BM25 index should be rebuilt after deletions"
-            )
+            # Delete from BM25 index
+            from app.services.bm25_service import get_bm25_service
+            bm25_service = get_bm25_service()
+            bm25_success = bm25_service.delete_document(document_id)
             
-            logger.info("document_deleted", document_id=document_id)
+            if not bm25_success:
+                logger.warning(
+                    "bm25_deletion_partial_failure",
+                    document_id=document_id,
+                    note="Vector store deleted but BM25 deletion had issues"
+                )
+            
+            logger.info(
+                "document_deleted",
+                document_id=document_id,
+                vector_deleted=True,
+                bm25_deleted=bm25_success
+            )
             return True
             
         except Exception as e:

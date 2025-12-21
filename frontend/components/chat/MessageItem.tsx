@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { User, Bot, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatTimestamp } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -55,6 +56,22 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
             {formatTimestamp(message.timestamp)}
           </span>
         </div>
+
+        {/* Context file badges (Copilot-style) */}
+        {isUser && message.contextFiles && message.contextFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2 px-1">
+            {message.contextFiles.map((file) => (
+              <Badge
+                key={file.id}
+                variant="outline"
+                className="text-xs py-0.5 px-2 bg-cyan-500/10 text-cyan-300 border-cyan-500/30"
+              >
+                <FileText className="h-2.5 w-2.5 mr-1" />
+                {file.filename}
+              </Badge>
+            ))}
+          </div>
+        )}
 
         {/* Message content */}
         <div className={cn(

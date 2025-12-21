@@ -81,7 +81,9 @@ class RAGEngine:
         self,
         query: str,
         session_id: Optional[str] = None,
-        use_context: bool = True
+        use_context: bool = True,
+        user_id: Optional[int] = None,
+        context_document_ids: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Execute a RAG query.
@@ -90,6 +92,8 @@ class RAGEngine:
             query: User query
             session_id: Session identifier for context
             use_context: Whether to use conversation context
+            user_id: User ID to filter documents (user can only query their own documents)
+            context_document_ids: Specific document IDs to use as context (if provided, only these will be searched)
             
         Returns:
             Dictionary with answer, confidence, and sources
@@ -115,15 +119,103 @@ class RAGEngine:
                 session_id=session_id,
                 query_length=len(query),
                 reformulated_length=len(reformulated_query),
+                user_id=user_id,
+                context_document_ids=context_document_ids,
+                num_context_docs=len(context_document_ids) if context_document_ids else 0,
             )
             
-            # Lazy load the retriever (will check DB for existing documents)
-            retriever = self._ensure_retriever()
+            # Debug: Log exactly what we're searching for
+            logger.info(
+                "starting_hybrid_search",
+                user_id=user_id,
+                has_document_filter=context_document_ids is not None and len(context_document_ids) > 0,
+                document_ids_to_search=context_document_ids,
+                query_preview=reformulated_query[:100]
+            )
             
-            # Check if retriever is available (documents exist in DB)
-            if retriever is None:
-                logger.warning("no_documents_available", query=query)
-                answer = "I don't have any documents in my knowledge base yet. Please upload some documents first before asking questions."
+            # Step 1: Hybrid Retrieval (BM25 + Vector) with user_id and document_ids filter
+            from app.services.vector_store import get_vector_store_service
+            from app.services.bm25_service import get_bm25_service
+            
+            vector_store = get_vector_store_service()
+            bm25_service = get_bm25_service()
+            
+            # Get results from both retrievers
+            vector_nodes = vector_store.retrieve(
+                query=reformulated_query,
+                top_k=settings.top_k_retrieval,
+                similarity_threshold=settings.similarity_threshold,
+                user_id=user_id,
+                document_ids=context_document_ids
+            )
+            
+            logger.info(
+                "vector_search_complete",
+                num_results=len(vector_nodes),
+                expected=settings.top_k_retrieval,
+                threshold=settings.similarity_threshold
+            )
+            
+            bm25_nodes = bm25_service.search(
+                query=reformulated_query,
+                top_k=settings.top_k_retrieval,
+                user_id=user_id,
+                document_ids=context_document_ids
+            )
+            
+            logger.info(
+                "bm25_search_complete",
+                num_results=len(bm25_nodes),
+                expected=settings.top_k_retrieval
+            )
+            
+            # Merge results using simple score-based fusion
+            # Combine and deduplicate by node ID
+            node_dict = {}
+            for node in vector_nodes:
+                node_id = node.node.node_id
+                node_dict[node_id] = node
+            
+            for node in bm25_nodes:
+                node_id = node.node.node_id
+                if node_id in node_dict:
+                    # Average scores if node appears in both
+                    node_dict[node_id].score = (node_dict[node_id].score + node.score) / 2
+                else:
+                    node_dict[node_id] = node
+            
+            # Sort by combined score and take top_k
+            all_merged = sorted(
+                node_dict.values(),
+                key=lambda x: x.score or 0.0,
+                reverse=True
+            )
+            retrieved_nodes = all_merged[:settings.top_k_retrieval]
+            
+            # Debug: Check document distribution
+            doc_distribution = {}
+            for node in retrieved_nodes:
+                doc_id = node.node.metadata.get('document_id', 'unknown')
+                filename = node.node.metadata.get('filename', 'unknown')
+                doc_key = f"{filename} ({doc_id[:8]}...)"
+                doc_distribution[doc_key] = doc_distribution.get(doc_key, 0) + 1
+            
+            logger.info(
+                "hybrid_retrieval_complete",
+                vector_results=len(vector_nodes),
+                bm25_results=len(bm25_nodes),
+                total_unique=len(all_merged),
+                merged_results=len(retrieved_nodes),
+                top_k=settings.top_k_retrieval,
+                document_distribution=doc_distribution
+            )
+        
+            if not retrieved_nodes:
+                context_msg = ""
+                if context_document_ids and len(context_document_ids) > 0:
+                    context_msg = " in the selected documents"
+                logger.warning("no_nodes_retrieved", query=query, user_id=user_id, context_document_ids=context_document_ids)
+                answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
                 confidence_result = {
                     "confidence_score": 0.0,
                     "confidence_level": "low",
@@ -131,39 +223,45 @@ class RAGEngine:
                 }
                 sources = []
             else:
-                # Step 1: Hybrid Retrieval
-                from llama_index.core.schema import QueryBundle
-                query_bundle = QueryBundle(query_str=reformulated_query)
-                retrieved_nodes = retriever.retrieve(query_bundle)
-            
-                if not retrieved_nodes:
-                    logger.warning("no_nodes_retrieved", query=query)
-                    answer = "I don't have sufficient information in my knowledge base to answer this question accurately."
-                    confidence_result = {
-                        "confidence_score": 0.0,
-                        "confidence_level": "low",
-                        "breakdown": {}
-                    }
-                    sources = []
-                else:
-                    # Step 2: Reranking with LlamaIndex's SentenceTransformerRerank
-                    # This uses BGE reranker (cross-encoder) for better relevance scoring
-                    reranked_nodes = self.reranker._postprocess_nodes(
-                        retrieved_nodes,
-                        query_str=reformulated_query
-                    )
-                    
-                    # Step 3: Build context from nodes
-                    context_str = "\n\n".join([
-                        f"[Source: {node.node.metadata.get('filename', 'Unknown')}]\n{node.node.get_content()}"
-                        for node in reranked_nodes
-                    ])
-                    
-                    # Step 4: Get conversation history
-                    chat_history = self.context_manager.get_chat_messages(session_id)
-                    
-                    # Step 5: Generate response with system prompt
-                    prompt = f"""{PROFESSIONAL_SYSTEM_PROMPT}
+                # Step 2: Reranking with LlamaIndex's SentenceTransformerRerank
+                # This uses BGE reranker (cross-encoder) for better relevance scoring
+                logger.info(
+                    "reranking_started",
+                    num_nodes_to_rerank=len(retrieved_nodes),
+                    expected_top_n=settings.top_k_rerank
+                )
+                
+                reranked_nodes = self.reranker._postprocess_nodes(
+                    retrieved_nodes,
+                    query_str=reformulated_query
+                )
+                
+                # Debug: Check reranked distribution
+                reranked_doc_distribution = {}
+                for node in reranked_nodes:
+                    doc_id = node.node.metadata.get('document_id', 'unknown')
+                    filename = node.node.metadata.get('filename', 'unknown')
+                    doc_key = f"{filename} ({doc_id[:8]}...)"
+                    reranked_doc_distribution[doc_key] = reranked_doc_distribution.get(doc_key, 0) + 1
+                
+                logger.info(
+                    "reranking_complete",
+                    num_reranked=len(reranked_nodes),
+                    expected=settings.top_k_rerank,
+                    reranked_document_distribution=reranked_doc_distribution
+                )
+                
+                # Step 3: Build context from nodes
+                context_str = "\n\n".join([
+                    f"[Source: {node.node.metadata.get('filename', 'Unknown')}]\n{node.node.get_content()}"
+                    for node in reranked_nodes
+                ])
+                
+                # Step 4: Get conversation history
+                chat_history = self.context_manager.get_chat_messages(session_id)
+                
+                # Step 5: Generate response with system prompt
+                prompt = f"""{PROFESSIONAL_SYSTEM_PROMPT}
 
 Context from knowledge base:
 {context_str}
@@ -171,26 +269,26 @@ Context from knowledge base:
 User Question: {query}
 
 Provide a comprehensive answer based on the context above."""
-                    
-                    # Generate answer
-                    response = await self.llm.acomplete(prompt)
-                    answer = response.text.strip()
-                    
-                    # Extract LLM's self-assessment confidence from the answer
-                    llm_confidence = self._extract_llm_confidence(answer)
-                    # Remove the CONFIDENCE: XX line from the answer for cleaner display
-                    answer = self._clean_answer(answer)
-                    
-                    # Step 6: Extract sources
-                    sources = self._extract_sources(reranked_nodes)
-                    
-                    # Step 7: Calculate confidence
-                    confidence_result = self.confidence_scorer.calculate_confidence(
-                        query=query,
-                        nodes=reranked_nodes,
-                        answer=answer,
-                        llm_assessment=llm_confidence  # Pass LLM's self-assessment
-                    )
+                
+                # Generate answer
+                response = await self.llm.acomplete(prompt)
+                answer = response.text.strip()
+                
+                # Extract LLM's self-assessment confidence from the answer
+                llm_confidence = self._extract_llm_confidence(answer)
+                # Remove the CONFIDENCE: XX line from the answer for cleaner display
+                answer = self._clean_answer(answer)
+                
+                # Step 6: Extract sources
+                sources = self._extract_sources(reranked_nodes)
+                
+                # Step 7: Calculate confidence
+                confidence_result = self.confidence_scorer.calculate_confidence(
+                    query=query,
+                    nodes=reranked_nodes,
+                    answer=answer,
+                    llm_assessment=llm_confidence  # Pass LLM's self-assessment
+                )
             
             # Add assistant message to context
             self.context_manager.add_message(

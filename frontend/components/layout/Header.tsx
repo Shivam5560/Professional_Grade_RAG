@@ -1,7 +1,12 @@
+'use client';
+
 import { Brain, Bell, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { apiClient } from "@/lib/api";
+import type { PingResponse } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +19,34 @@ import {
 export function Header() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
+
+  // Ping services every 30 seconds
+  useEffect(() => {
+    const pingServices = async () => {
+      try {
+        const pingResult = await apiClient.pingServices();
+        setLastPingStatus(pingResult);
+      } catch (err) {
+        console.warn('[Header] Failed to ping services:', err);
+        setLastPingStatus({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          services: {},
+          summary: { total: 0, healthy: 0, unhealthy: 0 },
+          error: 'Failed to connect to backend'
+        });
+      }
+    };
+
+    // Initial ping
+    pingServices();
+
+    // Ping every 30 seconds
+    const pingInterval = setInterval(pingServices, 30 * 1000);
+
+    return () => clearInterval(pingInterval);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -32,6 +65,47 @@ export function Header() {
       </div>
       
       <div className="flex items-center gap-3">
+        {/* Service Status Badges */}
+        {lastPingStatus && (
+          <div className="flex items-center gap-1.5 mr-2">
+            {lastPingStatus.services.embedding && (
+              <div className={`h-2 w-2 rounded-full transition-all ${
+                lastPingStatus.services.embedding.status === 'healthy' 
+                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
+                  : 'bg-red-400 shadow-sm shadow-red-400/50'
+              }`} title="Embedding Service" />
+            )}
+            {lastPingStatus.services.reranker && (
+              <div className={`h-2 w-2 rounded-full transition-all ${
+                lastPingStatus.services.reranker.status === 'healthy' 
+                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
+                  : 'bg-red-400 shadow-sm shadow-red-400/50'
+              }`} title="Reranker Service" />
+            )}
+            {lastPingStatus.services.llm && (
+              <div className={`h-2 w-2 rounded-full transition-all ${
+                lastPingStatus.services.llm.status === 'healthy' 
+                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
+                  : 'bg-red-400 shadow-sm shadow-red-400/50'
+              }`} title="LLM Service" />
+            )}
+            {lastPingStatus.services.database && (
+              <div className={`h-2 w-2 rounded-full transition-all ${
+                lastPingStatus.services.database.status === 'healthy' 
+                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
+                  : 'bg-red-400 shadow-sm shadow-red-400/50'
+              }`} title="Database" />
+            )}
+            {lastPingStatus.services.bm25 && (
+              <div className={`h-2 w-2 rounded-full transition-all ${
+                lastPingStatus.services.bm25.status === 'healthy' 
+                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
+                  : 'bg-red-400 shadow-sm shadow-red-400/50'
+              }`} title="BM25 Service" />
+            )}
+          </div>
+        )}
+        
         <Button 
           variant="ghost" 
           size="icon" 

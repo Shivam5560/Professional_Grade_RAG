@@ -179,7 +179,9 @@ class VectorStoreService:
         self, 
         query: str, 
         top_k: int = 10,
-        similarity_threshold: Optional[float] = None
+        similarity_threshold: Optional[float] = None,
+        user_id: Optional[int] = None,
+        document_ids: Optional[List[str]] = None
     ) -> List[NodeWithScore]:
         """
         Retrieve relevant nodes for a query.
@@ -188,6 +190,8 @@ class VectorStoreService:
             query: Search query
             top_k: Number of results to return
             similarity_threshold: Minimum similarity score
+            user_id: Filter results by user_id (if provided)
+            document_ids: Filter results by specific document IDs (if provided)
             
         Returns:
             List of NodeWithScore objects
@@ -198,24 +202,90 @@ class VectorStoreService:
             return []
         
         try:
-            retriever = index.as_retriever(
-                similarity_top_k=top_k,
-            )
+            # Create retriever with metadata filters if needed
+            filters_list = []
+            
+            # Add user_id filter
+            if user_id is not None:
+                from llama_index.core.vector_stores import ExactMatchFilter
+                filters_list.append(ExactMatchFilter(key="user_id", value=str(user_id)))
+            
+            # Add document_ids filter (if specific documents selected)
+            if document_ids is not None and len(document_ids) > 0:
+                # For multiple document IDs, we need to use metadata filtering
+                # LlamaIndex supports filtering, but for multiple values we'll filter post-retrieval
+                # Or we can retrieve more and filter in memory
+                pass
+            
+            if filters_list:
+                from llama_index.core.vector_stores import MetadataFilters
+                
+                filters = MetadataFilters(filters=filters_list)
+                
+                retriever = index.as_retriever(
+                    similarity_top_k=top_k * 2 if document_ids else top_k,  # Get more if we need to filter
+                    filters=filters,
+                )
+                
+                logger.info(
+                    "vector_retrieval_with_filters",
+                    user_id=user_id,
+                    document_ids=document_ids,
+                    top_k=top_k,
+                )
+            else:
+                retriever = index.as_retriever(
+                    similarity_top_k=top_k * 2 if document_ids else top_k,
+                )
             
             nodes = retriever.retrieve(query)
             
-            # Filter by similarity threshold if provided
+            # Post-filter by document_ids if specified
+            if document_ids is not None and len(document_ids) > 0:
+                original_count = len(nodes)
+                
+                # Debug: Log what we're checking
+                if nodes:
+                    sample_node = nodes[0].node
+                    logger.info(
+                        "debug_node_structure",
+                        ref_doc_id=sample_node.ref_doc_id,
+                        metadata_keys=list(sample_node.metadata.keys()) if sample_node.metadata else [],
+                        metadata_document_id=sample_node.metadata.get("document_id") if sample_node.metadata else None,
+                    )
+                
+                # Filter by document_id in metadata (ref_doc_id is not stored in pgvector)
+                filtered_nodes = [
+                    node for node in nodes
+                    if node.node.metadata.get("document_id") in document_ids
+                ]
+                
+                logger.info(
+                    "filtered_by_document_ids",
+                    original_count=original_count,
+                    filtered_count=len(filtered_nodes),
+                    document_ids=document_ids
+                )
+                
+                nodes = filtered_nodes
+            
+            # Filter by similarity threshold BEFORE trimming (if provided)
             if similarity_threshold is not None:
                 nodes = [
                     node for node in nodes 
                     if node.score and node.score >= similarity_threshold
                 ]
             
+            # Trim to top_k after filtering
+            nodes = nodes[:top_k]
+            
             logger.info(
                 "vector_retrieval_complete",
                 query_length=len(query),
                 num_results=len(nodes),
                 top_k=top_k,
+                user_filtered=user_id is not None,
+                document_filtered=document_ids is not None,
             )
             
             return nodes
@@ -251,6 +321,38 @@ class VectorStoreService:
         except Exception as e:
             logger.error("document_deletion_failed", error=str(e), document_id=document_id)
             return False
+    
+    def get_document_vector_count(self, document_id: str) -> int:
+        """
+        Get the number of vectors for a specific document.
+        
+        Args:
+            document_id: Document identifier
+            
+        Returns:
+            Number of vectors/chunks for the document
+        """
+        try:
+            index = self.get_index()
+            if not index:
+                return 0
+            
+            # Query the docstore for document info
+            docstore = index.docstore
+            if hasattr(docstore, 'get_all_document_hashes'):
+                # Check if document exists
+                doc_hashes = docstore.get_all_document_hashes()
+                if document_id in doc_hashes:
+                    # Get all nodes for this document
+                    ref_doc_info = index.ref_doc_info.get(document_id)
+                    if ref_doc_info:
+                        return len(ref_doc_info.node_ids)
+            
+            return 0
+            
+        except Exception as e:
+            logger.error("failed_to_get_document_vector_count", error=str(e), document_id=document_id)
+            return 0
     
     def get_collection_stats(self) -> Dict[str, Any]:
         """

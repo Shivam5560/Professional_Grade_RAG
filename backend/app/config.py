@@ -54,9 +54,9 @@ class Settings(BaseSettings):
     # RAG Configuration
     chunk_size: int = Field(default=512, alias="CHUNK_SIZE")
     chunk_overlap: int = Field(default=128, alias="CHUNK_OVERLAP")
-    top_k_retrieval: int = Field(default=10, alias="TOP_K_RETRIEVAL")
-    top_k_rerank: int = Field(default=5, alias="TOP_K_RERANK")
-    similarity_threshold: float = Field(default=0.7, alias="SIMILARITY_THRESHOLD")
+    top_k_retrieval: int = Field(default=15, alias="TOP_K_RETRIEVAL")  # Retrieve top 15 nodes from all selected documents
+    top_k_rerank: int = Field(default=5, alias="TOP_K_RERANK")  # Rerank to top 5 most relevant
+    similarity_threshold: float = Field(default=0.3, alias="SIMILARITY_THRESHOLD")  # Lower threshold - let reranker filter quality
     
     # Chat Configuration
     max_chat_history: int = Field(default=10, alias="MAX_CHAT_HISTORY")

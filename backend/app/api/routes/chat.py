@@ -75,13 +75,18 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             query=request.query,
             session_id=session_id,
             stream=request.stream,
+            user_id=request.user_id,
+            context_document_ids=request.context_document_ids,
+            num_context_docs=len(request.context_document_ids) if request.context_document_ids else 0,
         )
         
-        # Execute query
+        # Execute query with user_id filter and optional context documents
         result = await rag_engine.query(
             query=request.query,
             session_id=session_id,
-            use_context=True
+            use_context=True,
+            user_id=request.user_id,  # Pass user_id to filter documents
+            context_document_ids=request.context_document_ids  # Pass selected document IDs
         )
         
         # Save assistant message

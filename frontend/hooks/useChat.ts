@@ -15,17 +15,22 @@ export function useChat(initialSessionId?: string) {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
 
-  const sendMessage = useCallback(async (query: string) => {
+  const sendMessage = useCallback(async (
+    query: string, 
+    contextDocumentIds?: string[],
+    contextFiles?: { id: string; filename: string }[]
+  ) => {
     if (!query.trim()) return;
 
     setIsLoading(true);
     setError(null);
 
-    // Add user message immediately
+    // Add user message immediately with context files
     const userMessage: Message = {
       role: 'user',
       content: query,
       timestamp: new Date().toISOString(),
+      contextFiles: contextFiles,  // Store which files were used
     };
     setMessages(prev => [...prev, userMessage]);
 
@@ -35,6 +40,7 @@ export function useChat(initialSessionId?: string) {
         query,
         session_id: sessionId,
         user_id: user?.id, // Include user_id if user is logged in
+        context_document_ids: contextDocumentIds,
       });
 
       // Add assistant message
@@ -102,7 +108,13 @@ export function useChat(initialSessionId?: string) {
         setSessionId(sessionIdToLoad);
       }
       
-      setMessages(history.messages);
+      // Convert ChatMessage to Message format
+      const convertedMessages: Message[] = history.messages.map(msg => ({
+        ...msg,
+        timestamp: msg.created_at,
+      }));
+      
+      setMessages(convertedMessages);
     } catch (err) {
       console.error('Failed to load history:', err);
     }

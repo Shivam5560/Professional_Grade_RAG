@@ -17,22 +17,33 @@ logger = get_logger(__name__)
 class BM25Retriever(BaseRetriever):
     """Wrapper to make BM25Service compatible with LlamaIndex retrievers."""
     
-    def __init__(self, top_k: int = 10):
+    def __init__(
+        self, 
+        top_k: int = 10,
+        user_id: Optional[int] = None,
+        document_ids: Optional[List[str]] = None
+    ):
         super().__init__()
         self.top_k = top_k
+        self.user_id = user_id
+        self.document_ids = document_ids
         self.bm25_service = get_bm25_service()
     
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
-        """Retrieve nodes using BM25."""
+        """Retrieve nodes using BM25 with optional filters."""
         return self.bm25_service.search(
             query=query_bundle.query_str,
-            top_k=self.top_k
+            top_k=self.top_k,
+            user_id=self.user_id,
+            document_ids=self.document_ids
         )
 
 
 def get_hybrid_retriever(
     top_k: Optional[int] = None,
-    similarity_threshold: Optional[float] = None
+    similarity_threshold: Optional[float] = None,
+    user_id: Optional[int] = None,
+    document_ids: Optional[List[str]] = None
 ) -> Optional[QueryFusionRetriever]:
     """
     Create a hybrid retriever using LlamaIndex's QueryFusionRetriever.
@@ -43,6 +54,8 @@ def get_hybrid_retriever(
     Args:
         top_k: Number of results to return (default from config)
         similarity_threshold: Minimum similarity score (default from config)
+        user_id: Filter results by user ID
+        document_ids: Filter results by specific document IDs
         
     Returns:
         QueryFusionRetriever instance or None if no documents exist
@@ -67,8 +80,12 @@ def get_hybrid_retriever(
         similarity_top_k=top_k,
     )
     
-    # Create BM25 retriever
-    bm25_retriever = BM25Retriever(top_k=top_k)
+    # Create BM25 retriever with filters
+    bm25_retriever = BM25Retriever(
+        top_k=top_k,
+        user_id=user_id,
+        document_ids=document_ids
+    )
     
     # Use LlamaIndex's QueryFusionRetriever for automatic hybrid search
     # It handles RRF (Reciprocal Rank Fusion) automatically
@@ -84,6 +101,8 @@ def get_hybrid_retriever(
         "hybrid_retriever_initialized",
         top_k=top_k,
         similarity_threshold=similarity_threshold,
+        user_id=user_id,
+        num_document_filters=len(document_ids) if document_ids else 0,
         mode="query_fusion_with_rrf",
         type="QueryFusionRetriever"
     )

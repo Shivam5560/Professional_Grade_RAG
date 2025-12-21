@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw } from "lucide-react";
+import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useEffect, useState, useCallback } from "react";
 import { apiClient } from "@/lib/api";
 import { ChatSession } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -15,6 +16,7 @@ interface SidebarProps {
 
 export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarProps) {
   const { user } = useAuthStore();
+  const router = useRouter();
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -138,6 +140,14 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
 
       <div className="mt-auto p-4 border-t border-slate-800/50">
         <div className="space-y-1">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start gap-2 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all"
+            onClick={() => router.push('/knowledge-base')}
+          >
+            <Database className="h-4 w-4" />
+            Knowledge Base
+          </Button>
           <Button variant="ghost" className="w-full justify-start gap-2 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-lg transition-all">
             <Settings className="h-4 w-4" />
             Settings

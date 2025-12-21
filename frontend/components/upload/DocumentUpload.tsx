@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Upload, X, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useAuthStore } from '@/lib/store';
 
 // Configuration constants
 const MAX_FILE_SIZE_MB = 200;
@@ -28,6 +29,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuthStore();
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file size
@@ -90,6 +92,17 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
 
   const uploadFiles = async (filesToUpload: UploadedFile[]) => {
     if (filesToUpload.length === 0) return;
+    
+    // Check if user is logged in
+    if (!user) {
+      setFiles(prev => prev.map(f => ({
+        ...f,
+        status: 'error',
+        message: 'Please log in to upload documents'
+      })));
+      setIsUploading(false);
+      return;
+    }
 
     setIsUploading(true);
     let successCount = 0;
@@ -105,6 +118,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       try {
         const formData = new FormData();
         formData.append('file', currentFile.file);
+        formData.append('user_id', user.id.toString());
         formData.append('title', currentFile.file.name);
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/documents/upload`, {
@@ -287,7 +301,8 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         <div className="text-xs text-zinc-500 space-y-1">
           <p>• Supported formats: TXT, PDF, DOC, DOCX, MD</p>
           <p>• Files are chunked and embedded for semantic search</p>
-          <p>• Original files are not stored after processing</p>
+          <p>• You can only query documents you've uploaded</p>
+          <p>• Manage your documents in the Knowledge Base section</p>
         </div>
       </CardContent>
     </Card>
