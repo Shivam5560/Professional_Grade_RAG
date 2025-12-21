@@ -35,24 +35,9 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<DocumentInfo[]>([]);
+  // Default to healthy to prevent unnecessary health check API calls
+  // Status is updated based on actual chat request success/failure
   const [servicesHealthy, setServicesHealthy] = useState(true);
-
-  // Check service health
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const health = await apiClient.checkHealth();
-        const isHealthy = health.status === 'healthy' || health.status === 'degraded';
-        setServicesHealthy(isHealthy);
-      } catch (err) {
-        setServicesHealthy(false);
-      }
-    };
-
-    checkHealth();
-    const healthInterval = setInterval(checkHealth, 30000);
-    return () => clearInterval(healthInterval);
-  }, []);
 
   // Debug: Log when messages or sessionId changes
   useEffect(() => {
@@ -93,9 +78,15 @@ export function ChatInterface({
       const response = await sendMessage(message, contextIds, contextFilesInfo);
       if (response && response.sources) {
         setLatestSources(response.sources);
+        // Chat request succeeded - mark services as healthy and notify Header
+        setServicesHealthy(true);
+        window.dispatchEvent(new CustomEvent('llm-health-update', { detail: { healthy: true } }));
       }
     } catch (err) {
       console.error('Failed to send message:', err);
+      // Chat request failed - mark services as unhealthy and notify Header
+      setServicesHealthy(false);
+      window.dispatchEvent(new CustomEvent('llm-health-update', { detail: { healthy: false } }));
     }
   };
 

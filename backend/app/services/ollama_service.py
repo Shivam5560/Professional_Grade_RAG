@@ -4,6 +4,7 @@ Wraps Ollama API calls for embedding generation in the RAG system.
 Note: LLM functionality has been moved to Groq service.
 """
 
+import time
 from typing import List, Optional
 import httpx
 from llama_index.embeddings.ollama import OllamaEmbedding
@@ -29,6 +30,11 @@ class OllamaService:
             embed_batch_size=10,  # Explicitly set batch size
         )
         
+        # Health check caching to prevent excessive API calls
+        self._last_health_check: Optional[float] = None
+        self._last_health_status: bool = True
+        self._health_check_cache_duration: int = 60  # Cache for 60 seconds
+        
         logger.info(
             "ollama_service_initialized",
             embedding_model=self.embedding_model,
@@ -37,16 +43,41 @@ class OllamaService:
     async def check_health(self) -> bool:
         """
         Check if Ollama service is available.
+        Uses caching to prevent excessive API calls during health checks.
         
         Returns:
             True if service is healthy
         """
+        # Check if we have a recent cached result
+        current_time = time.time()
+        if (self._last_health_check is not None and 
+            (current_time - self._last_health_check) < self._health_check_cache_duration):
+            logger.debug(
+                "ollama_health_check_cached",
+                cached_status=self._last_health_status,
+                seconds_since_check=int(current_time - self._last_health_check)
+            )
+            return self._last_health_status
+        
+        # Perform actual health check
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/api/tags", timeout=5.0)
-                return response.status_code == 200
+                is_healthy = response.status_code == 200
+                
+                # Update cache
+                self._last_health_check = current_time
+                self._last_health_status = is_healthy
+                
+                logger.info("ollama_health_check_performed", status=is_healthy)
+                return is_healthy
         except Exception as e:
             logger.error("ollama_health_check_failed", error=str(e))
+            
+            # Update cache with failure
+            self._last_health_check = current_time
+            self._last_health_status = False
+            
             return False
     
     async def list_models(self) -> List[str]:

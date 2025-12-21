@@ -3,6 +3,7 @@ Groq service for LLM inference.
 Wraps Groq API calls using LlamaIndex for the RAG system.
 """
 
+import time
 from typing import Optional
 from llama_index.llms.groq import Groq
 from app.config import settings
@@ -31,6 +32,11 @@ class GroqService:
             max_tokens=4096,
         )
         
+        # Health check caching to prevent excessive API calls
+        self._last_health_check: Optional[float] = None
+        self._last_health_status: bool = True
+        self._health_check_cache_duration: int = 60  # Cache for 60 seconds
+        
         logger.info(
             "groq_service_initialized",
             model=self.model,
@@ -47,17 +53,42 @@ class GroqService:
     
     async def check_health(self) -> bool:
         """
-        Check if Groq service is available by attempting a simple completion.
+        Check if Groq service is available.
+        Uses caching to prevent excessive API calls during health checks.
         
         Returns:
             True if service is healthy
         """
+        # Check if we have a recent cached result
+        current_time = time.time()
+        if (self._last_health_check is not None and 
+            (current_time - self._last_health_check) < self._health_check_cache_duration):
+            logger.debug(
+                "groq_health_check_cached",
+                cached_status=self._last_health_status,
+                seconds_since_check=int(current_time - self._last_health_check)
+            )
+            return self._last_health_status
+        
+        # Perform actual health check
         try:
             # Try a minimal completion to verify API key and service availability
             response = await self.llm.acomplete("Hello")
-            return bool(response.text)
+            is_healthy = bool(response.text)
+            
+            # Update cache
+            self._last_health_check = current_time
+            self._last_health_status = is_healthy
+            
+            logger.info("groq_health_check_performed", status=is_healthy)
+            return is_healthy
         except Exception as e:
             logger.error("groq_health_check_failed", error=str(e))
+            
+            # Update cache with failure
+            self._last_health_check = current_time
+            self._last_health_status = False
+            
             return False
 
 

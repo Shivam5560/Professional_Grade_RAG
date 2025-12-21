@@ -20,21 +20,38 @@ export function Header() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
+  const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
 
-  // Ping services every 30 seconds
+  // Poll services (excluding LLM health check) every 60 seconds
   useEffect(() => {
     const pingServices = async () => {
       try {
         const pingResult = await apiClient.pingServices();
-        setLastPingStatus(pingResult);
+        // Update services but override LLM status with our tracked status
+        setLastPingStatus({
+          ...pingResult,
+          services: {
+            ...pingResult.services,
+            llm: {
+              type: pingResult.services.llm?.type || 'groq',
+              status: llmHealthy ? 'healthy' : 'unhealthy',
+              model: pingResult.services.llm?.model
+            }
+          }
+        });
       } catch (err) {
         console.warn('[Header] Failed to ping services:', err);
         setLastPingStatus({
           status: 'unhealthy',
           timestamp: new Date().toISOString(),
-          services: {},
-          summary: { total: 0, healthy: 0, unhealthy: 0 },
-          error: 'Failed to connect to backend'
+          services: {
+            embedding: { type: 'unknown', status: 'unhealthy' },
+            reranker: { type: 'unknown', status: 'unhealthy' },
+            llm: { type: 'unknown', status: llmHealthy ? 'healthy' : 'unhealthy' },
+            database: { type: 'unknown', status: 'unhealthy' },
+            bm25: { type: 'unknown', status: 'unhealthy' }
+          },
+          summary: { total: 5, healthy: 0, unhealthy: 5 }
         });
       }
     };
@@ -42,11 +59,20 @@ export function Header() {
     // Initial ping
     pingServices();
 
-    // Ping every 30 seconds
-    const pingInterval = setInterval(pingServices, 30 * 1000);
+    // Poll every 60 seconds
+    const pingInterval = setInterval(pingServices, 60 * 1000);
 
-    return () => clearInterval(pingInterval);
-  }, []);
+    // Listen for custom events from chat component about LLM health
+    const handleLlmHealth = (event: any) => {
+      setLlmHealthy(event.detail.healthy);
+    };
+    window.addEventListener('llm-health-update', handleLlmHealth);
+
+    return () => {
+      clearInterval(pingInterval);
+      window.removeEventListener('llm-health-update', handleLlmHealth);
+    };
+  }, [llmHealthy]);
 
   const handleLogout = () => {
     logout();

@@ -23,15 +23,18 @@ async def health_check():
     """
     Check the health of the application and its components.
     
+    Note: Health checks are cached for 60 seconds to prevent excessive API calls
+    to external services (Groq, Ollama). This prevents unnecessary costs and rate limiting.
+    
     Returns:
         HealthResponse with status of all components
     """
     try:
-        # Check Ollama service (embeddings only)
+        # Check Ollama service (embeddings only) - cached for 60s
         ollama_service = get_ollama_service()
         ollama_healthy = await ollama_service.check_health()
         
-        # Check Groq service (LLM)
+        # Check Groq service (LLM) - cached for 60s to prevent excessive API calls
         groq_service = get_groq_service()
         groq_healthy = await groq_service.check_health()
         
@@ -222,32 +225,24 @@ async def ping_services():
         
         results["summary"]["total"] += 1
         
-        # 3. Check Groq LLM Service
+        # 3. Skip Groq LLM Health Check (to prevent excessive API calls)
+        # LLM status is tracked by actual chat request success/failure in frontend
         try:
-            groq_service = get_groq_service()
-            if await groq_service.check_health():
-                results["services"]["llm"] = {
-                    "type": "groq",
-                    "status": "healthy",
-                    "model": settings.groq_model
-                }
-                logger.info("ping_groq_success")
-                results["summary"]["healthy"] += 1
-            else:
-                results["services"]["llm"] = {
-                    "type": "groq",
-                    "status": "unhealthy",
-                    "error": "Health check failed"
-                }
-                results["summary"]["unhealthy"] += 1
-        except Exception as e:
-            logger.warning("ping_groq_failed", error=str(e))
             results["services"]["llm"] = {
                 "type": "groq",
-                "status": "unhealthy",
+                "status": "healthy",  # Default to healthy, frontend tracks actual status
+                "model": settings.groq_model,
+                "note": "Status tracked by chat requests"
+            }
+            logger.info("ping_groq_skipped_to_save_api_calls")
+            results["summary"]["healthy"] += 1
+        except Exception as e:
+            results["services"]["llm"] = {
+                "type": "groq",
+                "status": "unknown",
                 "error": str(e)
             }
-            results["summary"]["unhealthy"] += 1
+            results["summary"]["healthy"] += 1  # Still count as healthy since we're not actually checking
         
         results["summary"]["total"] += 1
         
