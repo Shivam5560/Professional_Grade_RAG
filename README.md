@@ -225,17 +225,12 @@ MIT License - See LICENSE file for details
 
 - **LlamaIndex**: RAG orchestration framework
 - **Ollama**: Local LLM inference
-- **ChromaDB**: Vector database
+- **Groq**: Cloud LLM inferenece
+- **Postgres**: pgvector database
+- **mxbai-rerankers: Cross-encoder models for reranking
 - **shadcn/ui**: UI component library
 - **FastAPI**: Modern Python web framework
 - **Next.js**: React framework
-
-## 📞 Support
-
-For issues and questions:
-1. Check the troubleshooting section
-2. Review logs: `docker-compose logs`
-3. Consult `PLAN.md` for architecture details
 
 ---
 
