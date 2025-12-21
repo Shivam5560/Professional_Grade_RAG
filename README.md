@@ -1,4 +1,4 @@
-m# Professional-Grade RAG System
+# Professional-Grade RAG System
 
 A production-ready Retrieval-Augmented Generation (RAG) system with advanced features including hybrid search, confidence scoring, and conversational context management.
 
