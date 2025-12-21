@@ -11,12 +11,15 @@ Deploy on Lightning.ai or any cloud platform.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
 import structlog
 from sentence_transformers import CrossEncoder
 import ollama
 import os
+import asyncio
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Configure structured logging
 structlog.configure(
@@ -33,10 +36,21 @@ logger = structlog.get_logger()
 reranker_model = None
 ollama_client = None
 
+# Global metrics tracking
+embedding_metrics = {
+    "total_requests": 0,
+    "total_texts_processed": 0,
+    "total_time_seconds": 0.0,
+    "failed_requests": 0,
+    "average_batch_time": 0.0,
+}
+
 # Configuration
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "embeddinggemma")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "mixedbread-ai/mxbai-rerank-large-v2")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
+MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "5"))
 
 
 @asynccontextmanager
@@ -125,6 +139,100 @@ class RerankResponse(BaseModel):
     model: str = Field(..., description="Model used for reranking")
 
 
+# Helper functions for batch processing
+async def get_single_embedding_with_retry(text: str, model: str, semaphore: asyncio.Semaphore) -> List[float]:
+    """
+    Get embedding for a single text with retry logic and concurrency control.
+    
+    Args:
+        text: Text to embed
+        model: Model name
+        semaphore: Semaphore for concurrency control
+        
+    Returns:
+        Embedding vector
+    """
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(Exception),
+        reraise=True
+    )
+    async def _get_embedding():
+        async with semaphore:
+            # Run ollama call in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: ollama_client.embeddings(model=model, prompt=text)
+            )
+            return response['embedding']
+    
+    return await _get_embedding()
+
+
+async def process_embeddings_in_batches(texts: List[str], model: str) -> List[List[float]]:
+    """
+    Process embeddings in batches with parallel execution.
+    
+    Args:
+        texts: List of texts to embed
+        model: Model name
+        
+    Returns:
+        List of embedding vectors
+    """
+    start_time = time.time()
+    all_embeddings = []
+    
+    # Create semaphore to limit concurrent requests
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    
+    # Process in batches
+    for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        batch = texts[i:i + EMBEDDING_BATCH_SIZE]
+        batch_start = time.time()
+        
+        logger.info(
+            "processing_batch",
+            batch_num=i // EMBEDDING_BATCH_SIZE + 1,
+            batch_size=len(batch),
+            total_batches=(len(texts) + EMBEDDING_BATCH_SIZE - 1) // EMBEDDING_BATCH_SIZE
+        )
+        
+        # Process batch in parallel
+        tasks = [get_single_embedding_with_retry(text, model, semaphore) for text in batch]
+        batch_embeddings = await asyncio.gather(*tasks)
+        all_embeddings.extend(batch_embeddings)
+        
+        batch_time = time.time() - batch_start
+        logger.info(
+            "batch_complete",
+            batch_size=len(batch),
+            time_seconds=round(batch_time, 2),
+            texts_per_second=round(len(batch) / batch_time, 2)
+        )
+    
+    total_time = time.time() - start_time
+    
+    # Update metrics
+    embedding_metrics["total_requests"] += 1
+    embedding_metrics["total_texts_processed"] += len(texts)
+    embedding_metrics["total_time_seconds"] += total_time
+    embedding_metrics["average_batch_time"] = (
+        embedding_metrics["total_time_seconds"] / embedding_metrics["total_requests"]
+    )
+    
+    logger.info(
+        "all_embeddings_complete",
+        total_texts=len(texts),
+        total_time_seconds=round(total_time, 2),
+        texts_per_second=round(len(texts) / total_time, 2)
+    )
+    
+    return all_embeddings
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -133,14 +241,22 @@ async def health_check():
         "ollama_available": ollama_client is not None,
         "reranker_available": reranker_model is not None,
         "ollama_model": OLLAMA_MODEL,
-        "reranker_model": RERANKER_MODEL
+        "reranker_model": RERANKER_MODEL,
+        "batch_size": EMBEDDING_BATCH_SIZE,
+        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS
     }
 
 
 @app.post("/api/v1/embeddings", response_model=EmbeddingResponse)
 async def create_embeddings(request: EmbeddingRequest):
     """
-    Generate embeddings for input texts using Ollama.
+    Generate embeddings for input texts using Ollama with batch processing.
+    
+    Optimizations:
+    - Processes texts in configurable batches (default 10)
+    - Parallel execution within batches with concurrency control
+    - Automatic retry with exponential backoff
+    - Performance metrics tracking
     
     Args:
         request: EmbeddingRequest with texts to embed
@@ -153,25 +269,21 @@ async def create_embeddings(request: EmbeddingRequest):
     
     try:
         model = request.model or OLLAMA_MODEL
-        embeddings = []
         
         logger.info(
-            "embedding_request",
+            "embedding_request_received",
             num_texts=len(request.texts),
-            model=model
+            model=model,
+            batch_size=EMBEDDING_BATCH_SIZE
         )
         
-        for text in request.texts:
-            response = ollama_client.embeddings(
-                model=model,
-                prompt=text
-            )
-            embeddings.append(response['embedding'])
+        # Process embeddings in batches with parallel execution
+        embeddings = await process_embeddings_in_batches(request.texts, model)
         
         dimension = len(embeddings[0]) if embeddings else 0
         
         logger.info(
-            "embeddings_generated",
+            "embeddings_generated_successfully",
             count=len(embeddings),
             dimension=dimension
         )
@@ -183,7 +295,8 @@ async def create_embeddings(request: EmbeddingRequest):
         )
         
     except Exception as e:
-        logger.error("embedding_failed", error=str(e))
+        embedding_metrics["failed_requests"] += 1
+        logger.error("embedding_failed", error=str(e), error_type=type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
 
 
@@ -259,6 +372,38 @@ async def list_models():
         "reranker_model": RERANKER_MODEL,
         "default_embedding_model": OLLAMA_MODEL
     }
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Get performance metrics for the embedding service.
+    
+    Returns:
+        Performance metrics including throughput and latency statistics
+    """
+    metrics = embedding_metrics.copy()
+    
+    # Calculate additional metrics
+    if metrics["total_requests"] > 0:
+        metrics["average_texts_per_request"] = round(
+            metrics["total_texts_processed"] / metrics["total_requests"], 2
+        )
+        metrics["average_texts_per_second"] = round(
+            metrics["total_texts_processed"] / metrics["total_time_seconds"], 2
+        ) if metrics["total_time_seconds"] > 0 else 0
+    else:
+        metrics["average_texts_per_request"] = 0
+        metrics["average_texts_per_second"] = 0
+    
+    metrics["configuration"] = {
+        "batch_size": EMBEDDING_BATCH_SIZE,
+        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
+        "ollama_model": OLLAMA_MODEL,
+        "reranker_model": RERANKER_MODEL
+    }
+    
+    return metrics
 
 
 if __name__ == "__main__":

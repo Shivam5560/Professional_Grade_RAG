@@ -5,9 +5,12 @@ Connects to Lightning.ai hosted embedding and reranking service
 
 from typing import List, Optional
 import httpx
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import PrivateAttr
 from app.utils.logger import get_logger
+from app.config import settings
 
 logger = get_logger(__name__)
 
@@ -21,11 +24,13 @@ class RemoteEmbeddingService(BaseEmbedding):
     
     _base_url: str = PrivateAttr()
     _model_name: str = PrivateAttr()
+    _embed_batch_size: int = PrivateAttr()
     
     def __init__(
         self,
         base_url: str,
         model_name: str = "embeddinggemma",
+        embed_batch_size: Optional[int] = None,
         **kwargs
     ):
         """
@@ -34,15 +39,18 @@ class RemoteEmbeddingService(BaseEmbedding):
         Args:
             base_url: Base URL of the remote service
             model_name: Name of the embedding model to use
+            embed_batch_size: Batch size for embedding requests (default from settings)
         """
         super().__init__(**kwargs)
         self._base_url = base_url.rstrip('/')
         self._model_name = model_name
+        self._embed_batch_size = embed_batch_size or settings.embedding_batch_size
         
         logger.info(
             "remote_embedding_service_initialized",
             base_url=base_url,
-            model=model_name
+            model=model_name,
+            embed_batch_size=self._embed_batch_size
         )
     
     def _get_query_embedding(self, query: str) -> List[float]:
@@ -96,10 +104,21 @@ class RemoteEmbeddingService(BaseEmbedding):
             # No event loop running, safe to use asyncio.run
             return asyncio.run(coro)
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.HTTPError)),
+        reraise=True
+    )
     async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Get embeddings from remote service.
+        Get embeddings from remote service with retry logic.
         Creates a new client for each request to avoid event loop issues.
+        
+        Features:
+        - Automatic retry with exponential backoff (3 attempts)
+        - Dynamic timeout based on batch size
+        - Detailed logging for monitoring
         
         Args:
             texts: List of texts to embed
@@ -107,14 +126,26 @@ class RemoteEmbeddingService(BaseEmbedding):
         Returns:
             List of embedding vectors
         """
+        # Calculate dynamic timeout based on batch size
+        # Base timeout + (texts_count * 0.5 seconds per text)
+        # Minimum 60s, maximum from settings
+        base_timeout = 60.0
+        dynamic_timeout = min(
+            base_timeout + (len(texts) * 0.5),
+            float(settings.embedding_request_timeout)
+        )
+        
+        start_time = time.time()
+        
         # Create a new client for each request to avoid event loop issues
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=dynamic_timeout) as client:
             try:
                 logger.info(
                     "calling_remote_embedding_service",
                     num_texts=len(texts),
                     base_url=self._base_url,
-                    endpoint="/api/v1/embeddings"
+                    endpoint="/api/v1/embeddings",
+                    timeout=dynamic_timeout
                 )
                 
                 response = await client.post(
@@ -124,15 +155,37 @@ class RemoteEmbeddingService(BaseEmbedding):
                 response.raise_for_status()
                 data = response.json()
                 
+                elapsed_time = time.time() - start_time
+                
                 logger.info(
                     "remote_embeddings_generated_successfully",
                     num_texts=len(texts),
                     dimension=data.get("dimension"),
-                    base_url=self._base_url
+                    base_url=self._base_url,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    texts_per_second=round(len(texts) / elapsed_time, 2) if elapsed_time > 0 else 0
                 )
                 
                 return data["embeddings"]
                 
+            except httpx.TimeoutException as e:
+                logger.error(
+                    "remote_embedding_timeout",
+                    error=str(e),
+                    num_texts=len(texts),
+                    timeout=dynamic_timeout,
+                    base_url=self._base_url
+                )
+                raise
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    "remote_embedding_http_error",
+                    error=str(e),
+                    status_code=e.response.status_code,
+                    num_texts=len(texts),
+                    base_url=self._base_url
+                )
+                raise
             except Exception as e:
                 logger.error(
                     "remote_embedding_failed",

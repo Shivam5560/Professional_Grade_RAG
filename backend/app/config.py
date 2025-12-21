@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         default="https://8001-01kcxs65eap7vtj55ymz4r6xag.cloudspaces.litng.ai",
         alias="REMOTE_EMBEDDING_SERVICE_URL"
     )
+    embedding_batch_size: int = Field(default=10, alias="EMBEDDING_BATCH_SIZE")
+    embedding_request_timeout: int = Field(default=120, alias="EMBEDDING_REQUEST_TIMEOUT")  # 2 minutes for large batches
     
     # PostgreSQL Configuration
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
