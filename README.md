@@ -1,4 +1,4 @@
-# Professional-Grade RAG System
+m# Professional-Grade RAG System
 
 A production-ready Retrieval-Augmented Generation (RAG) system with advanced features including hybrid search, confidence scoring, and conversational context management.
 
@@ -6,7 +6,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system with advanced fea
 
 ### Core Capabilities
 - **Hybrid Search**: Combines BM25 keyword search with semantic vector search
-- **Intelligent Reranking**: Uses BGE-reranker-v2-m3 for optimal result ordering
+- **Intelligent Reranking**: Uses mxbai-rerank-large-v2 for optimal result ordering
 - **Confidence Scoring**: Multi-factor confidence assessment (retrieval, coherence, coverage, clarity)
 - **Conversational Context**: Maintains chat history for follow-up questions
 - **Source Citations**: Every answer includes traceable source references
@@ -14,11 +14,10 @@ A production-ready Retrieval-Augmented Generation (RAG) system with advanced fea
 
 ### Technical Highlights
 - **LlamaIndex Orchestration**: Modular, composable RAG pipeline
-- **Groq Integration**: High-performance LLM inference (Llama 3 70B / Mixtral)
+- **Groq Integration**: High-performance LLM inference (OpenAI gpt-oss 20b)
 - **PostgreSQL + pgvector**: Robust vector storage and retrieval
 - **Flexible Embeddings**: Support for local Ollama or remote embedding services
 - **Type-Safe**: Full TypeScript support in frontend
-- **Docker-Ready**: Containerized deployment support
 
 ## 📋 Prerequisites
 
@@ -26,7 +25,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system with advanced fea
 - **Node.js 18+**
 - **PostgreSQL** with `pgvector` extension
 - **Groq API Key**
-- **Ollama** (optional, for local embeddings)
+- **Ollama** 
 
 ## 🚀 Quick Start
 
@@ -71,19 +70,10 @@ If using the standalone embedding service:
 
 ```bash
 cd embedding-service
-docker-compose up -d
+ollama pull embeddinggemma
+python main.py
 ```
 
-## 📚 Usage
-
-### Upload Documents
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/documents/upload" \
-  -F "file=@your-document.txt" \
-  -F "title=My Document" \
-  -F "category=Technical"
-```
 
 ### Query via UI
 
@@ -226,18 +216,6 @@ Verify your API key is valid and set in the `.env` file.
 2. Add to page in `frontend/app/page.tsx`
 3. Update types in `frontend/lib/types.ts`
 
-### Testing Locally
-
-```bash
-# Backend
-cd backend
-python -m pytest  # (if tests were added)
-
-# Frontend
-cd frontend
-npm run lint
-npm run build
-```
 
 ## 📝 License
 
