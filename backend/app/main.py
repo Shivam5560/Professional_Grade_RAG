@@ -28,8 +28,8 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
     # Startup
-    logger.info(
-        "application_starting",
+    logger.log_operation(
+        "🚀 Application starting",
         version=__version__,
         environment=settings.log_level,
     )
@@ -45,25 +45,16 @@ async def lifespan(app: FastAPI):
         vector_store = get_vector_store_service()
         bm25_service = get_bm25_service()
         
-        # Configure embedding model based on settings
-        if settings.use_remote_embedding_service:
-            from app.services.remote_embedding_service import RemoteEmbeddingService
-            embed_model = RemoteEmbeddingService(
-                base_url=settings.remote_embedding_service_url,
-                model_name=settings.ollama_embedding_model
-            )
-            logger.info(
-                "remote_embedding_service_configured",
-                url=settings.remote_embedding_service_url,
-                model=settings.ollama_embedding_model
-            )
-        else:
+        # Get embedding model from vector store (already initialized)
+        embed_model = vector_store.embed_model
+        
+        # Check Ollama health if using local embeddings
+        if not settings.use_remote_embedding_service:
             from app.services.ollama_service import get_ollama_service
             ollama_service = get_ollama_service()
-            embed_model = ollama_service.get_embed_model()
             ollama_healthy = await ollama_service.check_health()
             if not ollama_healthy:
-                logger.warning("ollama_embeddings_not_available_on_startup")
+                logger.log_operation("⚠️  Ollama embeddings not available", level="WARNING")
         
         # Configure LlamaIndex global Settings to prevent OpenAI defaults
         Settings.llm = groq_service.get_llm()
@@ -71,8 +62,8 @@ async def lifespan(app: FastAPI):
         Settings.chunk_size = settings.chunk_size
         Settings.chunk_overlap = settings.chunk_overlap
         
-        logger.info(
-            "llamaindex_settings_configured",
+        logger.log_operation(
+            "LlamaIndex settings configured",
             llm_model=settings.groq_model,
             embed_model=settings.ollama_embedding_model,
             chunk_size=settings.chunk_size,
@@ -81,22 +72,22 @@ async def lifespan(app: FastAPI):
         
         groq_healthy = await groq_service.check_health()
         if not groq_healthy:
-            logger.warning("groq_llm_not_available_on_startup")
+            logger.log_operation("⚠️  Groq LLM not available", level="WARNING")
         
-        logger.info("services_initialized")
+        logger.log_operation("✅ All services initialized successfully")
         
     except Exception as e:
-        logger.error("service_initialization_failed", error=str(e))
+        logger.log_error("Service initialization", e)
     
-    logger.info("application_started")
+    logger.log_operation("✅ Application ready")
     
     yield
     
     # Shutdown
-    logger.info("application_shutting_down")
+    logger.log_operation("Application shutting down")
     
     # Cleanup if needed
-    logger.info("application_shutdown_complete")
+    logger.log_operation("✅ Application shutdown complete")
 
 
 # Create FastAPI application

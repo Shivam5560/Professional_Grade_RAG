@@ -35,10 +35,7 @@ class OllamaService:
         self._last_health_status: bool = True
         self._health_check_cache_duration: int = 60  # Cache for 60 seconds
         
-        logger.info(
-            "ollama_service_initialized",
-            embedding_model=self.embedding_model,
-        )
+        logger.log_operation("📚 Ollama embeddings initialized", model=self.embedding_model)
     
     async def check_health(self) -> bool:
         """
@@ -69,10 +66,9 @@ class OllamaService:
                 self._last_health_check = current_time
                 self._last_health_status = is_healthy
                 
-                logger.info("ollama_health_check_performed", status=is_healthy)
                 return is_healthy
         except Exception as e:
-            logger.error("ollama_health_check_failed", error=str(e))
+            logger.log_error("Ollama health check", e)
             
             # Update cache with failure
             self._last_health_check = current_time

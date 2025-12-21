@@ -43,7 +43,7 @@ class RAGEngine:
         # Get LLM from Groq service
         self.llm = self.groq_service.get_llm()
         
-        logger.info("rag_engine_initialized")
+        logger.log_operation("🔧 RAG engine initialized")
     
     def _ensure_retriever(self):
         """Lazy load the retriever if not already initialized."""
@@ -114,23 +114,17 @@ class RAGEngine:
             else:
                 reformulated_query = query
             
-            logger.info(
-                "query_received",
-                session_id=session_id,
-                query_length=len(query),
-                reformulated_length=len(reformulated_query),
-                user_id=user_id,
-                context_document_ids=context_document_ids,
-                num_context_docs=len(context_document_ids) if context_document_ids else 0,
-            )
+            # Log search start
+            search_context = {
+                'user_id': user_id,
+                'has_filters': context_document_ids is not None and len(context_document_ids) > 0
+            }
+            if context_document_ids:
+                search_context['num_docs'] = len(context_document_ids)
             
-            # Debug: Log exactly what we're searching for
-            logger.info(
-                "starting_hybrid_search",
-                user_id=user_id,
-                has_document_filter=context_document_ids is not None and len(context_document_ids) > 0,
-                document_ids_to_search=context_document_ids,
-                query_preview=reformulated_query[:100]
+            logger.log_query(
+                query=query,
+                **search_context
             )
             
             # Step 1: Hybrid Retrieval (BM25 + Vector) with user_id and document_ids filter
@@ -149,13 +143,6 @@ class RAGEngine:
                 document_ids=context_document_ids
             )
             
-            logger.info(
-                "vector_search_complete",
-                num_results=len(vector_nodes),
-                expected=settings.top_k_retrieval,
-                threshold=settings.similarity_threshold
-            )
-            
             bm25_nodes = bm25_service.search(
                 query=reformulated_query,
                 top_k=settings.top_k_retrieval,
@@ -163,10 +150,10 @@ class RAGEngine:
                 document_ids=context_document_ids
             )
             
-            logger.info(
-                "bm25_search_complete",
-                num_results=len(bm25_nodes),
-                expected=settings.top_k_retrieval
+            logger.log_operation(
+                "🔍 Hybrid search complete",
+                vector_results=len(vector_nodes),
+                bm25_results=len(bm25_nodes)
             )
             
             # Merge results using simple score-based fusion
@@ -192,29 +179,22 @@ class RAGEngine:
             )
             retrieved_nodes = all_merged[:settings.top_k_retrieval]
             
-            # Debug: Check document distribution
-            doc_distribution = {}
-            for node in retrieved_nodes:
-                doc_id = node.node.metadata.get('document_id', 'unknown')
-                filename = node.node.metadata.get('filename', 'unknown')
-                doc_key = f"{filename} ({doc_id[:8]}...)"
-                doc_distribution[doc_key] = doc_distribution.get(doc_key, 0) + 1
-            
-            logger.info(
-                "hybrid_retrieval_complete",
-                vector_results=len(vector_nodes),
-                bm25_results=len(bm25_nodes),
-                total_unique=len(all_merged),
-                merged_results=len(retrieved_nodes),
-                top_k=settings.top_k_retrieval,
-                document_distribution=doc_distribution
-            )
+            # Log merged results
+            if retrieved_nodes:
+                logger.log_operation(
+                    "📦 Merged results",
+                    total_unique=len(all_merged),
+                    kept=len(retrieved_nodes)
+                )
         
             if not retrieved_nodes:
                 context_msg = ""
                 if context_document_ids and len(context_document_ids) > 0:
                     context_msg = " in the selected documents"
-                logger.warning("no_nodes_retrieved", query=query, user_id=user_id, context_document_ids=context_document_ids)
+                logger.log_operation(
+                    "⚠️  No relevant documents found",
+                    level="WARNING"
+                )
                 answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
                 confidence_result = {
                     "confidence_score": 0.0,
@@ -225,10 +205,10 @@ class RAGEngine:
             else:
                 # Step 2: Reranking with LlamaIndex's SentenceTransformerRerank
                 # This uses BGE reranker (cross-encoder) for better relevance scoring
-                logger.info(
-                    "reranking_started",
-                    num_nodes_to_rerank=len(retrieved_nodes),
-                    expected_top_n=settings.top_k_rerank
+                logger.log_operation(
+                    "🎯 Reranking nodes",
+                    nodes=len(retrieved_nodes),
+                    target=settings.top_k_rerank
                 )
                 
                 reranked_nodes = self.reranker._postprocess_nodes(
@@ -236,19 +216,9 @@ class RAGEngine:
                     query_str=reformulated_query
                 )
                 
-                # Debug: Check reranked distribution
-                reranked_doc_distribution = {}
-                for node in reranked_nodes:
-                    doc_id = node.node.metadata.get('document_id', 'unknown')
-                    filename = node.node.metadata.get('filename', 'unknown')
-                    doc_key = f"{filename} ({doc_id[:8]}...)"
-                    reranked_doc_distribution[doc_key] = reranked_doc_distribution.get(doc_key, 0) + 1
-                
-                logger.info(
-                    "reranking_complete",
-                    num_reranked=len(reranked_nodes),
-                    expected=settings.top_k_rerank,
-                    reranked_document_distribution=reranked_doc_distribution
+                logger.log_operation(
+                    "✅ Reranking complete",
+                    reranked=len(reranked_nodes)
                 )
                 
                 # Step 3: Build context from nodes
@@ -310,18 +280,17 @@ Provide a comprehensive answer based on the context above."""
                 "processing_time_ms": round(processing_time, 2),
             }
             
-            logger.info(
-                "query_completed",
-                session_id=session_id,
-                confidence_score=confidence_result["confidence_score"],
-                num_sources=len(sources),
-                processing_time_ms=processing_time,
+            logger.log_operation(
+                "✅ Query completed",
+                confidence=f"{confidence_result['confidence_score']:.2f}",
+                sources=len(sources),
+                duration_ms=f"{processing_time:.0f}"
             )
             
             return result
             
         except Exception as e:
-            logger.error("query_failed", error=str(e), query=query)
+            logger.log_error("Query execution", e, query=query[:50])
             raise
     
     async def stream_query(

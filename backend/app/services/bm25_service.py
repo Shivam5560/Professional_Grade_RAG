@@ -26,7 +26,7 @@ class BM25Service:
         # Try to load existing index
         self._load_index()
         
-        logger.info("bm25_service_initialized", algorithm="BM25Okapi")
+        logger.log_operation("🔤 BM25 service initialized", algorithm="BM25Okapi")
     
     def _tokenize(self, text: str) -> List[str]:
         """
@@ -53,10 +53,10 @@ class BM25Service:
             with open(self.index_path, 'wb') as f:
                 pickle.dump(index_data, f)
             
-            logger.info("bm25_index_saved", num_nodes=len(self.nodes))
+            logger.log_operation("💾 BM25 index saved", nodes=len(self.nodes))
             
         except Exception as e:
-            logger.error("failed_to_save_bm25_index", error=str(e))
+            logger.log_error("Saving BM25 index", e)
     
     def _load_index(self) -> None:
         """Load BM25 index from disk."""

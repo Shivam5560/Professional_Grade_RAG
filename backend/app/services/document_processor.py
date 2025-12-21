@@ -38,8 +38,8 @@ class DocumentProcessor:
         self.documents_dir = os.path.join(settings.data_dir, "documents")
         os.makedirs(self.documents_dir, exist_ok=True)
         
-        logger.info(
-            "document_processor_initialized",
+        logger.log_operation(
+            "📄 Document processor initialized",
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
         )
@@ -100,9 +100,9 @@ class DocumentProcessor:
             # Combine all document text
             text = "\n\n".join(doc.text for doc in documents)
             
-            logger.info(
-                "text_extracted_from_file",
-                filename=filename,
+            logger.log_document(
+                "Text extracted",
+                filename,
                 file_type=file_extension,
                 text_length=len(text)
             )
@@ -110,11 +110,10 @@ class DocumentProcessor:
             return text
             
         except Exception as e:
-            logger.error(
-                "text_extraction_failed",
-                filename=filename,
-                file_type=file_extension,
-                error=str(e)
+            logger.log_error(
+                f"Text extraction from {filename}",
+                e,
+                file_type=file_extension
             )
             raise ValueError(f"Failed to extract text from {filename}: {str(e)}")
         finally:
@@ -181,19 +180,18 @@ class DocumentProcessor:
                 )
                 text_nodes.append(text_node)
             
-            logger.info(
-                "document_processed",
-                document_id=document_id,
-                filename=filename,
-                num_chunks=len(text_nodes),
+            logger.log_document(
+                "Document processed",
+                filename,
+                document_id=document_id[:12] + "...",
+                chunks=len(text_nodes),
                 text_length=len(text),
-                user_id=metadata.get("user_id"),
             )
             
             return document_id, text_nodes
             
         except Exception as e:
-            logger.error("document_processing_failed", error=str(e), filename=filename)
+            logger.log_error(f"Processing {filename}", e)
             raise
     
     async def ingest_document(
@@ -225,17 +223,17 @@ class DocumentProcessor:
             bm25_service = get_bm25_service()
             bm25_service.add_nodes(nodes)
             
-            logger.info(
-                "document_ingested",
-                document_id=document_id,
-                filename=filename,
-                num_chunks=len(nodes),
+            logger.log_document(
+                "✅ Document ingested",
+                filename,
+                document_id=document_id[:12] + "...",
+                chunks=len(nodes),
             )
             
             return document_id, len(nodes)
             
         except Exception as e:
-            logger.error("document_ingestion_failed", error=str(e), filename=filename)
+            logger.log_error(f"Ingesting {filename}", e)
             raise
     
     async def ingest_file(
@@ -263,7 +261,7 @@ class DocumentProcessor:
             return await self.ingest_document(text, filename, metadata)
             
         except Exception as e:
-            logger.error("file_ingestion_failed", error=str(e), filename=filename)
+            logger.log_error(f"File ingestion {filename}", e)
             raise
     
     async def delete_document(self, document_id: str) -> bool:
@@ -287,22 +285,22 @@ class DocumentProcessor:
             bm25_success = bm25_service.delete_document(document_id)
             
             if not bm25_success:
-                logger.warning(
-                    "bm25_deletion_partial_failure",
-                    document_id=document_id,
-                    note="Vector store deleted but BM25 deletion had issues"
+                logger.log_operation(
+                    "⚠️  BM25 deletion partial failure",
+                    level="WARNING",
+                    document_id=document_id[:12] + "..."
                 )
             
-            logger.info(
-                "document_deleted",
-                document_id=document_id,
+            logger.log_operation(
+                "🗑️  Document deleted",
+                document_id=document_id[:12] + "...",
                 vector_deleted=True,
                 bm25_deleted=bm25_success
             )
             return True
             
         except Exception as e:
-            logger.error("document_deletion_failed", error=str(e), document_id=document_id)
+            logger.log_error(f"Deleting document {document_id[:12]}...", e)
             return False
 
 

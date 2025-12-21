@@ -5,11 +5,11 @@ Connects to Lightning.ai hosted embedding and reranking service
 
 from typing import List, Optional
 import httpx
-import structlog
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import PrivateAttr
+from app.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class RemoteEmbeddingService(BaseEmbedding):

@@ -54,9 +54,9 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             )
             db.add(db_session)
             db.commit()
-            logger.info(
-                "new_chat_session_created",
-                session_id=session_id,
+            logger.log_operation(
+                "💬 New chat session created",
+                session_id=session_id[:8] + "...",
                 user_id=request.user_id,
                 title=title
             )
@@ -70,14 +70,16 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         db.add(user_msg)
         db.commit()
         
-        logger.info(
-            "chat_query_received",
+        # Log query with context info
+        context_info = {}
+        if request.context_document_ids:
+            context_info['context_docs'] = len(request.context_document_ids)
+        
+        logger.log_query(
             query=request.query,
-            session_id=session_id,
-            stream=request.stream,
+            session_id=session_id[:8] + "...",
             user_id=request.user_id,
-            context_document_ids=request.context_document_ids,
-            num_context_docs=len(request.context_document_ids) if request.context_document_ids else 0,
+            **context_info
         )
         
         # Execute query with user_id filter and optional context documents

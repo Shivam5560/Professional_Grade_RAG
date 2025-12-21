@@ -21,7 +21,7 @@ class GroqService:
         self.model = settings.groq_model
         
         if not self.api_key:
-            logger.warning("groq_api_key_not_set", message="GROQ_API_KEY is not set in environment")
+            logger.log_operation("⚠️  GROQ_API_KEY not set", level="WARNING")
             raise ValueError("GROQ_API_KEY must be set in environment variables")
         
         # Initialize Groq LLM with LlamaIndex
@@ -37,10 +37,7 @@ class GroqService:
         self._last_health_status: bool = True
         self._health_check_cache_duration: int = 60  # Cache for 60 seconds
         
-        logger.info(
-            "groq_service_initialized",
-            model=self.model,
-        )
+        logger.log_operation("🤖 Groq LLM initialized", model=self.model)
     
     def get_llm(self) -> Groq:
         """
@@ -80,10 +77,9 @@ class GroqService:
             self._last_health_check = current_time
             self._last_health_status = is_healthy
             
-            logger.info("groq_health_check_performed", status=is_healthy)
             return is_healthy
         except Exception as e:
-            logger.error("groq_health_check_failed", error=str(e))
+            logger.log_error("Groq health check", e)
             
             # Update cache with failure
             self._last_health_check = current_time

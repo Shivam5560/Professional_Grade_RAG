@@ -24,43 +24,32 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request_id = str(time.time())
         start_time = time.time()
         
-        # Log request
-        logger.info(
-            "request_started",
-            request_id=request_id,
-            method=request.method,
-            path=request.url.path,
-            client=request.client.host if request.client else None,
-        )
-        
         try:
             response = await call_next(request)
             
             # Calculate processing time
-            process_time = time.time() - start_time
+            process_time_ms = (time.time() - start_time) * 1000
             
             # Log response
-            logger.info(
-                "request_completed",
-                request_id=request_id,
+            logger.log_request(
                 method=request.method,
                 path=request.url.path,
-                status_code=response.status_code,
-                process_time_ms=round(process_time * 1000, 2),
+                status=response.status_code,
+                duration_ms=process_time_ms,
+                client=request.client.host if request.client else None,
             )
             
             # Add custom headers
-            response.headers["X-Process-Time"] = str(process_time)
+            response.headers["X-Process-Time"] = str(process_time_ms / 1000)
             response.headers["X-Request-ID"] = request_id
             
             return response
             
         except Exception as e:
-            logger.error(
-                "request_failed",
+            logger.log_error(
+                f"Request {request.method} {request.url.path}",
+                e,
                 request_id=request_id,
-                error=str(e),
-                traceback=traceback.format_exc(),
             )
             raise
 
@@ -73,11 +62,9 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         except Exception as e:
-            logger.error(
-                "unhandled_exception",
-                error=str(e),
-                path=request.url.path,
-                traceback=traceback.format_exc(),
+            logger.log_error(
+                f"Unhandled exception in {request.url.path}",
+                e,
             )
             
             # Create error response
@@ -103,7 +90,7 @@ def setup_cors(app):
         allow_headers=["*"],
     )
     
-    logger.info("cors_configured", origins=settings.cors_origins)
+    logger.log_operation("cors_configured", origins=settings.cors_origins)
 
 
 def setup_middleware(app):
@@ -115,4 +102,4 @@ def setup_middleware(app):
     # Add CORS
     setup_cors(app)
     
-    logger.info("middleware_configured")
+    logger.log_operation("middleware_configured")

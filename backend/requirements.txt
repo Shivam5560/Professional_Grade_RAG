@@ -35,9 +35,6 @@ aiofiles==23.2.1
 typing-extensions==4.12.2
 nest-asyncio==1.6.0
 
-# Logging & Monitoring
-structlog==23.2.0
-
 # HTTP Client
 httpx==0.25.2
 
