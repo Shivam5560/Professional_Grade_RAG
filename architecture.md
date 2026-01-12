@@ -183,3 +183,26 @@ The system is a professional-grade Retrieval-Augmented Generation (RAG) applicat
 - Endpoint health monitoring.
 - Database connection health.
 - External service availability checks.
+
+## 10. Future Enhancements
+
+- **Multi-modal Support**: Add support for images and tables in documents.
+- **Advanced Query Understanding**: Query expansion and intent classification.
+- **Streaming Responses**: Real-time token streaming for better UX.
+- **Fine-tuned Models**: Custom fine-tuned embeddings for domain-specific use cases.
+- **Analytics Dashboard**: User behavior analytics and system performance metrics.
+- **Multi-language Support**: Expand beyond English for global deployment.
+
+## 11. Conclusion
+
+This Professional Grade RAG system represents a modern, production-ready approach to document-based question answering. By combining hybrid retrieval strategies, advanced reranking techniques, and high-performance LLM inference, the system achieves a balance between accuracy, speed, and scalability.
+
+The microservices architecture ensures that each component can be developed, deployed, and scaled independently, providing flexibility for future enhancements and optimizations. The use of industry-standard technologies like FastAPI, PostgreSQL with pgvector, and Next.js ensures maintainability and a strong ecosystem of tools and libraries.
+
+Key architectural decisions—such as the separation of embedding/reranking services, the hybrid retrieval approach, and the emphasis on observability—position this system for both immediate deployment and long-term growth. As the system evolves, the modular design will facilitate the integration of new features, models, and capabilities without requiring fundamental architectural changes.
+
+This architecture document serves as a living blueprint that will be updated as the system matures and new requirements emerge. Contributors are encouraged to refer to this document when making architectural decisions and to propose updates as needed.
+
+---
+
+**For questions or suggestions regarding this architecture, please contact the author or open an issue in the project repository.**
