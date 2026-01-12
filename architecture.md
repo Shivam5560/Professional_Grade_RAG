@@ -13,46 +13,8 @@ The system is a professional-grade Retrieval-Augmented Generation (RAG) applicat
 - **Scalable Storage**: Uses PostgreSQL with `pgvector` for vector storage and metadata management.
 
 ## 2. Architecture Diagram
+<img src="./architecture.png" alt="Architecture Diagram" width="800" />
 
-
-```mermaid
-graph TD
-    User[User] -->|Interacts| FE[Frontend Next.js]
-    
-    FE -->|API Requests| API[Backend API FastAPI]
-    
-    API -->|Orchestrates| RAG[RAG Engine]
-    API -->|Manage| DOC[Document Processor]
-    
-    DOC -->|Store Nodes| VS[Vector Store Service]
-    DOC -->|Index Text| BM25[BM25 Service]
-    
-    RAG -->|1. Keyword Search| BM25
-    RAG -->|2. Vector Search| VS
-    RAG -->|3. Rerank| RR[Reranker]
-    RAG -->|4. Generate| GROQ[Groq Service]
-    
-    VS -->|Read/Write| PG[(PostgreSQL + pgvector)]
-    BM25 -->|Read/Write| FS[File System Cache]
-    
-    GROQ -->|Inference| GQ[Groq Cloud API]
-    VS -->|Get Embeddings| ES[Embedding Service]
-    RR -->|Rerank Results| ES
-    
-    style User fill:#e1f5ff
-    style FE fill:#b3e0ff
-    style API fill:#ffe0b3
-    style RAG fill:#ffe0b3
-    style DOC fill:#ffe0b3
-    style BM25 fill:#ffe0b3
-    style VS fill:#ffe0b3
-    style RR fill:#ffe0b3
-    style GROQ fill:#ffe0b3
-    style PG fill:#d4edda
-    style FS fill:#d4edda
-    style ES fill:#f8d7da
-    style GQ fill:#f8d7da
-```
 
 ## 3. Component Details
 
