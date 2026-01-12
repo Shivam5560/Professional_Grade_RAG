@@ -234,4 +234,5 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Built with ❤️ for professional RAG applications**
+**Built with ❤️ for professional RAG applications.**
+**Contact - shivamsourav2003@gmail**
