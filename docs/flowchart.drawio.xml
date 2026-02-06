@@ -1,0 +1,164 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" version="29.3.8">
+  <diagram name="RAG Flow - Fast and Think Modes" id="flow-diagram-001">
+    <mxGraphModel dx="2066" dy="1184" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#333333" value="RAG System Query Flow (Fast Mode + Think Mode)" vertex="1">
+          <mxGeometry height="40" width="500" x="400" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" value="User Query" vertex="1">
+          <mxGeometry height="50" width="140" x="580" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12" value="POST /api/v1/chat/query&#xa;(FastAPI)" vertex="1">
+          <mxGeometry height="50" width="160" x="570" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="save-msg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" value="Save user message&#xa;to PostgreSQL" vertex="1">
+          <mxGeometry height="45" width="160" x="570" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="mode-decision" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1" value="mode?" vertex="1">
+          <mxGeometry height="80" width="100" x="600" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="fast-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#10739e" value="FAST MODE (Hybrid RAG)" vertex="1">
+          <mxGeometry height="30" width="200" x="100" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="reformulate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11" value="Context-Aware&#xa;Query Reformulation" vertex="1">
+          <mxGeometry height="45" width="160" x="120" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="parallel-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#10739e" value="Parallel Retrieval" vertex="1">
+          <mxGeometry height="20" width="120" x="140" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="bm25" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=10" value="BM25 Retrieval&#xa;(Keyword Match)&#xa;top_k=15" vertex="1">
+          <mxGeometry height="55" width="130" x="40" y="465" as="geometry" />
+        </mxCell>
+        <mxCell id="vector" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=10" value="Vector Retrieval&#xa;(Semantic Search)&#xa;pgvector, top_k=15" vertex="1">
+          <mxGeometry height="55" width="130" x="230" y="465" as="geometry" />
+        </mxCell>
+        <mxCell id="rrf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11" value="Score Fusion&#xa;(Merge + Deduplicate + Average)" vertex="1">
+          <mxGeometry height="45" width="200" x="100" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="rerank" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;fontStyle=1" value="Cross-Encoder Reranker&#xa;(bge-reranker-v2-m3)&#xa;15 to 5 results" vertex="1">
+          <mxGeometry height="55" width="200" x="100" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="build-ctx" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11" value="Build Context String&#xa;from Top-5 Chunks" vertex="1">
+          <mxGeometry height="40" width="160" x="120" y="725" as="geometry" />
+        </mxCell>
+        <mxCell id="llm-fast" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" value="Groq LLM Generation&#xa;(openai/gpt-oss-20b)" vertex="1">
+          <mxGeometry height="50" width="180" x="110" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="confidence-fast" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=10" value="Multi-Factor Confidence&#xa;Scoring (retrieval 55%,&#xa;coherence 25%, coverage 15%,&#xa;clarity 5%)" vertex="1">
+          <mxGeometry height="60" width="200" x="100" y="885" as="geometry" />
+        </mxCell>
+        <mxCell id="think-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#7b1fa2" value="THINK MODE (PageIndex RAG)" vertex="1">
+          <mxGeometry height="30" width="220" x="920" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="get-trees" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=11" value="Get Documents&#xa;with PageIndex Trees" vertex="1">
+          <mxGeometry height="45" width="160" x="940" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="auto-gen-decision" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=11" value="Trees&#xa;exist?" vertex="1">
+          <mxGeometry height="70" width="90" x="975" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="auto-gen" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=10" value="Auto-Generate Trees&#xa;(PDF to LLM to TOC&#xa;to Hierarchy to Summaries)" vertex="1">
+          <mxGeometry height="55" width="170" x="1180" y="455" as="geometry" />
+        </mxCell>
+        <mxCell id="tree-search" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=11;fontStyle=1" value="LLM Tree Search&#xa;(Navigate hierarchy,&#xa;select 1-5 relevant nodes)" vertex="1">
+          <mxGeometry height="55" width="180" x="930" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="retrieve-text" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=11" value="Retrieve Full Text&#xa;of Selected Nodes" vertex="1">
+          <mxGeometry height="45" width="160" x="940" y="645" as="geometry" />
+        </mxCell>
+        <mxCell id="llm-think" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1" value="Groq LLM Generation&#xa;with Reasoning Context" vertex="1">
+          <mxGeometry height="50" width="180" x="930" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="confidence-think" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#7b1fa2;fontSize=10" value="Extract LLM&#xa;Self-Assessment&#xa;Confidence (0-100)" vertex="1">
+          <mxGeometry height="55" width="160" x="940" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="response" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1" value="ChatResponse&#xa;{answer, confidence_score,&#xa;confidence_level, sources,&#xa;processing_time_ms}" vertex="1">
+          <mxGeometry height="60" width="280" x="510" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="save-resp" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11" value="Save assistant message&#xa;to PostgreSQL" vertex="1">
+          <mxGeometry height="40" width="180" x="560" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="end" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" value="Return to User" vertex="1">
+          <mxGeometry height="45" width="130" x="585" y="1130" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" edge="1" parent="1" source="start" style="endArrow=classic;html=1;strokeWidth=2" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" edge="1" parent="1" source="api" style="endArrow=classic;html=1;strokeWidth=1" target="save-msg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" edge="1" parent="1" source="save-msg" style="endArrow=classic;html=1;strokeWidth=2" target="mode-decision">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" edge="1" parent="1" source="mode-decision" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#10739e;fontStyle=1;fontSize=12" target="reformulate" value="fast">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" edge="1" parent="1" source="mode-decision" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#7b1fa2;fontStyle=1;fontSize=12" target="get-trees" value="think">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" edge="1" parent="1" source="reformulate" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="bm25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" edge="1" parent="1" source="reformulate" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="vector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" edge="1" parent="1" source="bm25" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="rrf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" edge="1" parent="1" source="vector" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="rrf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a10" edge="1" parent="1" source="rrf" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="rerank">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a11" edge="1" parent="1" source="rerank" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="build-ctx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a12" edge="1" parent="1" source="build-ctx" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="llm-fast">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a13" edge="1" parent="1" source="llm-fast" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#10739e" target="confidence-fast">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a14" edge="1" parent="1" source="confidence-fast" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#10739e" target="response">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a15" edge="1" parent="1" source="get-trees" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2" target="auto-gen-decision">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a16" edge="1" parent="1" source="auto-gen-decision" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2;fontSize=11" target="auto-gen" value="No">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a17" edge="1" parent="1" source="auto-gen-decision" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2;fontSize=11" target="tree-search" value="Yes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a18" edge="1" parent="1" source="auto-gen" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="tree-search">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1265" y="583" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a19" edge="1" parent="1" source="tree-search" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2" target="retrieve-text">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a20" edge="1" parent="1" source="retrieve-text" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2" target="llm-think">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a21" edge="1" parent="1" source="llm-think" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#7b1fa2" target="confidence-think">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a22" edge="1" parent="1" source="confidence-think" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#7b1fa2" target="response">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a23" edge="1" parent="1" source="response" style="endArrow=classic;html=1;strokeWidth=1" target="save-resp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a24" edge="1" parent="1" source="save-resp" style="endArrow=classic;html=1;strokeWidth=2" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

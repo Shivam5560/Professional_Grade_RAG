@@ -158,3 +158,5 @@ site/
 *.csv
 *.json.gz
 *.parquet
+
+.github/

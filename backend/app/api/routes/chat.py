@@ -23,28 +23,24 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 async def query(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Query the RAG system with a question.
+    Supports two modes:
+    - fast (default): Hybrid BM25 + Vector retrieval with reranking
+    - think: PageIndex reasoning-based tree search
     
     Args:
-        request: ChatRequest with query and session_id
+        request: ChatRequest with query, session_id, and mode
         
     Returns:
-        ChatResponse with answer, confidence, and sources
+        ChatResponse with answer, confidence, sources, and optional reasoning
     """
     try:
-        # Get RAG engine
-        rag_engine = get_rag_engine()
-        
         # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
-        
-        # Check if this is a new session
-        is_new_session = False
+        mode = request.mode or "fast"
         
         # Save session if it doesn't exist
         db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if not db_session:
-            is_new_session = True
-            # Generate title from first message (truncate to 50 chars)
             title = request.query[:50] + "..." if len(request.query) > 50 else request.query
             
             db_session = ChatSession(
@@ -70,8 +66,8 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         db.add(user_msg)
         db.commit()
         
-        # Log query with context info
-        context_info = {}
+        # Log query with mode info
+        context_info = {"mode": mode}
         if request.context_document_ids:
             context_info['context_docs'] = len(request.context_document_ids)
         
@@ -82,14 +78,27 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             **context_info
         )
         
-        # Execute query with user_id filter and optional context documents
-        result = await rag_engine.query(
-            query=request.query,
-            session_id=session_id,
-            use_context=True,
-            user_id=request.user_id,  # Pass user_id to filter documents
-            context_document_ids=request.context_document_ids  # Pass selected document IDs
-        )
+        # Route to the appropriate engine based on mode
+        if mode == "think":
+            from app.core.pageindex_rag_engine import get_pageindex_rag_engine
+            think_engine = get_pageindex_rag_engine()
+            result = await think_engine.query(
+                query=request.query,
+                db=db,
+                session_id=session_id,
+                user_id=request.user_id,
+                context_document_ids=request.context_document_ids,
+            )
+        else:
+            # Fast mode — existing hybrid RAG
+            rag_engine = get_rag_engine()
+            result = await rag_engine.query(
+                query=request.query,
+                session_id=session_id,
+                use_context=True,
+                user_id=request.user_id,
+                context_document_ids=request.context_document_ids,
+            )
         
         # Save assistant message
         assistant_msg = ChatMessage(
@@ -113,12 +122,15 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             confidence_level=result["confidence_level"],
             sources=result["sources"],
             session_id=result["session_id"],
-            processing_time_ms=result.get("processing_time_ms")
+            processing_time_ms=result.get("processing_time_ms"),
+            reasoning=result.get("reasoning"),
+            mode=mode,
         )
         
         logger.info(
             "chat_query_completed",
             session_id=session_id,
+            mode=mode,
             confidence_score=response.confidence_score,
             num_sources=len(response.sources),
         )

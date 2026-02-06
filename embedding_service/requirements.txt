@@ -10,7 +10,7 @@ transformers
 
 # Ollama Client
 ollama>=0.3.1
-
+numpy
 # HTTP Client
 
 # Retry Logic

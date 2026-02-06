@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '@/lib/api';
-import { Message, ChatResponse } from '@/lib/types';
+import { Message, ChatResponse, RAGMode } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 
 export function useChat(initialSessionId?: string) {
@@ -18,7 +18,8 @@ export function useChat(initialSessionId?: string) {
   const sendMessage = useCallback(async (
     query: string, 
     contextDocumentIds?: string[],
-    contextFiles?: { id: string; filename: string }[]
+    contextFiles?: { id: string; filename: string }[],
+    mode?: RAGMode
   ) => {
     if (!query.trim()) return;
 
@@ -30,7 +31,8 @@ export function useChat(initialSessionId?: string) {
       role: 'user',
       content: query,
       timestamp: new Date().toISOString(),
-      contextFiles: contextFiles,  // Store which files were used
+      contextFiles: contextFiles,
+      mode: mode,
     };
     setMessages(prev => [...prev, userMessage]);
 
@@ -39,8 +41,9 @@ export function useChat(initialSessionId?: string) {
       const response: ChatResponse = await apiClient.query({
         query,
         session_id: sessionId,
-        user_id: user?.id, // Include user_id if user is logged in
+        user_id: user?.id,
         context_document_ids: contextDocumentIds,
+        mode: mode || 'fast',
       });
 
       // Add assistant message
@@ -49,6 +52,8 @@ export function useChat(initialSessionId?: string) {
         content: response.answer,
         timestamp: new Date().toISOString(),
         confidence_score: response.confidence_score,
+        reasoning: response.reasoning,
+        mode: response.mode,
       };
 
       setMessages(prev => [...prev, assistantMessage]);

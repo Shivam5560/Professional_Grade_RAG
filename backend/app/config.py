@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     max_chat_history: int = Field(default=10, alias="MAX_CHAT_HISTORY")
     max_tokens: int = Field(default=3000, alias="MAX_TOKENS")
     
+    # PageIndex / Think Mode Configuration
+    pageindex_max_pages_per_chunk: int = Field(default=15, alias="PAGEINDEX_MAX_PAGES_PER_CHUNK")
+    pageindex_auto_generate: bool = Field(default=False, alias="PAGEINDEX_AUTO_GENERATE")  # Auto-generate trees on PDF upload
+    
     # Confidence Scoring Weights
     # Increased retrieval weight since it's the most reliable signal
     weight_retrieval: float = Field(default=0.55, alias="WEIGHT_RETRIEVAL")

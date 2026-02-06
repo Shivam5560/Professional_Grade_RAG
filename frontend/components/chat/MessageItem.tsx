@@ -4,8 +4,8 @@
 
 'use client';
 
-import { useState } from 'react';
-import { User, Bot, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { User, Bot, FileText, ChevronDown, ChevronUp, Brain, Zap, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatTimestamp } from '@/lib/utils';
@@ -22,6 +22,19 @@ interface MessageItemProps {
 export function MessageItem({ message, showConfidence = false, onShowSources }: MessageItemProps) {
   const isUser = message.role === 'user';
   const [showSources, setShowSources] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const isThinkMode = message.mode === 'think';
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, [message.content]);
 
   return (
     <div
@@ -78,11 +91,28 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
           'rounded-2xl px-6 py-4 shadow-xl text-sm transition-all duration-300 relative overflow-hidden',
           isUser 
             ? 'bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-600 text-white rounded-tr-sm shadow-cyan-500/30 hover:shadow-cyan-500/50 ring-1 ring-white/20' 
-            : 'backdrop-blur-xl bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/98 border border-slate-700/60 rounded-tl-sm text-slate-100 shadow-slate-900/60 hover:shadow-slate-900/80 hover:border-cyan-500/40 ring-1 ring-cyan-500/10'
+            : 'backdrop-blur-xl bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/98 border border-slate-700/60 rounded-tl-sm text-slate-100 shadow-slate-900/60 hover:shadow-slate-900/80 hover:border-cyan-500/40 ring-1 ring-cyan-500/10',
+          !isUser && 'group/msg'
         )}>
           {/* Decorative gradient overlay for assistant messages */}
           {!isUser && (
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-blue-500/5 pointer-events-none" />
+          )}
+
+          {/* Copy button for assistant messages */}
+          {!isUser && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="absolute top-2 right-2 z-20 p-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/80 border border-slate-600/40 hover:border-cyan-500/40 text-slate-400 hover:text-cyan-300 transition-all duration-200 opacity-0 group-hover/msg:opacity-100 focus:opacity-100"
+              title="Copy to clipboard"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-green-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
           )}
           
           <div className={cn(
@@ -173,14 +203,44 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
         </div>
 
         {/* Badges for assistant messages */}
-        {!isUser && (showConfidence || (message.sources && message.sources.length > 0)) && (
+        {!isUser && (showConfidence || (message.sources && message.sources.length > 0) || message.reasoning || message.mode) && (
           <div className="flex flex-col gap-2 pt-2 px-1">
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Mode badge */}
+              {message.mode && (
+                <div className={cn(
+                  "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg backdrop-blur-sm flex items-center gap-1.5",
+                  message.mode === 'think'
+                    ? "text-purple-300 bg-gradient-to-r from-purple-900/40 to-pink-900/40 border-purple-500/30 shadow-purple-500/10"
+                    : "text-cyan-300 bg-gradient-to-r from-slate-800/80 to-slate-900/80 border-cyan-500/30 shadow-cyan-500/10"
+                )}>
+                  {message.mode === 'think' ? <Brain className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                  {message.mode === 'think' ? 'Think' : 'Fast'}
+                </div>
+              )}
+
               {/* Confidence badge */}
               {showConfidence && message.confidence_score !== undefined && (
                 <div className="text-xs font-semibold text-cyan-300 bg-gradient-to-r from-slate-800/80 to-slate-900/80 px-3 py-1 rounded-full border border-cyan-500/30 shadow-lg shadow-cyan-500/10 backdrop-blur-sm">
                   Confidence: {Math.round(message.confidence_score)}%
                 </div>
+              )}
+
+              {/* Reasoning badge (think mode) */}
+              {message.reasoning && (
+                <button
+                  type="button"
+                  onClick={() => setShowReasoning(!showReasoning)}
+                  className="text-xs font-semibold text-purple-300 bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-3 py-1 rounded-full border border-purple-500/30 shadow-lg shadow-purple-500/10 backdrop-blur-sm hover:border-purple-400/50 hover:shadow-purple-500/20 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Brain className="h-3 w-3" />
+                  <span>Reasoning</span>
+                  {showReasoning ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
+                </button>
               )}
               
               {/* Sources badge - clickable button */}
@@ -200,6 +260,23 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                 </button>
               )}
             </div>
+
+            {/* Collapsible reasoning panel */}
+            {showReasoning && message.reasoning && (
+              <div className="mt-2 animate-in slide-in-from-top-2 duration-200">
+                <div className="bg-purple-900/20 border border-purple-500/20 rounded-lg p-4 text-xs backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Brain className="h-4 w-4 text-purple-400" />
+                    <span className="font-semibold text-purple-300">Reasoning Steps</span>
+                  </div>
+                  <div className="text-slate-300 leading-relaxed whitespace-pre-wrap prose prose-sm prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.reasoning}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Collapsible sources list */}
             {showSources && message.sources && message.sources.length > 0 && (

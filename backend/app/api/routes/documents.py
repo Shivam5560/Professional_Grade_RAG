@@ -3,8 +3,9 @@ Document management endpoints.
 """
 
 import uuid
+import os
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.models.schemas import (
@@ -13,14 +14,16 @@ from app.models.schemas import (
     DocumentInfo,
     UserDocumentResponse,
     BulkDeleteRequest,
-    BulkDeleteResponse
+    BulkDeleteResponse,
+    TreeGenerationRequest,
+    TreeGenerationResponse,
 )
 from app.services.document_processor import get_document_processor
 from app.services.vector_store import get_vector_store_service
 from app.utils.validators import validate_file_extension, validate_file_size
 from app.utils.logger import get_logger
 from app.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
 from app.db.models import Document
 
 logger = get_logger(__name__)
@@ -34,7 +37,8 @@ async def upload_document(
     user_id: int = Form(...),
     title: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Upload and process a document for a specific user.
@@ -97,6 +101,23 @@ async def upload_document(
             metadata=metadata
         )
         
+        # Save PDF file to disk for PageIndex tree generation
+        file_extension = Path(file.filename).suffix.lower()
+        if file_extension == ".pdf":
+            pdf_dir = os.path.join(settings.data_dir, "documents")
+            os.makedirs(pdf_dir, exist_ok=True)
+            pdf_path = os.path.join(pdf_dir, f"{document_id}.pdf")
+            
+            # Write PDF to disk
+            with open(pdf_path, "wb") as f:
+                f.write(content)
+            
+            logger.log_operation(
+                "💾 PDF saved to disk",
+                document_id=document_id,
+                path=pdf_path,
+            )
+        
         # Save document metadata to database
         file_extension = Path(file.filename).suffix.lower()
         db_document = Document(
@@ -120,6 +141,16 @@ async def upload_document(
             num_chunks=num_chunks,
             user_id=user_id,
         )
+        
+        # Auto-generate tree for PDF documents if enabled
+        if settings.pageindex_auto_generate and file_extension == ".pdf" and background_tasks:
+            pdf_path = os.path.join(settings.data_dir, "documents", f"{document_id}.pdf")
+            if os.path.exists(pdf_path):
+                background_tasks.add_task(_generate_tree_background, document_id, pdf_path)
+                logger.log_operation(
+                    "🌲 Auto-triggering tree generation",
+                    document_id=document_id,
+                )
         
         return DocumentUploadResponse(
             document_id=document_id,
@@ -324,3 +355,157 @@ async def delete_document(document_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# PageIndex Tree Generation Endpoints
+# ---------------------------------------------------------------------------
+
+async def _generate_tree_background(document_id: str, pdf_path: str):
+    """
+    Background task: generate PageIndex tree for a document.
+    Uses its own DB session since background tasks outlive request scope.
+    """
+    from app.services.pageindex_service import get_pageindex_service
+
+    pageindex_service = get_pageindex_service()
+    db = SessionLocal()
+
+    try:
+        # Mark as processing
+        pageindex_service.mark_tree_status(db, document_id, "processing")
+
+        # Generate tree from PDF
+        tree = await pageindex_service.generate_tree(pdf_path)
+
+        # Store tree + flat nodes
+        pageindex_service.store_tree(db, document_id, tree)
+
+        logger.log_operation(
+            "✅ Tree generation completed (background)",
+            document_id=document_id,
+        )
+    except Exception as e:
+        logger.log_error("Background tree generation failed", e, document_id=document_id)
+        pageindex_service.mark_tree_status(
+            db, document_id, "failed", error_message=str(e)
+        )
+    finally:
+        db.close()
+
+
+@router.post(
+    "/{document_id}/generate-tree",
+    response_model=TreeGenerationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_tree(
+    document_id: str,
+    request: TreeGenerationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Trigger PageIndex tree generation for a document.
+    The tree is built in the background; poll GET /documents/{id}/tree-status.
+
+    Only works for PDF documents.
+    """
+    try:
+        # Verify document exists and belongs to user
+        db_document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.user_id == request.user_id,
+        ).first()
+
+        if not db_document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found or unauthorized",
+            )
+
+        # Check file type
+        if db_document.file_type and db_document.file_type.lower() not in [".pdf"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tree generation is only supported for PDF documents",
+            )
+
+        # Build PDF path - stored as {document_id}.pdf
+        pdf_path = os.path.join(settings.data_dir, "documents", f"{document_id}.pdf")
+        
+        if not os.path.exists(pdf_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF file not found on disk. This document may have been uploaded before PDF storage was implemented. Please re-upload.",
+            )
+
+        # Check if a tree already exists
+        from app.services.pageindex_service import get_pageindex_service
+        pageindex_service = get_pageindex_service()
+        current_status = pageindex_service.get_tree_status(db, document_id)
+
+        if current_status == "processing":
+            return TreeGenerationResponse(
+                document_id=document_id,
+                status="processing",
+                message="Tree generation is already in progress",
+            )
+
+        # Mark as pending and kick off background task
+        pageindex_service.mark_tree_status(db, document_id, "processing")
+        background_tasks.add_task(_generate_tree_background, document_id, pdf_path)
+
+        logger.log_operation(
+            "🌲 Tree generation started",
+            document_id=document_id,
+            filename=db_document.filename,
+        )
+
+        return TreeGenerationResponse(
+            document_id=document_id,
+            status="processing",
+            message="Tree generation started in background. Poll /tree-status for progress.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("generate_tree_failed", error=str(e), document_id=document_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start tree generation: {str(e)}",
+        )
+
+
+@router.get(
+    "/{document_id}/tree-status",
+    response_model=TreeGenerationResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_tree_status(document_id: str, db: Session = Depends(get_db)):
+    """Get the tree generation status for a document."""
+    from app.services.pageindex_service import get_pageindex_service
+    from app.db.models import DocumentTreeStructure
+
+    pageindex_service = get_pageindex_service()
+
+    db_tree = (
+        db.query(DocumentTreeStructure)
+        .filter(DocumentTreeStructure.document_id == document_id)
+        .first()
+    )
+
+    if not db_tree:
+        return TreeGenerationResponse(
+            document_id=document_id,
+            status="pending",
+            message="No tree has been generated yet",
+        )
+
+    return TreeGenerationResponse(
+        document_id=document_id,
+        status=db_tree.status,
+        node_count=db_tree.node_count if db_tree.status == "completed" else None,
+        message=db_tree.error_message or f"Tree status: {db_tree.status}",
+    )

@@ -58,3 +58,42 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="documents")
+    tree_structure = relationship("DocumentTreeStructure", back_populates="document", uselist=False)
+
+
+class DocumentTreeStructure(Base):
+    """Stores PageIndex hierarchical tree structures for Think mode RAG."""
+    __tablename__ = "document_tree_structures_nexus_rag"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(String, ForeignKey("documents_nexus_rag.id"), unique=True, nullable=False)
+    tree_json = Column(JSON, nullable=False)       # Full tree structure JSON
+    doc_description = Column(Text, nullable=True)   # LLM-generated document description
+    node_count = Column(Integer, default=0)         # Total nodes in tree
+    status = Column(String, default="pending")      # pending | processing | completed | failed
+    error_message = Column(Text, nullable=True)     # Error details if generation failed
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    document = relationship("Document", back_populates="tree_structure")
+    nodes = relationship("TreeNode", back_populates="tree_structure", cascade="all, delete-orphan")
+
+
+class TreeNode(Base):
+    """Individual flattened nodes from the tree for fast retrieval queries."""
+    __tablename__ = "tree_nodes_nexus_rag"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tree_id = Column(Integer, ForeignKey("document_tree_structures_nexus_rag.id"), nullable=False)
+    document_id = Column(String, ForeignKey("documents_nexus_rag.id"), nullable=False)
+    node_id = Column(String, nullable=False)         # e.g., "0001", "0002"
+    title = Column(String, nullable=False)
+    summary = Column(Text, nullable=True)
+    text_content = Column(Text, nullable=True)       # Full section text
+    start_page = Column(Integer, nullable=True)
+    end_page = Column(Integer, nullable=True)
+    parent_node_id = Column(String, nullable=True)   # node_id of parent
+    depth = Column(Integer, default=0)               # Depth in tree (0 = root)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tree_structure = relationship("DocumentTreeStructure", back_populates="nodes")

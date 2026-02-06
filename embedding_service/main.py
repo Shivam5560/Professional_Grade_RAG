@@ -19,6 +19,7 @@ import ollama
 import os
 import asyncio
 import time
+import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Configure structured logging
@@ -46,11 +47,15 @@ embedding_metrics = {
 }
 
 # Configuration
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "embeddinggemma")
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "mixedbread-ai/mxbai-rerank-large-v2")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "nomic-embed-text-v2-moe")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "5"))
+# Safe character limit per chunk for nomic-embed-text models (~2k tokens)
+MAX_TEXT_LENGTH = int(os.getenv("MAX_TEXT_LENGTH", "8000"))
+# Overlap between chunks to preserve context
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 
 
 @asynccontextmanager
@@ -140,9 +145,82 @@ class RerankResponse(BaseModel):
 
 
 # Helper functions for batch processing
+def chunk_text(text: str, max_length: int = MAX_TEXT_LENGTH, overlap: int = CHUNK_OVERLAP) -> List[str]:
+    """
+    Split text into overlapping chunks that fit within the model's context window.
+    
+    Args:
+        text: Input text
+        max_length: Maximum characters per chunk
+        overlap: Number of overlapping characters between chunks
+        
+    Returns:
+        List of text chunks
+    """
+    if not text or not text.strip():
+        return [" "]  # Return a space for empty texts to avoid API errors
+    
+    if len(text) <= max_length:
+        return [text]
+    
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + max_length
+        chunk = text[start:end]
+        
+        # Try to break at a sentence or word boundary
+        if end < len(text):
+            # Look for last sentence boundary
+            for sep in ['. ', '.\n', '\n\n', '\n', ' ']:
+                last_break = chunk.rfind(sep)
+                if last_break > max_length // 2:  # Only break if we keep at least half
+                    chunk = chunk[:last_break + len(sep)]
+                    end = start + len(chunk)
+                    break
+        
+        chunks.append(chunk.strip() or " ")
+        start = end - overlap
+        
+        # Safety: avoid infinite loop
+        if start >= len(text):
+            break
+    
+    logger.info(
+        "text_chunked",
+        original_length=len(text),
+        num_chunks=len(chunks),
+        chunk_sizes=[len(c) for c in chunks]
+    )
+    return chunks
+
+
+def average_embeddings(embeddings: List[List[float]]) -> List[float]:
+    """
+    Average multiple embedding vectors into one (mean pooling).
+    
+    Args:
+        embeddings: List of embedding vectors
+        
+    Returns:
+        Averaged embedding vector (normalized)
+    """
+    if len(embeddings) == 1:
+        return embeddings[0]
+    
+    arr = np.array(embeddings)
+    mean_vec = np.mean(arr, axis=0)
+    # Normalize to unit vector
+    norm = np.linalg.norm(mean_vec)
+    if norm > 0:
+        mean_vec = mean_vec / norm
+    return mean_vec.tolist()
+
+
 async def get_single_embedding_with_retry(text: str, model: str, semaphore: asyncio.Semaphore) -> List[float]:
     """
-    Get embedding for a single text with retry logic and concurrency control.
+    Get embedding for a single text with retry logic, concurrency control,
+    and automatic chunking for long texts.
     
     Args:
         text: Text to embed
@@ -152,23 +230,38 @@ async def get_single_embedding_with_retry(text: str, model: str, semaphore: asyn
     Returns:
         Embedding vector
     """
+    chunks = chunk_text(text)
+    
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type(Exception),
         reraise=True
     )
-    async def _get_embedding():
+    async def _get_chunk_embedding(chunk: str):
         async with semaphore:
-            # Run ollama call in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: ollama_client.embeddings(model=model, prompt=text)
+                lambda: ollama_client.embed(model=model, input=chunk)
             )
-            return response['embedding']
+            # ollama.embed returns {"model": ..., "embeddings": [[...]]}
+            return response['embeddings'][0]
     
-    return await _get_embedding()
+    if len(chunks) == 1:
+        return await _get_chunk_embedding(chunks[0])
+    
+    # Embed all chunks and average
+    chunk_tasks = [_get_chunk_embedding(chunk) for chunk in chunks]
+    chunk_embeddings = await asyncio.gather(*chunk_tasks)
+    
+    averaged = average_embeddings(list(chunk_embeddings))
+    logger.info(
+        "chunks_averaged",
+        num_chunks=len(chunks),
+        embedding_dim=len(averaged)
+    )
+    return averaged
 
 
 async def process_embeddings_in_batches(texts: List[str], model: str) -> List[List[float]]:
@@ -243,7 +336,8 @@ async def health_check():
         "ollama_model": OLLAMA_MODEL,
         "reranker_model": RERANKER_MODEL,
         "batch_size": EMBEDDING_BATCH_SIZE,
-        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS
+        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
+        "max_text_length": MAX_TEXT_LENGTH
     }
 
 
@@ -257,6 +351,7 @@ async def create_embeddings(request: EmbeddingRequest):
     - Parallel execution within batches with concurrency control
     - Automatic retry with exponential backoff
     - Performance metrics tracking
+    - Automatic chunking and averaging for long texts
     
     Args:
         request: EmbeddingRequest with texts to embed
@@ -270,11 +365,27 @@ async def create_embeddings(request: EmbeddingRequest):
     try:
         model = request.model or OLLAMA_MODEL
         
+        # Log info about long texts
+        text_lengths = [len(t) for t in request.texts]
+        max_input_length = max(text_lengths) if text_lengths else 0
+        long_text_count = sum(1 for l in text_lengths if l > MAX_TEXT_LENGTH)
+        
+        if long_text_count > 0:
+            logger.warning(
+                "long_texts_detected",
+                count=long_text_count,
+                max_length=max_input_length,
+                chunk_limit=MAX_TEXT_LENGTH,
+                will_chunk=True
+            )
+        
         logger.info(
             "embedding_request_received",
             num_texts=len(request.texts),
             model=model,
-            batch_size=EMBEDDING_BATCH_SIZE
+            batch_size=EMBEDDING_BATCH_SIZE,
+            max_text_length=MAX_TEXT_LENGTH,
+            text_lengths=text_lengths
         )
         
         # Process embeddings in batches with parallel execution
@@ -399,6 +510,7 @@ async def get_metrics():
     metrics["configuration"] = {
         "batch_size": EMBEDDING_BATCH_SIZE,
         "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
+        "max_text_length": MAX_TEXT_LENGTH,
         "ollama_model": OLLAMA_MODEL,
         "reranker_model": RERANKER_MODEL
     }
