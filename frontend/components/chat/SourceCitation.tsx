@@ -77,7 +77,7 @@ export function SourceCitation({ sources }: SourceCitationProps) {
                     </div>
                     {source.text_snippet && (
                       <div className="text-xs text-muted-foreground mt-2 pl-3 border-l-2 border-foreground/20 italic leading-relaxed">
-                        "{source.text_snippet}"
+                        &quot;{source.text_snippet}&quot;
                       </div>
                     )}
                   </div>

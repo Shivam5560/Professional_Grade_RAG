@@ -11,20 +11,18 @@ import { cn } from '@/lib/utils';
 import { formatTimestamp } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { Message, SourceReference } from '@/lib/types';
+import type { Message } from '@/lib/types';
 
 interface MessageItemProps {
   message: Message;
   showConfidence?: boolean;
-  onShowSources?: () => void;
 }
 
-export function MessageItem({ message, showConfidence = false, onShowSources }: MessageItemProps) {
+export function MessageItem({ message, showConfidence = false }: MessageItemProps) {
   const isUser = message.role === 'user';
   const [showSources, setShowSources] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const [copied, setCopied] = useState(false);
-  const isThinkMode = message.mode === 'think';
 
   const handleCopy = useCallback(async () => {
     try {
@@ -138,60 +136,60 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  table: ({ node, ...props }) => (
+                  table: ({ ...props }) => (
                     <div className="overflow-x-auto my-4">
                       <table className="min-w-full divide-y divide-border" {...props} />
                     </div>
                   ),
-                  th: ({ node, ...props }) => (
+                  th: ({ ...props }) => (
                     <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
                   ),
-                  td: ({ node, ...props }) => (
+                  td: ({ ...props }) => (
                     <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
                   ),
-                  h1: ({ node, ...props }) => (
+                  h1: ({ ...props }) => (
                     <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
                   ),
-                  h2: ({ node, ...props }) => (
+                  h2: ({ ...props }) => (
                     <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
                   ),
-                  h3: ({ node, ...props }) => (
+                  h3: ({ ...props }) => (
                     <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
                   ),
-                  p: ({ node, ...props }) => (
+                  p: ({ ...props }) => (
                     <p className="mb-3 leading-relaxed text-foreground" {...props} />
                   ),
-                  ul: ({ node, ...props }) => (
+                  ul: ({ ...props }) => (
                     <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
                   ),
-                  ol: ({ node, ...props }) => (
+                  ol: ({ ...props }) => (
                     <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
                   ),
-                  li: ({ node, ...props }) => (
+                  li: ({ ...props }) => (
                     <li className="text-foreground leading-relaxed pl-1" {...props} />
                   ),
-                  code: ({ node, inline, ...props }: any) => 
+                  code: ({ inline, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => 
                     inline ? (
                       <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
                     ) : (
                       <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
                     ),
-                  pre: ({ node, ...props }) => (
+                  pre: ({ ...props }) => (
                     <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
                   ),
-                  blockquote: ({ node, ...props }) => (
+                  blockquote: ({ ...props }) => (
                     <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
                   ),
-                  hr: ({ node, ...props }) => (
+                  hr: ({ ...props }) => (
                     <hr className="my-4 border-border" {...props} />
                   ),
-                  strong: ({ node, ...props }) => (
+                  strong: ({ ...props }) => (
                     <strong className="font-semibold text-foreground" {...props} />
                   ),
-                  em: ({ node, ...props }) => (
+                  em: ({ ...props }) => (
                     <em className="italic text-foreground/80" {...props} />
                   ),
-                  a: ({ node, ...props }) => (
+                  a: ({ ...props }) => (
                     <a className="text-foreground underline underline-offset-2" {...props} />
                   ),
                 }}
@@ -304,7 +302,7 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                         </div>
                         {source.text_snippet && (
                           <div className="text-foreground/80 leading-relaxed mt-1 pt-2 border-t border-border/60">
-                            "{source.text_snippet}"
+                            &quot;{source.text_snippet}&quot;
                           </div>
                         )}
                       </div>

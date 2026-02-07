@@ -4,7 +4,6 @@
 
 'use client';
 
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { getConfidenceColor } from '@/lib/utils';
 import type { ConfidenceLevel } from '@/lib/types';

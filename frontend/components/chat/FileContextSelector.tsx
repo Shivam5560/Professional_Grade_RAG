@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, FileText, X, Upload } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,20 +19,12 @@ interface FileContextSelectorProps {
 export function FileContextSelector({ selectedFiles, onFilesChange }: FileContextSelectorProps) {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
   const { user } = useAuthStore();
   const router = useRouter();
 
-  useEffect(() => {
-    if (user) {
-      loadDocuments();
-    }
-  }, [user]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     if (!user) return;
     
-    setLoading(true);
     try {
       const response = await apiClient.getUserDocuments(user.id);
       // Sort by filename ascending
@@ -42,10 +34,14 @@ export function FileContextSelector({ selectedFiles, onFilesChange }: FileContex
       setDocuments(sorted);
     } catch (err) {
       console.error('Failed to load documents:', err);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadDocuments();
+    }
+  }, [user, loadDocuments]);
 
   const filteredDocuments = documents.filter(doc =>
     doc.filename.toLowerCase().includes(searchQuery.toLowerCase())

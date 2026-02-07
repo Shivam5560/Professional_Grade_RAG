@@ -301,7 +301,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         <div className="text-xs text-zinc-500 space-y-1">
           <p>• Supported formats: TXT, PDF, DOC, DOCX, MD</p>
           <p>• Files are chunked and embedded for semantic search</p>
-          <p>• You can only query documents you've uploaded</p>
+          <p>• You can only query documents you&apos;ve uploaded</p>
           <p>• Manage your documents in the Knowledge Base section</p>
         </div>
       </CardContent>

@@ -27,7 +27,13 @@ export function MessageInput({
 }: MessageInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isControlled = typeof value === 'string' && typeof onChange === 'function';
+  const hasValueProp = typeof value === 'string';
+  if (process.env.NODE_ENV !== 'production' && hasValueProp && typeof onChange !== 'function') {
+    console.warn(
+      '[MessageInput] A controlled value was provided without an onChange handler. The component will operate as uncontrolled.'
+    );
+  }
+  const isControlled = hasValueProp && typeof onChange === 'function';
   const currentValue = isControlled ? value : input;
 
   const handleSend = () => {

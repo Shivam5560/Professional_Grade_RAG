@@ -31,16 +31,16 @@ export function Header({
   const router = useRouter();
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  useEffect(() => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') {
+      return 'light';
+    }
     const stored = window.localStorage.getItem('theme');
-    const nextTheme = stored === 'light' || stored === 'dark' ? stored : 'light';
-    setTheme(nextTheme);
-    document.documentElement.classList.toggle('dark', nextTheme === 'dark');
-  }, []);
+    return stored === 'light' || stored === 'dark' ? stored : 'light';
+  });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     document.documentElement.classList.toggle('dark', theme === 'dark');
     window.localStorage.setItem('theme', theme);
   }, [theme]);
@@ -86,8 +86,10 @@ export function Header({
     const pingInterval = setInterval(pingServices, 60 * 1000);
 
     // Listen for custom events from chat component about LLM health
-    const handleLlmHealth = (event: any) => {
-      setLlmHealthy(event.detail.healthy);
+    const handleLlmHealth = (event: Event) => {
+      if (event instanceof CustomEvent && typeof event.detail?.healthy === 'boolean') {
+        setLlmHealthy(event.detail.healthy);
+      }
     };
     window.addEventListener('llm-health-update', handleLlmHealth);
 

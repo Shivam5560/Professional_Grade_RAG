@@ -17,7 +17,7 @@ export default function AuthPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
   const router = useRouter()
-  const login = useAuthStore((state: any) => state.login)
+  const login = useAuthStore((state) => state.login)
 
   useEffect(() => {
     const stored = window.localStorage.getItem('theme');
@@ -39,8 +39,10 @@ export default function AuthPage() {
       login(user)
       setSuccess("Login successful! Redirecting...")
       setTimeout(() => router.push("/"), 1000)
-    } catch (error: any) {
-      const errorMessage = error.message || "Login failed. Please check your credentials."
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Login failed. Please check your credentials."
       
       // Check if user not found (400 status or specific error message)
       if (errorMessage.toLowerCase().includes('user not found') || 
@@ -89,8 +91,11 @@ export default function AuthPage() {
       const user = await apiClient.login(email, password)
       login(user)
       setTimeout(() => router.push("/"), 1000)
-    } catch (error: any) {
-      setError(error.message || "Registration failed. Please try again.")
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Registration failed. Please try again."
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }

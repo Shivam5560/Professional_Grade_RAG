@@ -12,7 +12,6 @@ import { ModeSelector } from './ModeSelector';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
-import { apiClient } from '@/lib/api';
 import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode } from '@/lib/types';
 
 interface ChatInterfaceProps {
@@ -60,23 +59,33 @@ export function ChatInterface({
           throw new Error('Failed to load prompts');
         }
         const text = await response.text();
+        // Expected formats:
+        // - Title: Prompt (colons allowed inside prompt)
+        // - Single line prompt
         const parsed = text
           .split('\n')
           .map((line) => line.trim())
           .filter((line) => line.startsWith('- '))
           .map((line) => line.replace(/^\-\s*/, ''))
           .map((line) => {
-            const [title, ...rest] = line.split(':');
-            const prompt = rest.join(':').trim();
-            const cleanTitle = title.trim();
-            return {
-              title: cleanTitle || line,
-              prompt: prompt || cleanTitle,
-            };
+            const trimmed = line.trim();
+            if (!trimmed) return null;
+            const splitIndex = trimmed.indexOf(':');
+            if (splitIndex === -1) {
+              return { title: trimmed, prompt: trimmed };
+            }
+            const title = trimmed.slice(0, splitIndex).trim();
+            const prompt = trimmed.slice(splitIndex + 1).trim();
+            if (!title || !prompt) return null;
+            return { title, prompt };
           })
-          .filter((item) => item.title.length > 0);
+          .filter((item): item is { title: string; prompt: string } => Boolean(item && item.title && item.prompt));
 
-        setPromptSuggestions(parsed);
+        if (parsed.length > 0) {
+          setPromptSuggestions(parsed);
+        } else {
+          throw new Error('No valid prompts found');
+        }
       } catch (err) {
         console.warn('[ChatInterface] Using fallback prompts:', err);
         setPromptSuggestions([

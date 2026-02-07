@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, Upload, Database, Loader2, CheckCircle } from 'lucide-react';
@@ -26,13 +26,7 @@ export function QuickFileSelector({
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (user) {
-      loadRecentFiles();
-    }
-  }, [user]);
-
-  const loadRecentFiles = async () => {
+  const loadRecentFiles = useCallback(async () => {
     if (!user) return;
     
     setLoading(true);
@@ -48,7 +42,13 @@ export function QuickFileSelector({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadRecentFiles();
+    }
+  }, [user, loadRecentFiles]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
