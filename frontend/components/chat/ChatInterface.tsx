@@ -38,6 +38,8 @@ export function ChatInterface({
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<DocumentInfo[]>([]);
   const [mode, setMode] = useState<RAGMode>('fast');
+  const [inputValue, setInputValue] = useState('');
+  const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
   // Default to healthy to prevent unnecessary health check API calls
   const [servicesHealthy, setServicesHealthy] = useState(true);
 
@@ -49,6 +51,44 @@ export function ChatInterface({
       messages: messages.map(m => ({ role: m.role, contentPreview: m.content.slice(0, 50) }))
     });
   }, [sessionId, messages]);
+
+  useEffect(() => {
+    const loadPrompts = async () => {
+      try {
+        const response = await fetch('/prompts.md');
+        if (!response.ok) {
+          throw new Error('Failed to load prompts');
+        }
+        const text = await response.text();
+        const parsed = text
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.startsWith('- '))
+          .map((line) => line.replace(/^\-\s*/, ''))
+          .map((line) => {
+            const [title, ...rest] = line.split(':');
+            const prompt = rest.join(':').trim();
+            const cleanTitle = title.trim();
+            return {
+              title: cleanTitle || line,
+              prompt: prompt || cleanTitle,
+            };
+          })
+          .filter((item) => item.title.length > 0);
+
+        setPromptSuggestions(parsed);
+      } catch (err) {
+        console.warn('[ChatInterface] Using fallback prompts:', err);
+        setPromptSuggestions([
+          { title: 'Summarize a document', prompt: 'Summarize the key points from the attached document in 5 bullets.' },
+          { title: 'Compare two files', prompt: 'Compare these two documents. Highlight differences and key overlaps.' },
+          { title: 'Draft an executive brief', prompt: 'Create an executive brief with highlights, risks, and next steps.' },
+        ]);
+      }
+    };
+
+    loadPrompts();
+  }, []);
 
   const handleFileToggle = (file: DocumentInfo) => {
     setSelectedFiles(prev => {
@@ -93,7 +133,7 @@ export function ChatInterface({
   };
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden border-none shadow-none bg-transparent">
+    <Card className="flex h-full flex-col overflow-hidden border-none bg-transparent shadow-none">
 
       {error && (
         <Alert variant="destructive" className="m-4">
@@ -102,16 +142,18 @@ export function ChatInterface({
         </Alert>
       )}
 
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative min-h-0">
         <MessageList
           key={`messages-${sessionId}`}
           messages={messages}
           isLoading={isLoading}
           latestSources={latestSources}
+          promptSuggestions={promptSuggestions}
+          onPromptSelect={(prompt) => setInputValue(prompt)}
         />
       </div>
 
-      <div className="relative p-4 bg-muted/10 border-t space-y-3">
+      <div className="relative p-4 bg-card/80 border-t border-border/60 space-y-3">
         {/* Quick File Selector - Shows last 5 files, upload, and query options */}
         <QuickFileSelector
           selectedFiles={selectedFiles}
@@ -129,6 +171,8 @@ export function ChatInterface({
             <MessageInput
               onSend={handleSend}
               disabled={isLoading || !servicesHealthy}
+              value={inputValue}
+              onChange={setInputValue}
               placeholder={
                 mode === 'think'
                   ? selectedFiles.length > 0

@@ -1,6 +1,6 @@
 'use client';
 
-import { Brain, Bell, User, LogOut } from "lucide-react";
+import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
@@ -16,11 +16,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function Header() {
+interface HeaderProps {
+  showSidebarToggle?: boolean;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
+}
+
+export function Header({
+  showSidebarToggle = false,
+  isSidebarOpen = true,
+  onToggleSidebar,
+}: HeaderProps) {
   const { user, logout } = useAuthStore();
   const router = useRouter();
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('theme');
+    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const nextTheme = stored === 'light' || stored === 'dark' ? stored : preferred;
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle('dark', nextTheme === 'dark');
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    window.localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Poll services (excluding LLM health check) every 60 seconds
   useEffect(() => {
@@ -80,14 +104,34 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-slate-800/50 bg-slate-900/80 backdrop-blur-xl px-6 shadow-lg shadow-cyan-500/5">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-xl px-6 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.35)]">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-500/20">
-          <Brain className="h-6 w-6 text-white" />
+        {showSidebarToggle && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+            onClick={onToggleSidebar}
+            aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          >
+            {isSidebarOpen ? (
+              <PanelLeftClose className="h-5 w-5" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5" />
+            )}
+          </Button>
+        )}
+        <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center shadow-lg ring-2 ring-foreground/10 pulse-glow">
+          <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
         </div>
-        <span className="text-xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
-          NexusMind RAG
-        </span>
+        <div className="flex flex-col">
+          <span className="text-lg font-black tracking-tight text-foreground">
+            NexusMind
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            Studio RAG
+          </span>
+        </div>
       </div>
       
       <div className="flex items-center gap-3">
@@ -135,9 +179,19 @@ export function Header() {
         <Button 
           variant="ghost" 
           size="icon" 
-          className="text-slate-400 hover:text-cyan-400 hover:bg-slate-800/50 transition-all"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
         >
           <Bell className="h-5 w-5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
         
         {user ? (
@@ -146,21 +200,21 @@ export function Header() {
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/30"
+                className="rounded-full bg-foreground text-background hover:bg-foreground/90 shadow-lg"
               >
                 <User className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-slate-900/95 border-slate-800/50 backdrop-blur-xl">
-              <DropdownMenuLabel className="text-white">My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-slate-800/50" />
-              <DropdownMenuItem className="text-xs text-slate-400 focus:text-white focus:bg-slate-800/50">
+            <DropdownMenuContent align="end" className="bg-background/95 border-border/70 backdrop-blur-xl">
+              <DropdownMenuLabel className="text-foreground">My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-border/60" />
+              <DropdownMenuItem className="text-xs text-muted-foreground focus:text-foreground focus:bg-muted/60">
                 {user.email}
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-slate-800/50" />
+              <DropdownMenuSeparator className="bg-border/60" />
               <DropdownMenuItem 
                 onClick={handleLogout} 
-                className="text-red-400 focus:text-red-300 focus:bg-red-500/10"
+                className="text-red-500 focus:text-red-500 focus:bg-red-500/10"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
@@ -168,7 +222,7 @@ export function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Button onClick={() => router.push("/auth")} className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-lg shadow-cyan-500/30">
+          <Button onClick={() => router.push("/auth")} className="bg-foreground text-background hover:bg-foreground/90 shadow-lg">
             Login
           </Button>
         )}

@@ -122,7 +122,7 @@ export function QuickFileSelector({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-400">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
         <span>Loading files...</span>
       </div>
@@ -144,8 +144,8 @@ export function QuickFileSelector({
                   className={`
                     cursor-pointer transition-all hover:scale-105 py-1 px-3
                     ${selected 
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 hover:bg-cyan-500/30' 
-                      : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700/50'
+                      ? 'bg-foreground text-background border-foreground/20 hover:bg-foreground/90' 
+                      : 'bg-card/70 text-muted-foreground border-border/70 hover:bg-muted/60'
                     }
                   `}
                   onClick={() => onFileToggle(file)}
@@ -165,7 +165,7 @@ export function QuickFileSelector({
             })}
           </>
         ) : (
-          <span className="text-sm text-slate-500">No files uploaded yet</span>
+          <span className="text-sm text-muted-foreground">No files uploaded yet</span>
         )}
 
         {/* Action buttons */}
@@ -175,7 +175,7 @@ export function QuickFileSelector({
               size="sm"
               variant="ghost"
               onClick={onClearAll}
-              className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800/50"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
             >
               Clear all
             </Button>
@@ -186,7 +186,7 @@ export function QuickFileSelector({
             variant="ghost"
             onClick={handleUploadClick}
             disabled={uploading}
-            className="h-7 px-2 text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+            className="h-7 px-2 text-xs text-foreground hover:text-foreground/80 hover:bg-muted/60"
           >
             {uploading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -203,7 +203,7 @@ export function QuickFileSelector({
               size="sm"
               variant="ghost"
               onClick={handleViewAll}
-              className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800/50"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
             >
               <Database className="h-3 w-3 mr-1" />
               View All
@@ -223,7 +223,7 @@ export function QuickFileSelector({
 
       {/* Selected count indicator */}
       {selectedFiles.length > 0 && (
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-muted-foreground">
           {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected as context
         </div>
       )}

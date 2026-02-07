@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { ChatInterface } from '@/components/chat/ChatInterface';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
 import { useChat } from '@/hooks/useChat';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
@@ -12,11 +11,23 @@ import AuthPage from '@/app/auth/page';
 export default function HomePage() {
   const { isAuthenticated } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory } = useChat();
   
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('sidebar');
+    if (stored === 'closed') {
+      setIsSidebarOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('sidebar', isSidebarOpen ? 'open' : 'closed');
+  }, [isSidebarOpen]);
 
   if (!isMounted) {
     return null;
@@ -40,37 +51,46 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 dark relative overflow-hidden">
-      {/* Ambient Background Effects - Cyberpunk Theme */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-cyan-500/10 blur-[120px] animate-pulse" />
-        <div className="absolute top-[40%] -right-[10%] w-[60%] h-[60%] rounded-full bg-purple-500/10 blur-[120px] animate-pulse" style={{animationDelay: '1s'}} />
-        <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] rounded-full bg-blue-500/8 blur-[100px] animate-pulse" style={{animationDelay: '2s'}} />
-        
-        {/* Grid Pattern Overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(6,182,212,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(6,182,212,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
-      </div>
+    <div className="relative h-screen overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-0 app-aurora" />
+      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
+      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
 
-      <Header />
-      <div className="flex flex-1 overflow-hidden relative z-10">
-        <aside className="hidden md:block">
-          <Sidebar 
-            onNewChat={handleNewChat} 
-            onLoadSession={handleLoadSession}
-            currentSessionId={sessionId}
-          />
-        </aside>
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden p-4 md:p-6">
-            <ChatInterface 
-              sessionId={sessionId}
-              messages={messages}
-              isLoading={isLoading}
-              error={error}
-              sendMessage={sendMessage}
+      <Header
+        showSidebarToggle
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+      />
+      <div className="relative z-10 flex h-[calc(100vh-4rem)] overflow-hidden">
+        <aside
+          className={`hidden md:block transition-all duration-300 ease-out ${
+            isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'
+          }`}
+        >
+          <div
+            className={`h-full transition-all duration-300 ${
+              isSidebarOpen ? 'translate-x-0' : '-translate-x-6 pointer-events-none'
+            }`}
+          >
+            <Sidebar 
+              onNewChat={handleNewChat} 
+              onLoadSession={handleLoadSession}
+              currentSessionId={sessionId}
             />
           </div>
-          <Footer />
+        </aside>
+        <main className="flex flex-1 flex-col overflow-hidden min-h-0">
+          <div className="flex-1 overflow-hidden p-3 md:p-6">
+            <div className="glass-panel h-full rounded-3xl">
+              <ChatInterface 
+                sessionId={sessionId}
+                messages={messages}
+                isLoading={isLoading}
+                error={error}
+                sendMessage={sendMessage}
+              />
+            </div>
+          </div>
         </main>
       </div>
     </div>

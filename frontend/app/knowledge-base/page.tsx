@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
 import { DocumentInfo } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
+import { Header } from '@/components/layout/Header';
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
@@ -58,10 +58,16 @@ export default function KnowledgeBasePage() {
   // Show loading state while hydrating
   if (!isHydrated || (loading && documents.length === 0)) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mx-auto mb-4" />
-          <p className="text-slate-400">Loading Knowledge Base...</p>
+      <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 app-aurora" />
+        <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
+        <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+        <Header />
+        <div className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center">
+          <div className="text-center glass-panel rounded-3xl px-8 py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading Knowledge Base...</p>
+          </div>
         </div>
       </div>
     );
@@ -131,64 +137,82 @@ export default function KnowledgeBasePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 app-aurora" />
+        <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
+        <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+        <Header />
+        <div className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-foreground" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <FileText className="h-6 w-6" />
-            Knowledge Base
-          </CardTitle>
-          <CardDescription>
-            Manage your uploaded documents. You can only query documents that you've uploaded.
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
+    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 app-aurora" />
+      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
+      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+
+      <Header />
+
+      <main className="relative z-10 px-4 md:px-8 py-8">
+        <div className="glass-panel rounded-3xl p-6 md:p-8 max-w-6xl mx-auto">
+          <div className="flex flex-col gap-2 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center shadow-lg ring-2 ring-foreground/10">
+                <FileText className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-foreground">Knowledge Base</h1>
+                <p className="text-sm text-muted-foreground">
+                  Manage your uploaded documents and keep your chat context clean.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {error && (
-            <Alert variant="destructive" className="mb-4">
+            <Alert variant="destructive" className="mb-4 border-red-500/30 bg-red-500/10 text-red-600">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
           {success && (
-            <Alert className="mb-4 bg-green-50 text-green-900 border-green-200">
+            <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
               <AlertDescription>{success}</AlertDescription>
             </Alert>
           )}
 
           {documents.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
-              <p className="text-gray-500 mb-6">Upload your first document to get started</p>
-              <Button onClick={() => router.push('/')}>
+            <div className="text-center py-14">
+              <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
+                <FileText className="h-8 w-8 text-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No documents yet</h3>
+              <p className="text-muted-foreground mb-6">Upload your first document to get started.</p>
+              <Button onClick={() => router.push('/')} className="bg-foreground text-background shadow-lg">
                 Go to Chat
               </Button>
             </div>
           ) : (
             <>
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={selectedIds.size === documents.length && documents.length > 0}
                       onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
                     />
-                    <span className="text-sm font-medium">Select All</span>
+                    <span className="text-sm font-medium text-foreground">Select All</span>
                   </label>
                   
                   {selectedIds.size > 0 && (
-                    <Badge variant="secondary">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20">
                       {selectedIds.size} selected
                     </Badge>
                   )}
@@ -214,34 +238,34 @@ export default function KnowledgeBasePage() {
                 </Button>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="border border-border/70 rounded-2xl overflow-hidden bg-card/70">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-muted/60">
                     <tr>
                       <th className="w-12 px-4 py-3"></th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Filename
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Type
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Size
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Vectors
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Uploaded
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-card/60 divide-y divide-border">
                     {documents.map((doc) => (
                       <tr
                         key={doc.id}
-                        className={`hover:bg-gray-50 transition-colors ${
-                          selectedIds.has(doc.id) ? 'bg-blue-50' : ''
+                        className={`hover:bg-muted/40 transition-colors ${
+                          selectedIds.has(doc.id) ? 'bg-primary/10' : ''
                         }`}
                       >
                         <td className="px-4 py-4">
@@ -249,16 +273,16 @@ export default function KnowledgeBasePage() {
                             type="checkbox"
                             checked={selectedIds.has(doc.id)}
                             onChange={(e) => handleSelectOne(doc.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
                           />
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium text-gray-900">
+                            <span className="text-sm font-medium text-foreground">
                               {doc.filename}
                             </span>
                             {doc.title && (
-                              <span className="text-xs text-gray-500">{doc.title}</span>
+                                <span className="text-xs text-muted-foreground">{doc.title}</span>
                             )}
                           </div>
                         </td>
@@ -267,7 +291,7 @@ export default function KnowledgeBasePage() {
                             {doc.file_type || 'N/A'}
                           </Badge>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
+                          <td className="px-4 py-4 text-sm text-foreground">
                           {formatFileSize(doc.file_size)}
                         </td>
                         <td className="px-4 py-4">
@@ -275,7 +299,7 @@ export default function KnowledgeBasePage() {
                             {doc.vector_count}
                           </Badge>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-500">
+                          <td className="px-4 py-4 text-sm text-muted-foreground">
                           {formatDate(doc.upload_date)}
                         </td>
                       </tr>
@@ -284,13 +308,13 @@ export default function KnowledgeBasePage() {
                 </table>
               </div>
 
-              <div className="mt-4 text-sm text-gray-500">
+                <div className="mt-4 text-sm text-muted-foreground">
                 Total: {documents.length} document{documents.length !== 1 ? 's' : ''}
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+        </main>
+      </div>
   );
 }

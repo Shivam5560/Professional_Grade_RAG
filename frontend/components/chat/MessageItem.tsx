@@ -45,8 +45,8 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
     >
       {/* Avatar for Assistant */}
       {!isUser && (
-        <div className="flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 via-cyan-400 to-blue-500 text-white shadow-xl shadow-cyan-500/40 ring-2 ring-cyan-400/20 hover:shadow-cyan-500/60 transition-all duration-300">
-          <Bot className="h-5 w-5" />
+        <div className="flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-2xl logo-mark shadow-xl ring-2 ring-foreground/10 hover:shadow-2xl transition-all duration-300">
+          <Bot className="h-5 w-5 text-primary-foreground" />
         </div>
       )}
 
@@ -59,13 +59,13 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
           <span className={cn(
             "text-xs font-semibold tracking-wide",
             isUser 
-              ? "text-cyan-400" 
-              : "bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"
+              ? "text-foreground" 
+              : "text-muted-foreground"
           )}>
             {isUser ? 'You' : 'AI Assistant'}
           </span>
-          <span className="text-xs text-slate-500">•</span>
-          <span className="text-xs text-slate-500 font-medium">
+          <span className="text-xs text-muted-foreground">•</span>
+          <span className="text-xs text-muted-foreground font-medium">
             {formatTimestamp(message.timestamp)}
           </span>
         </div>
@@ -77,7 +77,7 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
               <Badge
                 key={file.id}
                 variant="outline"
-                className="text-xs py-0.5 px-2 bg-cyan-500/10 text-cyan-300 border-cyan-500/30"
+                className="text-xs py-0.5 px-2 bg-muted/60 text-foreground border-border/60"
               >
                 <FileText className="h-2.5 w-2.5 mr-1" />
                 {file.filename}
@@ -90,13 +90,13 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
         <div className={cn(
           'rounded-2xl px-6 py-4 shadow-xl text-sm transition-all duration-300 relative overflow-hidden',
           isUser 
-            ? 'bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-600 text-white rounded-tr-sm shadow-cyan-500/30 hover:shadow-cyan-500/50 ring-1 ring-white/20' 
-            : 'backdrop-blur-xl bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/98 border border-slate-700/60 rounded-tl-sm text-slate-100 shadow-slate-900/60 hover:shadow-slate-900/80 hover:border-cyan-500/40 ring-1 ring-cyan-500/10',
+            ? 'bubble-user text-foreground rounded-tr-sm shadow-[0_18px_40px_-30px_rgba(0,0,0,0.3)] ring-1 ring-border/60' 
+            : 'bubble-bot backdrop-blur-xl border border-border/70 rounded-tl-sm text-foreground shadow-[0_20px_60px_-45px_rgba(0,0,0,0.35)] hover:shadow-[0_30px_80px_-60px_rgba(0,0,0,0.45)]',
           !isUser && 'group/msg'
         )}>
           {/* Decorative gradient overlay for assistant messages */}
           {!isUser && (
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-blue-500/5 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-foreground/5 via-transparent to-transparent pointer-events-none" />
           )}
 
           {/* Copy button for assistant messages */}
@@ -104,11 +104,11 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
             <button
               type="button"
               onClick={handleCopy}
-              className="absolute top-2 right-2 z-20 p-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/80 border border-slate-600/40 hover:border-cyan-500/40 text-slate-400 hover:text-cyan-300 transition-all duration-200 opacity-0 group-hover/msg:opacity-100 focus:opacity-100"
+              className="absolute top-2 right-2 z-20 p-1.5 rounded-lg bg-muted/70 hover:bg-muted border border-border/70 text-muted-foreground hover:text-foreground transition-all duration-200 opacity-0 group-hover/msg:opacity-100 focus:opacity-100"
               title="Copy to clipboard"
             >
               {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-400" />
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
@@ -118,19 +118,19 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
           <div className={cn(
             'prose prose-sm max-w-none relative z-10',
             isUser 
-              ? 'prose-invert text-white prose-headings:text-white prose-p:text-white prose-strong:text-white prose-code:text-cyan-100' 
-              : 'text-slate-100 prose-headings:text-slate-100 prose-p:text-slate-100 prose-strong:text-white',
+              ? 'text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground' 
+              : 'text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground',
             // Better table styling
             'prose-table:text-sm prose-table:border-collapse',
-            'prose-th:border prose-th:border-slate-600 prose-th:bg-slate-700/60 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:text-slate-200',
-            'prose-td:border prose-td:border-slate-700 prose-td:px-3 prose-td:py-2 prose-td:text-slate-200',
-            'prose-tr:border-b prose-tr:border-slate-700',
+            'prose-th:border prose-th:border-border prose-th:bg-muted/70 prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-th:text-foreground',
+            'prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2 prose-td:text-foreground/90',
+            'prose-tr:border-b prose-tr:border-border',
             // Better list styling
-            'prose-ul:my-2 prose-ol:my-2 prose-li:text-slate-100',
+            'prose-ul:my-2 prose-ol:my-2 prose-li:text-foreground',
             'prose-li:my-1',
             // Better code styling
-            'prose-code:text-xs prose-code:bg-slate-900/60 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-cyan-300 prose-code:border prose-code:border-slate-700',
-            'prose-pre:bg-slate-900/80 prose-pre:border prose-pre:border-slate-700 prose-pre:text-slate-200'
+            'prose-code:text-xs prose-code:bg-muted/70 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground prose-code:border prose-code:border-border',
+            'prose-pre:bg-muted/80 prose-pre:border prose-pre:border-border prose-pre:text-foreground'
           )}>
             {isUser ? (
               <p className="whitespace-pre-wrap m-0 leading-relaxed font-medium tracking-wide">{message.content}</p>
@@ -144,55 +144,55 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                     </div>
                   ),
                   th: ({ node, ...props }) => (
-                    <th className="bg-slate-700/50 px-3 py-2 text-left text-xs font-semibold text-slate-200 border border-slate-600/50" {...props} />
+                    <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
                   ),
                   td: ({ node, ...props }) => (
-                    <td className="px-3 py-2 text-sm border border-slate-600/30 text-slate-100" {...props} />
+                    <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
                   ),
                   h1: ({ node, ...props }) => (
-                    <h1 className="text-2xl font-bold mt-6 mb-3 bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent border-b border-cyan-500/30 pb-2" {...props} />
+                    <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
                   ),
                   h2: ({ node, ...props }) => (
-                    <h2 className="text-xl font-semibold mt-5 mb-2 bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent" {...props} />
+                    <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
                   ),
                   h3: ({ node, ...props }) => (
-                    <h3 className="text-lg font-semibold mt-4 mb-2 text-cyan-200" {...props} />
+                    <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
                   ),
                   p: ({ node, ...props }) => (
-                    <p className="mb-3 leading-relaxed text-slate-50" {...props} />
+                    <p className="mb-3 leading-relaxed text-foreground" {...props} />
                   ),
                   ul: ({ node, ...props }) => (
-                    <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-slate-50 marker:text-cyan-400" {...props} />
+                    <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
                   ),
                   ol: ({ node, ...props }) => (
-                    <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-slate-50 marker:text-cyan-400 marker:font-semibold" {...props} />
+                    <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
                   ),
                   li: ({ node, ...props }) => (
-                    <li className="text-slate-50 leading-relaxed pl-1" {...props} />
+                    <li className="text-foreground leading-relaxed pl-1" {...props} />
                   ),
                   code: ({ node, inline, ...props }: any) => 
                     inline ? (
-                      <code className="bg-slate-900/80 px-2 py-0.5 rounded text-sm font-mono text-cyan-300 border border-cyan-500/30 shadow-inner" {...props} />
+                      <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
                     ) : (
-                      <code className="block bg-slate-950/90 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-cyan-100 border border-cyan-500/30 shadow-lg shadow-cyan-500/10" {...props} />
+                      <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
                     ),
                   pre: ({ node, ...props }) => (
-                    <pre className="bg-slate-950/90 p-4 rounded-lg overflow-x-auto my-3 border border-cyan-500/30 shadow-lg shadow-cyan-500/10" {...props} />
+                    <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
                   ),
                   blockquote: ({ node, ...props }) => (
-                    <blockquote className="border-l-4 border-cyan-500 pl-4 italic my-3 text-slate-200 bg-cyan-500/5 py-2 rounded-r backdrop-blur-sm" {...props} />
+                    <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
                   ),
                   hr: ({ node, ...props }) => (
-                    <hr className="my-4 border-slate-600/50" {...props} />
+                    <hr className="my-4 border-border" {...props} />
                   ),
                   strong: ({ node, ...props }) => (
-                    <strong className="font-semibold text-slate-50" {...props} />
+                    <strong className="font-semibold text-foreground" {...props} />
                   ),
                   em: ({ node, ...props }) => (
-                    <em className="italic text-slate-200" {...props} />
+                    <em className="italic text-foreground/80" {...props} />
                   ),
                   a: ({ node, ...props }) => (
-                    <a className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2" {...props} />
+                    <a className="text-foreground underline underline-offset-2" {...props} />
                   ),
                 }}
               >
@@ -211,8 +211,8 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                 <div className={cn(
                   "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg backdrop-blur-sm flex items-center gap-1.5",
                   message.mode === 'think'
-                    ? "text-purple-300 bg-gradient-to-r from-purple-900/40 to-pink-900/40 border-purple-500/30 shadow-purple-500/10"
-                    : "text-cyan-300 bg-gradient-to-r from-slate-800/80 to-slate-900/80 border-cyan-500/30 shadow-cyan-500/10"
+                    ? "text-foreground bg-muted/70 border-border/60"
+                    : "text-foreground bg-muted/70 border-border/60"
                 )}>
                   {message.mode === 'think' ? <Brain className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
                   {message.mode === 'think' ? 'Think' : 'Fast'}
@@ -221,7 +221,7 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
 
               {/* Confidence badge */}
               {showConfidence && message.confidence_score !== undefined && (
-                <div className="text-xs font-semibold text-cyan-300 bg-gradient-to-r from-slate-800/80 to-slate-900/80 px-3 py-1 rounded-full border border-cyan-500/30 shadow-lg shadow-cyan-500/10 backdrop-blur-sm">
+                <div className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm">
                   Confidence: {Math.round(message.confidence_score)}%
                 </div>
               )}
@@ -231,7 +231,7 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                 <button
                   type="button"
                   onClick={() => setShowReasoning(!showReasoning)}
-                  className="text-xs font-semibold text-purple-300 bg-gradient-to-r from-purple-900/30 to-pink-900/30 px-3 py-1 rounded-full border border-purple-500/30 shadow-lg shadow-purple-500/10 backdrop-blur-sm hover:border-purple-400/50 hover:shadow-purple-500/20 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Brain className="h-3 w-3" />
                   <span>Reasoning</span>
@@ -248,7 +248,7 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                 <button
                   type="button"
                   onClick={() => setShowSources(!showSources)}
-                  className="text-xs font-semibold text-blue-300 bg-gradient-to-r from-slate-800/80 to-slate-900/80 px-3 py-1 rounded-full border border-blue-500/30 shadow-lg shadow-blue-500/10 backdrop-blur-sm hover:border-blue-400/50 hover:shadow-blue-500/20 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
                 >
                   <FileText className="h-3 w-3" />
                   <span>Sources ({message.sources.length})</span>
@@ -264,12 +264,12 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
             {/* Collapsible reasoning panel */}
             {showReasoning && message.reasoning && (
               <div className="mt-2 animate-in slide-in-from-top-2 duration-200">
-                <div className="bg-purple-900/20 border border-purple-500/20 rounded-lg p-4 text-xs backdrop-blur-sm">
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-xs backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
-                    <Brain className="h-4 w-4 text-purple-400" />
-                    <span className="font-semibold text-purple-300">Reasoning Steps</span>
+                    <Brain className="h-4 w-4 text-primary" />
+                    <span className="font-semibold text-primary">Reasoning Steps</span>
                   </div>
-                  <div className="text-slate-300 leading-relaxed whitespace-pre-wrap prose prose-sm prose-invert max-w-none">
+                  <div className="text-foreground/80 leading-relaxed whitespace-pre-wrap prose prose-sm max-w-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {message.reasoning}
                     </ReactMarkdown>
@@ -284,26 +284,26 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
                 {message.sources.map((source, idx) => (
                   <div
                     key={idx}
-                    className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3 text-xs backdrop-blur-sm hover:border-cyan-500/30 transition-all duration-200"
+                    className="bg-card/80 border border-border/70 rounded-lg p-3 text-xs backdrop-blur-sm hover:border-secondary/40 transition-all duration-200"
                   >
                     <div className="flex items-start gap-2">
-                      <FileText className="h-4 w-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+                      <FileText className="h-4 w-4 text-secondary flex-shrink-0 mt-0.5" />
                       <div className="flex-1 space-y-1">
-                        <div className="font-semibold text-cyan-300">
+                        <div className="font-semibold text-foreground">
                           {source.document}
                           {source.page && (
-                            <span className="text-slate-400 font-normal ml-1">
+                            <span className="text-muted-foreground font-normal ml-1">
                               (Page {source.page})
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-slate-400">
-                          <span className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 rounded text-cyan-400 font-medium">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <span className="px-2 py-0.5 bg-secondary/10 border border-secondary/20 rounded text-secondary font-medium">
                             {Math.round(source.relevance_score * 100)}% relevance
                           </span>
                         </div>
                         {source.text_snippet && (
-                          <div className="text-slate-300 leading-relaxed mt-1 pt-2 border-t border-slate-700/30">
+                          <div className="text-foreground/80 leading-relaxed mt-1 pt-2 border-t border-border/60">
                             "{source.text_snippet}"
                           </div>
                         )}
@@ -319,8 +319,8 @@ export function MessageItem({ message, showConfidence = false, onShowSources }: 
 
       {/* Avatar for User */}
       {isUser && (
-        <div className="flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500 text-white shadow-xl shadow-blue-500/40 ring-2 ring-blue-400/20 hover:shadow-blue-500/60 transition-all duration-300">
-          <User className="h-5 w-5" />
+        <div className="flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-2xl logo-mark shadow-xl ring-2 ring-foreground/10 hover:shadow-2xl transition-all duration-300">
+          <User className="h-5 w-5 text-primary-foreground" />
         </div>
       )}
     </div>

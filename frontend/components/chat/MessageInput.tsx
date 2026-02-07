@@ -14,20 +14,30 @@ interface MessageInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  value?: string;
+  onChange?: (value: string) => void;
 }
 
 export function MessageInput({
   onSend,
   disabled = false,
   placeholder = 'Ask a question...',
+  value,
+  onChange,
 }: MessageInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isControlled = typeof value === 'string' && typeof onChange === 'function';
+  const currentValue = isControlled ? value : input;
 
   const handleSend = () => {
-    if (input.trim() && !disabled) {
-      onSend(input.trim());
-      setInput('');
+    if (currentValue.trim() && !disabled) {
+      onSend(currentValue.trim());
+      if (isControlled) {
+        onChange?.('');
+      } else {
+        setInput('');
+      }
       // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -48,9 +58,14 @@ export function MessageInput({
       <div className="flex items-end gap-3">
         <Textarea
           ref={textareaRef}
-          value={input}
+          value={currentValue}
           onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-            setInput(e.target.value);
+            const nextValue = e.target.value;
+            if (isControlled) {
+              onChange?.(nextValue);
+            } else {
+              setInput(nextValue);
+            }
             // Auto-resize textarea
             e.target.style.height = 'auto';
             e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
@@ -58,14 +73,14 @@ export function MessageInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 min-h-[56px] max-h-[200px] resize-none bg-slate-800/40 border-slate-700/50 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all rounded-2xl px-5 py-4"
+          className="flex-1 min-h-[56px] max-h-[200px] resize-none bg-muted/70 border-border/70 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-foreground/30 focus:border-foreground/30 transition-all rounded-2xl px-5 py-4"
           rows={1}
         />
         <Button
           onClick={handleSend}
-          disabled={!input.trim() || disabled}
+          disabled={!currentValue.trim() || disabled}
           size="icon"
-          className="h-12 w-12 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/30 transition-all rounded-xl disabled:opacity-50"
+          className="h-12 w-12 bg-foreground text-background hover:bg-foreground/90 shadow-lg transition-all rounded-xl disabled:opacity-50"
         >
           <Send className="h-5 w-5" />
         </Button>
