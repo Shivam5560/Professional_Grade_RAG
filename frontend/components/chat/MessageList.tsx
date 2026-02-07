@@ -89,6 +89,49 @@ export function MessageList({
     return Array.from(set);
   }, [promptSuggestions, categoryMap]);
 
+  const categoryBadgeClass = (category: string, isActive: boolean) => {
+    const base = 'px-3 py-1 text-xs uppercase tracking-[0.2em] transition-colors';
+    if (category === 'All') {
+      return isActive
+        ? `${base} bg-foreground text-background`
+        : `${base} bg-card/80 text-foreground border-border/70 hover:bg-muted/60`;
+    }
+
+    const palette: Record<string, { active: string; idle: string }> = {
+      Summary: {
+        active: 'bg-emerald-500 text-white',
+        idle: 'bg-emerald-500/10 text-emerald-700 border-emerald-300/60 dark:text-emerald-200',
+      },
+      Comparison: {
+        active: 'bg-sky-500 text-white',
+        idle: 'bg-sky-500/10 text-sky-700 border-sky-300/60 dark:text-sky-200',
+      },
+      Actions: {
+        active: 'bg-amber-500 text-white',
+        idle: 'bg-amber-500/10 text-amber-700 border-amber-300/60 dark:text-amber-200',
+      },
+      Risk: {
+        active: 'bg-rose-500 text-white',
+        idle: 'bg-rose-500/10 text-rose-700 border-rose-300/60 dark:text-rose-200',
+      },
+      Stakeholders: {
+        active: 'bg-indigo-500 text-white',
+        idle: 'bg-indigo-500/10 text-indigo-700 border-indigo-300/60 dark:text-indigo-200',
+      },
+      Comms: {
+        active: 'bg-teal-500 text-white',
+        idle: 'bg-teal-500/10 text-teal-700 border-teal-300/60 dark:text-teal-200',
+      },
+      Other: {
+        active: 'bg-zinc-700 text-white',
+        idle: 'bg-zinc-500/10 text-zinc-600 border-zinc-300/60 dark:text-zinc-200',
+      },
+    };
+
+    const selected = palette[category] || palette.Other;
+    return `${base} ${isActive ? selected.active : selected.idle}`;
+  };
+
   const filteredPrompts = useMemo(() => {
     if (activeCategory === 'All') return promptSuggestions;
     return promptSuggestions.filter((item) => categoryMap[item.title] === activeCategory);
@@ -141,11 +184,7 @@ export function MessageList({
                         className="rounded-full"
                       >
                         <Badge
-                          className={`px-3 py-1 text-xs uppercase tracking-[0.2em] transition-colors ${
-                            isActive
-                              ? 'bg-foreground text-background'
-                              : 'bg-card/80 text-foreground border-border/70 hover:bg-muted/60'
-                          }`}
+                          className={categoryBadgeClass(category, isActive)}
                           variant={isActive ? 'default' : 'outline'}
                         >
                           {category}

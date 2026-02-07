@@ -153,36 +153,40 @@ export function ChatInterface({
         />
       </div>
 
-      <div className="relative p-4 bg-card/80 border-t border-border/60 space-y-3">
-        {/* Quick File Selector - Shows last 5 files, upload, and query options */}
-        <QuickFileSelector
-          selectedFiles={selectedFiles}
-          onFileToggle={handleFileToggle}
-          onClearAll={handleClearAll}
-        />
-        
-        <div className="flex items-end gap-3">
-          <ModeSelector
-            mode={mode}
-            onModeChange={setMode}
-            disabled={isLoading}
-          />
-          <div className="flex-1">
-            <MessageInput
-              onSend={handleSend}
-              disabled={isLoading || !servicesHealthy}
-              value={inputValue}
-              onChange={setInputValue}
-              placeholder={
-                mode === 'think'
-                  ? selectedFiles.length > 0
-                    ? `Think deeply about ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}...`
-                    : "Ask a complex question (Think mode)..."
-                  : selectedFiles.length > 0
-                    ? `Ask about ${selectedFiles.length} selected file${selectedFiles.length !== 1 ? 's' : ''}...`
-                    : "Ask a question about your documents..."
-              }
+      <div className="sticky bottom-0 z-20">
+        <div className="bg-gradient-to-t from-background/95 via-background/80 to-transparent px-4 pt-6 pb-4">
+          <div className="mx-auto w-full max-w-4xl glass-panel rounded-3xl p-4 space-y-3">
+            {/* Quick File Selector - Shows last 5 files, upload, and query options */}
+            <QuickFileSelector
+              selectedFiles={selectedFiles}
+              onFileToggle={handleFileToggle}
+              onClearAll={handleClearAll}
             />
+            
+            <div className="flex items-end gap-3">
+              <ModeSelector
+                mode={mode}
+                onModeChange={setMode}
+                disabled={isLoading}
+              />
+              <div className="flex-1">
+                <MessageInput
+                  onSend={handleSend}
+                  disabled={isLoading || !servicesHealthy}
+                  value={inputValue}
+                  onChange={setInputValue}
+                  placeholder={
+                    mode === 'think'
+                      ? selectedFiles.length > 0
+                        ? `Think deeply about ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}...`
+                        : "Ask a complex question (Think mode)..."
+                      : selectedFiles.length > 0
+                        ? `Ask about ${selectedFiles.length} selected file${selectedFiles.length !== 1 ? 's' : ''}...`
+                        : "Ask a question about your documents..."
+                  }
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

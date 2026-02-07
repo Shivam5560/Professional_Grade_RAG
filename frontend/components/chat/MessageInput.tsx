@@ -68,12 +68,12 @@ export function MessageInput({
             }
             // Auto-resize textarea
             e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+            e.target.style.height = Math.min(e.target.scrollHeight, 320) + 'px';
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 min-h-[56px] max-h-[200px] resize-none bg-muted/70 border-border/70 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-foreground/30 focus:border-foreground/30 transition-all rounded-2xl px-5 py-4"
+          className="flex-1 min-h-[56px] max-h-[320px] resize-none bg-muted/70 border-border/70 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-foreground/30 focus:border-foreground/30 transition-all rounded-2xl px-5 py-4"
           rows={1}
         />
         <Button

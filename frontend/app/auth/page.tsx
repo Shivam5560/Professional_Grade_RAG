@@ -21,8 +21,7 @@ export default function AuthPage() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem('theme');
-    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    const nextTheme = stored === 'light' || stored === 'dark' ? stored : preferred;
+    const nextTheme = stored === 'light' || stored === 'dark' ? stored : 'light';
     document.documentElement.classList.toggle('dark', nextTheme === 'dark');
   }, []);
 

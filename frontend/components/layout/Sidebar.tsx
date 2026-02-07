@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, ChevronDown, ChevronUp, X } from "lucide-react";
+import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api";
@@ -21,7 +21,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (user) {
@@ -63,6 +62,7 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
   }, [history]);
 
   const primaryHistory = sortedHistory.slice(0, 6);
+  const extraCount = Math.max(sortedHistory.length - primaryHistory.length, 0);
 
   const formatTitle = (title?: string, fallbackDate?: string) => {
     if (!title) {
@@ -82,14 +82,9 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
     });
   };
 
-  const toggleExpanded = (sessionId: string) => {
-    setExpandedId((prev) => (prev === sessionId ? null : sessionId));
-  };
-
   const renderSessionList = (sessions: ChatSession[]) => (
     <div className="space-y-2">
       {sessions.map((session) => {
-        const isExpanded = expandedId === session.id;
         const displayDate = formatDate(session.updated_at || session.created_at);
         const displayTitle = formatTitle(session.title, displayDate);
 
@@ -124,22 +119,7 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
                   </p>
                 </div>
               </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                onClick={() => toggleExpanded(session.id)}
-                aria-label={isExpanded ? 'Collapse chat details' : 'Expand chat details'}
-              >
-                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
             </div>
-            {isExpanded && (
-              <div className="px-3 pb-3 text-xs text-muted-foreground space-y-1">
-                <div>Created: {formatDate(session.created_at)}</div>
-                <div>Last updated: {formatDate(session.updated_at || session.created_at)}</div>
-              </div>
-            )}
           </div>
         );
       })}
@@ -160,7 +140,7 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
         </Button>
       </div>
       
-      <div className="px-4 py-2 flex-1 overflow-hidden">
+      <div className="px-4 py-2 flex-1 overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Recent Conversations
@@ -175,11 +155,21 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
             <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        <ScrollArea className="h-full pr-2">
+        <ScrollArea className="flex-1 pr-2">
           <div className="space-y-2">
             {user ? (
               sortedHistory.length > 0 ? (
-                renderSessionList(primaryHistory)
+                <>
+                  {renderSessionList(primaryHistory)}
+                  {showAll && sortedHistory.length > primaryHistory.length && (
+                    <div className="pt-2">
+                      <div className="px-2 py-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                        More conversations
+                      </div>
+                      {renderSessionList(sortedHistory.slice(primaryHistory.length))}
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="px-2 py-8 text-center text-xs text-muted-foreground">
                   {isRefreshing ? 'Loading...' : 'No chat history yet. Start a new conversation!'}
@@ -192,17 +182,20 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
             )}
           </div>
         </ScrollArea>
-        {sortedHistory.length > primaryHistory.length && (
-          <div className="pt-3">
-            <Button
-              variant="ghost"
-              className="w-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              onClick={() => setShowAll(true)}
-            >
-              Show more
-            </Button>
-          </div>
-        )}
+        <div className="pt-3">
+          <Button
+            variant="ghost"
+            className="w-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            onClick={() => setShowAll((prev) => !prev)}
+            disabled={extraCount === 0}
+          >
+            {extraCount === 0
+              ? 'All chats shown'
+              : showAll
+                ? 'Show less'
+                : `Show more (${extraCount})`}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-auto p-4 border-t border-border/60">
@@ -226,30 +219,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
         </div>
       </div>
       </div>
-      {showAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="glass-panel w-full max-w-2xl rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">All conversations</h3>
-                <p className="text-xs text-muted-foreground">Sorted by most recent update</p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                onClick={() => setShowAll(false)}
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <ScrollArea className="max-h-[65vh] pr-2">
-              {renderSessionList(sortedHistory)}
-            </ScrollArea>
-          </div>
-        </div>
-      )}
     </>
   );
 }

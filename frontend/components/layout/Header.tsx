@@ -31,12 +31,11 @@ export function Header({
   const router = useRouter();
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     const stored = window.localStorage.getItem('theme');
-    const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    const nextTheme = stored === 'light' || stored === 'dark' ? stored : preferred;
+    const nextTheme = stored === 'light' || stored === 'dark' ? stored : 'light';
     setTheme(nextTheme);
     document.documentElement.classList.toggle('dark', nextTheme === 'dark');
   }, []);
