@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { User, Bot, FileText, ChevronDown, ChevronUp, Brain, Zap, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,50 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
   const [showSources, setShowSources] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const unwrapMarkdownFence = useCallback((value: string) => {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^```(?:md|markdown)?\s*([\s\S]*?)\s*```$/i);
+    return match ? match[1].trim() : value;
+  }, []);
+
+  const extractedContent = useMemo(() => {
+    const content = message.content;
+
+    const textParts: string[] = [];
+    const xmlParts: string[] = [];
+    let lastIndex = 0;
+    const regex = /<mxfile[\s\S]*?<\/mxfile>/g;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      const textBefore = content.substring(lastIndex, match.index).trim();
+      if (textBefore) {
+        textParts.push(unwrapMarkdownFence(textBefore));
+      }
+      xmlParts.push(match[0]);
+      lastIndex = regex.lastIndex;
+    }
+
+    const textAfter = content.substring(lastIndex).trim();
+    if (textAfter) {
+      textParts.push(unwrapMarkdownFence(textAfter));
+    }
+
+    if (textParts.length === 0) {
+      textParts.push(unwrapMarkdownFence(content));
+    }
+
+    if (message.diagramXml) {
+      if (xmlParts.length > 0) {
+        xmlParts[0] = message.diagramXml;
+      } else {
+        xmlParts.push(message.diagramXml);
+      }
+    }
+
+    return { text: textParts.join('\n\n'), diagrams: xmlParts };
+  }, [message.content, message.diagramXml, unwrapMarkdownFence]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -134,75 +178,78 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
             {isUser ? (
               <p className="whitespace-pre-wrap m-0 leading-relaxed font-medium tracking-wide">{message.content}</p>
             ) : (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  table: ({ ...props }) => (
-                    <div className="overflow-x-auto my-4">
-                      <table className="min-w-full divide-y divide-border" {...props} />
-                    </div>
-                  ),
-                  th: ({ ...props }) => (
-                    <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
-                  ),
-                  td: ({ ...props }) => (
-                    <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
-                  ),
-                  h1: ({ ...props }) => (
-                    <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
-                  ),
-                  h2: ({ ...props }) => (
-                    <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
-                  ),
-                  h3: ({ ...props }) => (
-                    <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
-                  ),
-                  p: ({ ...props }) => (
-                    <p className="mb-3 leading-relaxed text-foreground" {...props} />
-                  ),
-                  ul: ({ ...props }) => (
-                    <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
-                  ),
-                  ol: ({ ...props }) => (
-                    <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
-                  ),
-                  li: ({ ...props }) => (
-                    <li className="text-foreground leading-relaxed pl-1" {...props} />
-                  ),
-                  code: ({ inline, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => 
-                    inline ? (
-                      <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
-                    ) : (
-                      <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
-                    ),
-                  pre: ({ ...props }) => (
-                    <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
-                  ),
-                  blockquote: ({ ...props }) => (
-                    <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
-                  ),
-                  hr: ({ ...props }) => (
-                    <hr className="my-4 border-border" {...props} />
-                  ),
-                  strong: ({ ...props }) => (
-                    <strong className="font-semibold text-foreground" {...props} />
-                  ),
-                  em: ({ ...props }) => (
-                    <em className="italic text-foreground/80" {...props} />
-                  ),
-                  a: ({ ...props }) => (
-                    <a className="text-foreground underline underline-offset-2" {...props} />
-                  ),
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
+              <>
+                {extractedContent.text && (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ ...props }) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="min-w-full divide-y divide-border" {...props} />
+                        </div>
+                      ),
+                      th: ({ ...props }) => (
+                        <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
+                      ),
+                      td: ({ ...props }) => (
+                        <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
+                      ),
+                      h1: ({ ...props }) => (
+                        <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
+                      ),
+                      h2: ({ ...props }) => (
+                        <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
+                      ),
+                      h3: ({ ...props }) => (
+                        <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
+                      ),
+                      p: ({ ...props }) => (
+                        <p className="mb-3 leading-relaxed text-foreground" {...props} />
+                      ),
+                      ul: ({ ...props }) => (
+                        <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
+                      ),
+                      ol: ({ ...props }) => (
+                        <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
+                      ),
+                      li: ({ ...props }) => (
+                        <li className="text-foreground leading-relaxed pl-1" {...props} />
+                      ),
+                      code: ({ inline, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => 
+                        inline ? (
+                          <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
+                        ) : (
+                          <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
+                        ),
+                      pre: ({ ...props }) => (
+                        <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
+                      ),
+                      blockquote: ({ ...props }) => (
+                        <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
+                      ),
+                      hr: ({ ...props }) => (
+                        <hr className="my-4 border-border" {...props} />
+                      ),
+                      strong: ({ ...props }) => (
+                        <strong className="font-semibold text-foreground" {...props} />
+                      ),
+                      em: ({ ...props }) => (
+                        <em className="italic text-foreground/80" {...props} />
+                      ),
+                      a: ({ ...props }) => (
+                        <a className="text-foreground underline underline-offset-2" {...props} />
+                      ),
+                    }}
+                  >
+                    {extractedContent.text}
+                  </ReactMarkdown>
+                )}
+                {extractedContent.diagrams.map((diagramXml, idx) => (
+                  <DrawioDiagram key={idx} xml={diagramXml} title="Generated diagram" />
+                ))}
+              </>
             )}
           </div>
-
-          {!isUser && message.diagramXml && (
-            <DrawioDiagram xml={message.diagramXml} title="Generated diagram" />
-          )}
         </div>
 
         {/* Badges for assistant messages */}

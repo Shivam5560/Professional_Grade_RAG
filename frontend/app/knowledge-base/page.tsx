@@ -10,6 +10,7 @@ import { Trash2, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
 import { Header } from '@/components/layout/Header';
+import { useToast } from '@/hooks/useToast';
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function KnowledgeBasePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const { confirm, toast } = useToast();
 
   const loadDocuments = useCallback(async (userId: number) => {
     setLoading(true);
@@ -93,10 +95,15 @@ export default function KnowledgeBasePage() {
 
   const handleBulkDelete = async () => {
     if (!user || selectedIds.size === 0) return;
-    
-    if (!confirm(`Are you sure you want to delete ${selectedIds.size} document(s)? This action cannot be undone.`)) {
-      return;
-    }
+
+    const approved = await confirm({
+      title: "Delete documents?",
+      description: `Delete ${selectedIds.size} document(s)? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "destructive",
+    });
+    if (!approved) return;
 
     setDeleting(true);
     setError(null);
@@ -110,11 +117,20 @@ export default function KnowledgeBasePage() {
 
       setSuccess(response.message);
       setSelectedIds(new Set());
+      toast({
+        title: "Documents deleted",
+        description: response.message,
+      });
       
       // Reload documents
       await loadDocuments(user.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete documents');
+      toast({
+        title: "Delete failed",
+        description: err instanceof Error ? err.message : 'Failed to delete documents',
+        variant: "destructive",
+      });
     } finally {
       setDeleting(false);
     }

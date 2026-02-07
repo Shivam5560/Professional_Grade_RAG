@@ -106,6 +106,13 @@ export function useChat(initialSessionId?: string) {
       }
 
       if (finalResponse) {
+        if (user?.id) {
+          window.dispatchEvent(
+            new CustomEvent('chat-history-updated', {
+              detail: { userId: user.id, sessionId: finalResponse.session_id },
+            })
+          );
+        }
         return finalResponse;
       }
 
@@ -139,6 +146,13 @@ export function useChat(initialSessionId?: string) {
         };
 
         setMessages(prev => [...prev, assistantMessage]);
+        if (user?.id) {
+          window.dispatchEvent(
+            new CustomEvent('chat-history-updated', {
+              detail: { userId: user.id, sessionId: response.session_id },
+            })
+          );
+        }
         return response;
       } catch (fallbackErr) {
         const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Failed to send message';

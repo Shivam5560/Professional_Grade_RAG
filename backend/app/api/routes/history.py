@@ -1,7 +1,7 @@
 """
 Chat history routes.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any
 from pydantic import BaseModel, ConfigDict
@@ -43,3 +43,19 @@ def get_session_messages(session_id: str, db: Session = Depends(get_db)):
     """Get all messages for a specific session."""
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
     return messages
+
+
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
+    """Delete a chat session and all associated messages."""
+    try:
+        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        deleted = db.query(ChatSession).filter(ChatSession.id == session_id).delete()
+        if deleted == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

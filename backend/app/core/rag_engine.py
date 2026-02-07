@@ -77,21 +77,21 @@ class RAGEngine:
         
         return sources
 
-        def _build_prompt(self, context_str: str, history_str: str, query: str) -> str:
-            """Build the final prompt with context and short-term memory."""
-            history_block = ""
-            if history_str:
-                history_block = f"\n\nConversation context:\n{history_str}"
+    def _build_prompt(self, context_str: str, history_str: str, query: str) -> str:
+        """Build the final prompt with context and short-term memory."""
+        history_block = ""
+        if history_str:
+            history_block = f"\n\nConversation context:\n{history_str}"
 
-            return f"""{PROFESSIONAL_SYSTEM_PROMPT}
+        return f"""{PROFESSIONAL_SYSTEM_PROMPT}
 
-    Context from knowledge base:
-    {context_str}
-    {history_block}
+Context from knowledge base:
+{context_str}
+{history_block}
 
-    User Question: {query}
+User Question: {query}
 
-    Provide a comprehensive answer based on the context above."""
+Provide a comprehensive answer based on the context above."""
     
     async def query(
         self,

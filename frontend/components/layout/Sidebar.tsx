@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database } from "lucide-react";
+import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api";
 import { ChatSession } from "@/lib/types";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/useToast";
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -17,6 +18,7 @@ interface SidebarProps {
 export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarProps) {
   const { user } = useAuthStore();
   const router = useRouter();
+  const { confirm, toast } = useToast();
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -47,9 +49,52 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
     }
   }, [user, hasLoadedOnce, loadHistory]);
 
+  useEffect(() => {
+    const handleHistoryUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: number }>).detail;
+      if (!user || (detail?.userId && detail.userId !== user.id)) return;
+      loadHistory();
+    };
+
+    window.addEventListener('chat-history-updated', handleHistoryUpdate as EventListener);
+    return () => {
+      window.removeEventListener('chat-history-updated', handleHistoryUpdate as EventListener);
+    };
+  }, [user, loadHistory]);
+
   const handleSessionClick = async (sessionId: string) => {
     if (onLoadSession) {
       onLoadSession(sessionId);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string, title?: string) => {
+    const label = title ? `"${title}"` : "this chat";
+    const confirmed = await confirm({
+      title: "Delete chat?",
+      description: `Delete ${label}? This cannot be undone.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
+    try {
+      await apiClient.deleteChatSession(sessionId);
+      setHistory((prev) => prev.filter((session) => session.id !== sessionId));
+      if (currentSessionId === sessionId) {
+        onNewChat();
+      }
+      toast({
+        title: "Chat deleted",
+        description: "The conversation has been removed.",
+      });
+    } catch (error) {
+      console.error("Failed to delete chat session:", error);
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Unable to delete chat session.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -115,6 +160,18 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
                     {displayDate}
                   </p>
                 </div>
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleDeleteSession(session.id, session.title);
+                }}
+                className="h-8 w-8 rounded-lg border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                aria-label="Delete chat"
+                title="Delete chat"
+              >
+                <Trash2 className="h-4 w-4 mx-auto" />
               </button>
             </div>
           </div>

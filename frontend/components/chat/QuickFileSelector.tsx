@@ -7,6 +7,7 @@ import { X, Upload, Database, Loader2, CheckCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { DocumentInfo } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
+import { useToast } from '@/hooks/useToast';
 
 interface QuickFileSelectorProps {
   selectedFiles: DocumentInfo[];
@@ -25,6 +26,7 @@ export function QuickFileSelector({
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const loadRecentFiles = useCallback(async () => {
     if (!user) return;
@@ -106,7 +108,11 @@ export function QuickFileSelector({
       }
     } catch (error) {
       console.error('Upload failed:', error);
-      alert(error instanceof Error ? error.message : 'Failed to upload file');
+      toast({
+        title: 'Upload failed',
+        description: error instanceof Error ? error.message : 'Failed to upload file',
+        variant: 'destructive',
+      });
     } finally {
       setUploading(false);
     }

@@ -79,6 +79,15 @@ Provide a comprehensive answer based on the retrieved sections above.
 
 **Format your response with proper Markdown.**
 
+**Diagram Requests:**
+If the user asks for an architecture diagram, flow diagram, or sequence diagram, generate it as draw.io XML using the `<mxfile>` format. Place the XML immediately after the relevant section heading (e.g., after ## Architecture or ## System Design) in a fenced ```xml block. Keep the diagram focused and readable.
+
+**XML Requirements:**
+- Use proper XML escaping: & becomes &amp;, < becomes &lt;, > becomes &gt;
+- Start with <mxfile host="app.diagrams.net" and end with </mxfile>
+- Include one <diagram> with <mxGraphModel> containing <root> and <mxCell> elements
+- Use sequential id attributes ("0", "1", "2", etc.)
+
 End your response with: `CONFIDENCE: XX` (0-100) based on how well the retrieved sections answer the question."""
 
 

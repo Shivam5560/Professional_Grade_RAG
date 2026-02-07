@@ -13,7 +13,8 @@ from app.utils.logger import get_logger
 from app.db.database import get_db
 from app.db.models import ChatSession, ChatMessage
 import json
-from app.utils.diagram_utils import extract_drawio_xml
+from app.utils.diagram_utils import extract_drawio_xml, is_diagram_request
+from app.models.prompts import DRAWIO_XML_PROMPT
 from app.config import settings
 import httpx
 
@@ -201,6 +202,38 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
         result["answer"] = cleaned_answer
 
+        logger.info(
+            "diagram_extraction",
+            session_id=session_id,
+            mode=mode,
+            has_diagram_xml=diagram_xml is not None,
+        )
+
+        if diagram_xml is None and is_diagram_request(request.query):
+            try:
+                from app.services.groq_service import get_groq_service
+                llm = get_groq_service().get_llm()
+                logger.info(
+                    "diagram_fallback_start",
+                    session_id=session_id,
+                    mode=mode,
+                )
+                diagram_prompt = DRAWIO_XML_PROMPT.format(
+                    query=request.query,
+                    answer=cleaned_answer,
+                )
+                diagram_response = await llm.acomplete(diagram_prompt)
+                diagram_text = getattr(diagram_response, "text", None) or str(diagram_response)
+                _, diagram_xml = extract_drawio_xml(diagram_text)
+                logger.info(
+                    "diagram_fallback_complete",
+                    session_id=session_id,
+                    mode=mode,
+                    has_diagram_xml=diagram_xml is not None,
+                )
+            except Exception as e:
+                logger.warning("diagram_generation_failed", error=str(e))
+
         # Save assistant message
         assistant_msg = ChatMessage(
             session_id=session_id,
@@ -299,6 +332,38 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                 cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
                 result["answer"] = cleaned_answer
 
+                logger.info(
+                    "diagram_extraction",
+                    session_id=session_id,
+                    mode=mode,
+                    has_diagram_xml=diagram_xml is not None,
+                )
+
+                if diagram_xml is None and is_diagram_request(request.query):
+                    try:
+                        from app.services.groq_service import get_groq_service
+                        llm = get_groq_service().get_llm()
+                        logger.info(
+                            "diagram_fallback_start",
+                            session_id=session_id,
+                            mode=mode,
+                        )
+                        diagram_prompt = DRAWIO_XML_PROMPT.format(
+                            query=request.query,
+                            answer=cleaned_answer,
+                        )
+                        diagram_response = await llm.acomplete(diagram_prompt)
+                        diagram_text = getattr(diagram_response, "text", None) or str(diagram_response)
+                        _, diagram_xml = extract_drawio_xml(diagram_text)
+                        logger.info(
+                            "diagram_fallback_complete",
+                            session_id=session_id,
+                            mode=mode,
+                            has_diagram_xml=diagram_xml is not None,
+                        )
+                    except Exception as e:
+                        logger.warning("diagram_generation_failed", error=str(e))
+
                 # Emit the answer as a single token for think mode
                 yield _sse_event("token", {"token": cleaned_answer})
 
@@ -344,6 +409,38 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                     data = event["data"]
                     cleaned_answer, diagram_xml = extract_drawio_xml(data["answer"])
                     data["answer"] = cleaned_answer
+
+                    logger.info(
+                        "diagram_extraction",
+                        session_id=session_id,
+                        mode=mode,
+                        has_diagram_xml=diagram_xml is not None,
+                    )
+
+                    if diagram_xml is None and is_diagram_request(request.query):
+                        try:
+                            from app.services.groq_service import get_groq_service
+                            llm = get_groq_service().get_llm()
+                            logger.info(
+                                "diagram_fallback_start",
+                                session_id=session_id,
+                                mode=mode,
+                            )
+                            diagram_prompt = DRAWIO_XML_PROMPT.format(
+                                query=request.query,
+                                answer=cleaned_answer,
+                            )
+                            diagram_response = await llm.acomplete(diagram_prompt)
+                            diagram_text = getattr(diagram_response, "text", None) or str(diagram_response)
+                            _, diagram_xml = extract_drawio_xml(diagram_text)
+                            logger.info(
+                                "diagram_fallback_complete",
+                                session_id=session_id,
+                                mode=mode,
+                                has_diagram_xml=diagram_xml is not None,
+                            )
+                        except Exception as e:
+                            logger.warning("diagram_generation_failed", error=str(e))
                     data["mode"] = mode
                     data["diagram_xml"] = diagram_xml
                     data["sources"] = _serialize_sources(data.get("sources"))
