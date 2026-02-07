@@ -5,7 +5,7 @@ import { useAuthStore } from "@/lib/store";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api";
 import { ChatSession } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatTimestamp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
 interface SidebarProps {
@@ -74,12 +74,9 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return formatTimestamp(parsed.toISOString());
   };
 
   const renderSessionList = (sessions: ChatSession[]) => (

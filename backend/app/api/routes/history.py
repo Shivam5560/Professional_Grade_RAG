@@ -3,7 +3,7 @@ Chat history routes.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from app.db.database import get_db
@@ -15,6 +15,7 @@ class ChatSessionResponse(BaseModel):
     id: str
     title: Optional[str]
     created_at: datetime
+    updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -22,6 +23,12 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+    confidence_score: Optional[dict] = None
+    sources: Optional[List[Any]] = None
+    reasoning: Optional[str] = None
+    mode: Optional[str] = None
+    context_files: Optional[List[Any]] = None
+    diagram_xml: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

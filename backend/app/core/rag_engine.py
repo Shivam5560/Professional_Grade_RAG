@@ -4,8 +4,8 @@ Main RAG engine orchestrating retrieval and generation.
 
 import time
 import uuid
-from typing import Optional, Dict, Any, List
-from llama_index.core.schema import NodeWithScore
+from typing import Optional, Dict, Any, List, AsyncGenerator
+from llama_index.core.schema import NodeWithScore, QueryBundle
 from app.core.retriever import get_hybrid_retriever
 from app.core.reranker import get_reranker
 from app.core.confidence_scorer import get_confidence_scorer
@@ -76,6 +76,22 @@ class RAGEngine:
             sources.append(source)
         
         return sources
+
+        def _build_prompt(self, context_str: str, history_str: str, query: str) -> str:
+            """Build the final prompt with context and short-term memory."""
+            history_block = ""
+            if history_str:
+                history_block = f"\n\nConversation context:\n{history_str}"
+
+            return f"""{PROFESSIONAL_SYSTEM_PROMPT}
+
+    Context from knowledge base:
+    {context_str}
+    {history_block}
+
+    User Question: {query}
+
+    Provide a comprehensive answer based on the context above."""
     
     async def query(
         self,
@@ -211,9 +227,9 @@ class RAGEngine:
                     target=settings.top_k_rerank
                 )
                 
-                reranked_nodes = self.reranker._postprocess_nodes(
+                reranked_nodes = self.reranker.postprocess_nodes(
                     retrieved_nodes,
-                    query_str=reformulated_query
+                    QueryBundle(query_str=reformulated_query)
                 )
                 
                 logger.log_operation(
@@ -297,36 +313,147 @@ Provide a comprehensive answer based on the context above."""
         self,
         query: str,
         session_id: Optional[str] = None,
-        use_context: bool = True
-    ):
+        use_context: bool = True,
+        user_id: Optional[int] = None,
+        context_document_ids: Optional[List[str]] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Execute a RAG query with streaming response.
-        
-        Args:
-            query: User query
-            session_id: Session identifier
-            use_context: Whether to use conversation context
-            
+        Stream a RAG query response token-by-token.
+
         Yields:
-            Response chunks
+            Dict events with "type" and "data" keys.
         """
-        # This would implement streaming using async generators
-        # For now, we'll keep it simple with the regular query
-        result = await self.query(query, session_id, use_context)
-        
-        # Yield the complete result
-        # In a real streaming implementation, we'd yield tokens as they're generated
-        yield result
-    
+        start_time = time.time()
+
+        # Generate session ID if not provided
+        if session_id is None:
+            session_id = str(uuid.uuid4())
+
+        # Add user message to context
+        self.context_manager.add_message(session_id, "user", query)
+
+        # Reformulate query with context if enabled
+        if use_context:
+            reformulated_query = self.context_manager.reformulate_query(session_id, query)
+        else:
+            reformulated_query = query
+
+        # Step 1: Hybrid Retrieval (BM25 + Vector)
+        from app.services.vector_store import get_vector_store_service
+        from app.services.bm25_service import get_bm25_service
+
+        vector_store = get_vector_store_service()
+        bm25_service = get_bm25_service()
+
+        vector_nodes = vector_store.retrieve(
+            query=reformulated_query,
+            top_k=settings.top_k_retrieval,
+            similarity_threshold=settings.similarity_threshold,
+            user_id=user_id,
+            document_ids=context_document_ids,
+        )
+
+        bm25_nodes = bm25_service.search(
+            query=reformulated_query,
+            top_k=settings.top_k_retrieval,
+            user_id=user_id,
+            document_ids=context_document_ids,
+        )
+
+        # Merge results using simple score-based fusion
+        node_dict = {}
+        for node in vector_nodes:
+            node_id = node.node.node_id
+            node_dict[node_id] = node
+
+        for node in bm25_nodes:
+            node_id = node.node.node_id
+            if node_id in node_dict:
+                node_dict[node_id].score = (node_dict[node_id].score + node.score) / 2
+            else:
+                node_dict[node_id] = node
+
+        all_merged = sorted(
+            node_dict.values(),
+            key=lambda x: x.score or 0.0,
+            reverse=True,
+        )
+        retrieved_nodes = all_merged[:settings.top_k_retrieval]
+
+        if not retrieved_nodes:
+            context_msg = ""
+            if context_document_ids and len(context_document_ids) > 0:
+                context_msg = " in the selected documents"
+            answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
+            confidence_result = {
+                "confidence_score": 0.0,
+                "confidence_level": "low",
+                "breakdown": {},
+            }
+            sources = []
+        else:
+            # Rerank nodes
+            reranked_nodes = self.reranker.postprocess_nodes(
+                retrieved_nodes,
+                QueryBundle(query_str=reformulated_query),
+            )
+
+            context_str = "\n\n".join([
+                f"[Source: {node.node.metadata.get('filename', 'Unknown')}]\n{node.node.get_content()}"
+                for node in reranked_nodes
+            ])
+
+            history_str = self.context_manager.get_context_string(session_id, max_messages=4)
+            prompt = self._build_prompt(context_str, history_str, query)
+
+            answer_parts: List[str] = []
+            async for chunk in self.llm.astream_complete(prompt):
+                token = getattr(chunk, "delta", None) or getattr(chunk, "text", None) or ""
+                if token:
+                    answer_parts.append(token)
+                    yield {"type": "token", "data": token}
+
+            answer = "".join(answer_parts).strip()
+
+            llm_confidence = self._extract_llm_confidence(answer)
+            answer = self._clean_answer(answer)
+            sources = self._extract_sources(reranked_nodes)
+            confidence_result = self.confidence_scorer.calculate_confidence(
+                query=query,
+                nodes=reranked_nodes,
+                answer=answer,
+                llm_assessment=llm_confidence,
+            )
+
+        # Add assistant response to context
+        self.context_manager.add_message(
+            session_id, "assistant", answer, confidence_result["confidence_score"]
+        )
+
+        processing_time = (time.time() - start_time) * 1000
+        yield {
+            "type": "final",
+            "data": {
+                "answer": answer,
+                "confidence_score": confidence_result["confidence_score"],
+                "confidence_level": confidence_result["confidence_level"],
+                "sources": sources,
+                "session_id": session_id,
+                "processing_time_ms": round(processing_time, 2),
+                "reasoning": None,
+                "mode": "fast",
+            },
+        }
+
     def _extract_llm_confidence(self, answer: str) -> Optional[float]:
         """
         Extract LLM's self-assessed confidence score from the answer.
-        
+
         Looks for pattern: CONFIDENCE: XX where XX is a number between 0-100.
-        
+
         Args:
             answer: The LLM's response text
-            
+
         Returns:
             Confidence score as a float 0-1, or None if not found
         """

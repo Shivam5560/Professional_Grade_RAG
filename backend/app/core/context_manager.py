@@ -6,6 +6,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from collections import defaultdict
 from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.core.memory import ChatMemoryBuffer
 from app.config import settings
 from app.models.schemas import Message
 from app.utils.logger import get_logger
@@ -23,9 +24,11 @@ class ContextManager:
         self.max_history = settings.max_chat_history
         self.max_tokens = settings.max_tokens
         
-        # In-memory storage: session_id -> list of messages
-        # In production, use Redis or database
-        self.sessions: Dict[str, List[Message]] = defaultdict(list)
+        # In-memory storage: session_id -> LlamaIndex ChatMemoryBuffer
+        # In production, use Redis or database-backed ChatStore
+        self.sessions: Dict[str, ChatMemoryBuffer] = defaultdict(
+            lambda: ChatMemoryBuffer.from_defaults(token_limit=self.max_tokens)
+        )
         
         logger.info(
             "context_manager_initialized",
@@ -49,25 +52,20 @@ class ContextManager:
             content: Message content
             confidence_score: Optional confidence score for assistant messages
         """
-        message = Message(
-            role=role,
+        message = ChatMessage(
+            role=MessageRole.USER if role == "user" else MessageRole.ASSISTANT,
             content=content,
-            timestamp=datetime.utcnow().isoformat(),
-            confidence_score=confidence_score
         )
-        
-        self.sessions[session_id].append(message)
-        
-        # Trim history if exceeds max
-        if len(self.sessions[session_id]) > self.max_history:
-            self.sessions[session_id] = self.sessions[session_id][-self.max_history:]
+
+        memory = self.sessions[session_id]
+        memory.put(message)
         
         logger.info(
             "message_added_to_context",
             session_id=session_id,
             role=role,
             content_length=len(content),
-            total_messages=len(self.sessions[session_id]),
+            total_messages=len(memory.get())
         )
     
     def get_history(self, session_id: str) -> List[Message]:
@@ -80,7 +78,20 @@ class ContextManager:
         Returns:
             List of messages
         """
-        return self.sessions.get(session_id, [])
+        memory = self.sessions.get(session_id)
+        if memory is None:
+            return []
+
+        history: List[Message] = []
+        for msg in memory.get()[-self.max_history:]:
+            history.append(
+                Message(
+                    role="user" if msg.role == MessageRole.USER else "assistant",
+                    content=msg.content,
+                    timestamp=datetime.utcnow().isoformat(),
+                )
+            )
+        return history
     
     def get_chat_messages(self, session_id: str) -> List[ChatMessage]:
         """
@@ -92,16 +103,11 @@ class ContextManager:
         Returns:
             List of ChatMessage objects
         """
-        history = self.get_history(session_id)
-        
-        chat_messages = []
-        for msg in history:
-            role = MessageRole.USER if msg.role == "user" else MessageRole.ASSISTANT
-            chat_messages.append(
-                ChatMessage(role=role, content=msg.content)
-            )
-        
-        return chat_messages
+        memory = self.sessions.get(session_id)
+        if memory is None:
+            return []
+
+        return memory.get()[-self.max_history:]
     
     def get_context_string(self, session_id: str, max_messages: Optional[int] = None) -> str:
         """
@@ -114,19 +120,22 @@ class ContextManager:
         Returns:
             Formatted conversation history
         """
-        history = self.get_history(session_id)
-        
+        memory = self.sessions.get(session_id)
+        if memory is None:
+            return ""
+
+        history = memory.get()
         if max_messages:
             history = history[-max_messages:]
-        
+
         if not history:
             return ""
-        
+
         context_parts = []
         for msg in history:
-            prefix = "User" if msg.role == "user" else "Assistant"
+            prefix = "User" if msg.role == MessageRole.USER else "Assistant"
             context_parts.append(f"{prefix}: {msg.content}")
-        
+
         return "\n".join(context_parts)
     
     def reformulate_query(self, session_id: str, query: str) -> str:
@@ -140,19 +149,24 @@ class ContextManager:
         Returns:
             Reformulated query with context
         """
-        history = self.get_history(session_id)
-        
+        memory = self.sessions.get(session_id)
+
+        if memory is None:
+            return query
+
+        history = memory.get()
+
         # If no history or query is already detailed, return as-is
         if not history or len(query.split()) > 10:
             return query
-        
+
         # Get last few messages for context
         recent_history = history[-3:] if len(history) >= 3 else history
-        
+
         # Build context-aware query
         context_parts = []
         for msg in recent_history:
-            if msg.role == "user":
+            if msg.role == MessageRole.USER:
                 context_parts.append(f"Previous question: {msg.content}")
             # We can include assistant responses if needed, but keeping it simple
         

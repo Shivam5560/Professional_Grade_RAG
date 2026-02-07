@@ -48,8 +48,8 @@ async def lifespan(app: FastAPI):
         # Get embedding model from vector store (already initialized)
         embed_model = vector_store.embed_model
         
-        # Check Ollama health if using local embeddings
-        if not settings.use_remote_embedding_service:
+        # Check embedding health if using local Ollama
+        if settings.embedding_provider == "ollama" and not settings.use_remote_embedding_service:
             from app.services.ollama_service import get_ollama_service
             ollama_service = get_ollama_service()
             ollama_healthy = await ollama_service.check_health()

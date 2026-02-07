@@ -23,7 +23,8 @@ class VectorStoreService:
     def __init__(self):
         """Initialize PostgreSQL vector store with pgvector extension."""
         # Get embedding model based on configuration
-        if settings.use_remote_embedding_service:
+        provider = settings.embedding_provider
+        if provider == "remote" or settings.use_remote_embedding_service:
             logger.info(
                 "using_remote_embedding_service",
                 url=settings.remote_embedding_service_url,
@@ -33,6 +34,10 @@ class VectorStoreService:
                 base_url=settings.remote_embedding_service_url,
                 model_name=settings.ollama_embedding_model
             )
+        elif provider == "cohere":
+            from app.services.cohere_service import get_cohere_service
+            logger.info("using_cohere_embeddings", model=settings.cohere_embedding_model)
+            self.embed_model = get_cohere_service().get_embed_model()
         else:
             logger.info("using_local_ollama_embeddings")
             ollama_service = get_ollama_service()

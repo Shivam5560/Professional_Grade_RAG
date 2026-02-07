@@ -13,10 +13,106 @@ from app.utils.logger import get_logger
 from app.db.database import get_db
 from app.db.models import ChatSession, ChatMessage
 import json
+from app.utils.diagram_utils import extract_drawio_xml
+from app.config import settings
+import httpx
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
+
+async def _determine_default_mode() -> str:
+    """Return fast by default; fall back to think if any core service is unhealthy."""
+    unhealthy = False
+
+    # 1. Embedding service health
+    if settings.embedding_provider == "cohere":
+        try:
+            from app.services.cohere_service import get_cohere_service
+            if not await get_cohere_service().check_health():
+                unhealthy = True
+        except Exception:
+            unhealthy = True
+    elif settings.embedding_provider == "remote" or settings.use_remote_embedding_service:
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                response = await client.get(f"{settings.remote_embedding_service_url}/health")
+                if response.status_code != 200:
+                    unhealthy = True
+        except Exception:
+            unhealthy = True
+    else:
+        try:
+            from app.services.ollama_service import get_ollama_service
+            if not await get_ollama_service().check_health():
+                unhealthy = True
+        except Exception:
+            unhealthy = True
+
+    # 2. Reranker health (remote shares embedding health)
+    if settings.reranker_provider == "cohere":
+        try:
+            from app.services.cohere_service import get_cohere_service
+            if not await get_cohere_service().check_health():
+                unhealthy = True
+        except Exception:
+            unhealthy = True
+    elif settings.reranker_provider == "remote" or settings.use_remote_embedding_service:
+        if unhealthy:
+            unhealthy = True
+
+    # 3. LLM health (cached)
+    try:
+        from app.services.groq_service import get_groq_service
+        if not await get_groq_service().check_health():
+            unhealthy = True
+    except Exception:
+        unhealthy = True
+
+    # 4. Database/vector store health
+    try:
+        from app.services.vector_store import get_vector_store_service
+        if not get_vector_store_service().check_health():
+            unhealthy = True
+    except Exception:
+        unhealthy = True
+
+    # 5. BM25 index health
+    try:
+        from app.services.bm25_service import get_bm25_service
+        bm25_stats = get_bm25_service().get_stats()
+        if not bm25_stats.get("index_available", False):
+            unhealthy = True
+    except Exception:
+        unhealthy = True
+
+    return "think" if unhealthy else "fast"
+
+
+def _serialize_sources(sources):
+    if not sources:
+        return []
+    serialized = []
+    for source in sources:
+        if hasattr(source, "dict"):
+            serialized.append(source.dict())
+        else:
+            serialized.append(source)
+    return serialized
+
+
+def _extract_confidence_fields(confidence_score):
+    if isinstance(confidence_score, dict):
+        return confidence_score.get("score"), confidence_score.get("level")
+    if isinstance(confidence_score, (int, float)):
+        return float(confidence_score), None
+    return None, None
+
+
+def _sse_event(event: str, data) -> str:
+    payload = json.dumps(data, default=lambda obj: obj.dict() if hasattr(obj, "dict") else str(obj))
+    return f"event: {event}\ndata: {payload}\n\n"
 
 
 @router.post("/query", response_model=ChatResponse, status_code=status.HTTP_200_OK)
@@ -36,7 +132,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
-        mode = request.mode or "fast"
+        mode = request.mode or await _determine_default_mode()
         
         # Save session if it doesn't exist
         db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -61,7 +157,8 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         user_msg = ChatMessage(
             session_id=session_id,
             role="user",
-            content=request.query
+            content=request.query,
+            context_files=[cf.dict() for cf in request.context_files] if request.context_files else None,
         )
         db.add(user_msg)
         db.commit()
@@ -100,12 +197,20 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
                 context_document_ids=request.context_document_ids,
             )
         
+        # Extract draw.io XML if present
+        cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
+        result["answer"] = cleaned_answer
+
         # Save assistant message
         assistant_msg = ChatMessage(
             session_id=session_id,
             role="assistant",
             content=result["answer"],
-            confidence_score=json.loads(json.dumps({"score": result["confidence_score"], "level": result["confidence_level"]}))
+            confidence_score=json.loads(json.dumps({"score": result["confidence_score"], "level": result["confidence_level"]})),
+            sources=_serialize_sources(result.get("sources")),
+            reasoning=result.get("reasoning"),
+            mode=mode,
+            diagram_xml=diagram_xml,
         )
         db.add(assistant_msg)
         
@@ -125,6 +230,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             processing_time_ms=result.get("processing_time_ms"),
             reasoning=result.get("reasoning"),
             mode=mode,
+            diagram_xml=diagram_xml,
         )
         
         logger.info(
@@ -143,6 +249,129 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process query: {str(e)}"
         )
+
+
+@router.post("/stream", status_code=status.HTTP_200_OK)
+async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
+    """
+    Stream a chat response using Server-Sent Events (SSE).
+    """
+    session_id = request.session_id or str(uuid.uuid4())
+    mode = request.mode or await _determine_default_mode()
+
+    # Save session if it doesn't exist
+    db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not db_session:
+        title = request.query[:50] + "..." if len(request.query) > 50 else request.query
+        db_session = ChatSession(
+            id=session_id,
+            user_id=request.user_id,
+            title=title,
+        )
+        db.add(db_session)
+        db.commit()
+
+    # Save user message
+    user_msg = ChatMessage(
+        session_id=session_id,
+        role="user",
+        content=request.query,
+        context_files=[cf.dict() for cf in request.context_files] if request.context_files else None,
+    )
+    db.add(user_msg)
+    db.commit()
+
+    async def event_generator():
+        try:
+            yield _sse_event("session", {"session_id": session_id, "mode": mode})
+
+            if mode == "think":
+                from app.core.pageindex_rag_engine import get_pageindex_rag_engine
+                think_engine = get_pageindex_rag_engine()
+                result = await think_engine.query(
+                    query=request.query,
+                    db=db,
+                    session_id=session_id,
+                    user_id=request.user_id,
+                    context_document_ids=request.context_document_ids,
+                )
+
+                cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
+                result["answer"] = cleaned_answer
+
+                # Emit the answer as a single token for think mode
+                yield _sse_event("token", {"token": cleaned_answer})
+
+                result_payload = {
+                    **result,
+                    "mode": mode,
+                    "diagram_xml": diagram_xml,
+                    "sources": _serialize_sources(result.get("sources")),
+                }
+
+                assistant_msg = ChatMessage(
+                    session_id=session_id,
+                    role="assistant",
+                    content=cleaned_answer,
+                    confidence_score=json.loads(json.dumps({
+                        "score": result["confidence_score"],
+                        "level": result["confidence_level"],
+                    })),
+                    sources=_serialize_sources(result.get("sources")),
+                    reasoning=result.get("reasoning"),
+                    mode=mode,
+                    diagram_xml=diagram_xml,
+                )
+                db.add(assistant_msg)
+                from datetime import datetime
+                db_session.updated_at = datetime.utcnow()
+                db.commit()
+
+                yield _sse_event("final", result_payload)
+                return
+
+            rag_engine = get_rag_engine()
+            async for event in rag_engine.stream_query(
+                query=request.query,
+                session_id=session_id,
+                use_context=True,
+                user_id=request.user_id,
+                context_document_ids=request.context_document_ids,
+            ):
+                if event.get("type") == "token":
+                    yield _sse_event("token", {"token": event["data"]})
+                elif event.get("type") == "final":
+                    data = event["data"]
+                    cleaned_answer, diagram_xml = extract_drawio_xml(data["answer"])
+                    data["answer"] = cleaned_answer
+                    data["mode"] = mode
+                    data["diagram_xml"] = diagram_xml
+                    data["sources"] = _serialize_sources(data.get("sources"))
+
+                    assistant_msg = ChatMessage(
+                        session_id=session_id,
+                        role="assistant",
+                        content=cleaned_answer,
+                        confidence_score=json.loads(json.dumps({
+                            "score": data["confidence_score"],
+                            "level": data["confidence_level"],
+                        })),
+                        sources=_serialize_sources(data.get("sources")),
+                        reasoning=data.get("reasoning"),
+                        mode=mode,
+                        diagram_xml=diagram_xml,
+                    )
+                    db.add(assistant_msg)
+                    from datetime import datetime
+                    db_session.updated_at = datetime.utcnow()
+                    db.commit()
+
+                    yield _sse_event("final", data)
+        except Exception as e:
+            logger.error("chat_stream_failed", error=str(e))
+            yield _sse_event("error", {"message": "Streaming failed"})
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/history/{session_id}", response_model=ChatHistory, status_code=status.HTTP_200_OK)
@@ -173,12 +402,13 @@ async def get_history(session_id: str, db: Session = Depends(get_db)):
         context_manager.clear_session(session_id)  # Clear old context first
         
         for db_msg in db_messages:
+            score_value, level_value = _extract_confidence_fields(db_msg.confidence_score)
             # Add to context manager for RAG engine
             context_manager.add_message(
                 session_id=session_id,
                 role=db_msg.role,
                 content=db_msg.content,
-                confidence_score=db_msg.confidence_score.get('score') if db_msg.confidence_score else None
+                confidence_score=score_value
             )
             
             # Add to response
@@ -186,7 +416,13 @@ async def get_history(session_id: str, db: Session = Depends(get_db)):
                 role=db_msg.role,
                 content=db_msg.content,
                 timestamp=db_msg.created_at.isoformat(),
-                confidence_score=db_msg.confidence_score.get('score') if db_msg.confidence_score else None
+                confidence_score=score_value,
+                confidence_level=level_value,
+                sources=db_msg.sources,
+                reasoning=db_msg.reasoning,
+                mode=db_msg.mode,
+                context_files=db_msg.context_files,
+                diagram_xml=db_msg.diagram_xml,
             ))
         
         logger.info(

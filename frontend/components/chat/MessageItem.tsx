@@ -12,6 +12,7 @@ import { formatTimestamp } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message } from '@/lib/types';
+import { DrawioDiagram } from './DrawioDiagram';
 
 interface MessageItemProps {
   message: Message;
@@ -198,6 +199,10 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
               </ReactMarkdown>
             )}
           </div>
+
+          {!isUser && message.diagramXml && (
+            <DrawioDiagram xml={message.diagramXml} title="Generated diagram" />
+          )}
         </div>
 
         {/* Badges for assistant messages */}

@@ -11,6 +11,9 @@ llama-index-llms-groq
 llama-index-embeddings-ollama
 llama-index-vector-stores-postgres
 llama-index-readers-file
+llama-index-embeddings-cohere
+llama-index-postprocessor-cohere-rerank
+cohere
 
 # Reranking (needed for SentenceTransformerRerank)
 torch

@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
 import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode } from '@/lib/types';
+import { apiClient } from '@/lib/api';
 
 interface ChatInterfaceProps {
   sessionId: string;
@@ -37,6 +38,7 @@ export function ChatInterface({
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<DocumentInfo[]>([]);
   const [mode, setMode] = useState<RAGMode>('fast');
+  const [modeTouched, setModeTouched] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
   // Default to healthy to prevent unnecessary health check API calls
@@ -50,6 +52,27 @@ export function ChatInterface({
       messages: messages.map(m => ({ role: m.role, contentPreview: m.content.slice(0, 50) }))
     });
   }, [sessionId, messages]);
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const ping = await apiClient.pingServices();
+        const unhealthy = (ping.summary?.unhealthy ?? 0) > 0;
+        if (unhealthy && !modeTouched && mode === 'fast') {
+          setMode('think');
+        }
+        setServicesHealthy(ping.status !== 'unhealthy');
+      } catch (err) {
+        console.warn('[ChatInterface] Health check failed:', err);
+        if (!modeTouched && mode === 'fast') {
+          setMode('think');
+        }
+        setServicesHealthy(false);
+      }
+    };
+
+    checkHealth();
+  }, [mode, modeTouched]);
 
   useEffect(() => {
     const loadPrompts = async () => {
@@ -175,7 +198,10 @@ export function ChatInterface({
             <div className="flex items-end gap-3">
               <ModeSelector
                 mode={mode}
-                onModeChange={setMode}
+                onModeChange={(nextMode) => {
+                  setModeTouched(true);
+                  setMode(nextMode);
+                }}
                 disabled={isLoading}
               />
               <div className="flex-1">

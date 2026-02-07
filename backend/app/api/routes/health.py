@@ -30,9 +30,23 @@ async def health_check():
         HealthResponse with status of all components
     """
     try:
-        # Check Ollama service (embeddings only) - cached for 60s
-        ollama_service = get_ollama_service()
-        ollama_healthy = await ollama_service.check_health()
+        # Check embedding service based on provider
+        if settings.embedding_provider == "cohere":
+            from app.services.cohere_service import get_cohere_service
+            embedding_healthy = await get_cohere_service().check_health()
+            embedding_label = "cohere_embeddings"
+        elif settings.embedding_provider == "remote" or settings.use_remote_embedding_service:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(f"{settings.remote_embedding_service_url}/health")
+                    embedding_healthy = response.status_code == 200
+            except Exception:
+                embedding_healthy = False
+            embedding_label = "remote_embeddings"
+        else:
+            ollama_service = get_ollama_service()
+            embedding_healthy = await ollama_service.check_health()
+            embedding_label = "ollama_embeddings"
         
         # Check Groq service (LLM) - cached for 60s to prevent excessive API calls
         groq_service = get_groq_service()
@@ -48,7 +62,7 @@ async def health_check():
         bm25_healthy = bm25_stats.get("index_available", False)
         
         # Determine overall status
-        all_healthy = ollama_healthy and groq_healthy and postgres_healthy
+        all_healthy = embedding_healthy and groq_healthy and postgres_healthy
         
         if all_healthy:
             overall_status = "healthy"
@@ -58,7 +72,7 @@ async def health_check():
             overall_status = "unhealthy"
         
         components = {
-            "ollama_embeddings": "connected" if ollama_healthy else "disconnected",
+            embedding_label: "connected" if embedding_healthy else "disconnected",
             "groq_llm": "connected" if groq_healthy else "disconnected",
             "postgres_vector_store": "connected" if postgres_healthy else "disconnected",
             "bm25_index": "loaded" if bm25_healthy else "not_loaded",
@@ -115,8 +129,32 @@ async def ping_services():
     }
     
     try:
-        # 1. Check Embedding Service (Remote or Local)
-        if settings.use_remote_embedding_service:
+        # 1. Check Embedding Service (Remote, Cohere, or Local)
+        if settings.embedding_provider == "cohere":
+            try:
+                from app.services.cohere_service import get_cohere_service
+                if await get_cohere_service().check_health():
+                    results["services"]["embedding"] = {
+                        "type": "cohere",
+                        "status": "healthy",
+                        "model": settings.cohere_embedding_model
+                    }
+                    results["summary"]["healthy"] += 1
+                else:
+                    results["services"]["embedding"] = {
+                        "type": "cohere",
+                        "status": "unhealthy",
+                        "error": "Health check failed"
+                    }
+                    results["summary"]["unhealthy"] += 1
+            except Exception as e:
+                results["services"]["embedding"] = {
+                    "type": "cohere",
+                    "status": "unhealthy",
+                    "error": str(e)
+                }
+                results["summary"]["unhealthy"] += 1
+        elif settings.embedding_provider == "remote" or settings.use_remote_embedding_service:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(
@@ -174,8 +212,32 @@ async def ping_services():
         
         results["summary"]["total"] += 1
         
-        # 2. Check Reranking Service (Remote or Local)
-        if settings.use_remote_embedding_service:
+        # 2. Check Reranking Service (Remote, Cohere, or Local)
+        if settings.reranker_provider == "cohere":
+            try:
+                from app.services.cohere_service import get_cohere_service
+                if await get_cohere_service().check_health():
+                    results["services"]["reranker"] = {
+                        "type": "cohere",
+                        "status": "healthy",
+                        "model": settings.cohere_rerank_model
+                    }
+                    results["summary"]["healthy"] += 1
+                else:
+                    results["services"]["reranker"] = {
+                        "type": "cohere",
+                        "status": "unhealthy",
+                        "error": "Health check failed"
+                    }
+                    results["summary"]["unhealthy"] += 1
+            except Exception as e:
+                results["services"]["reranker"] = {
+                    "type": "cohere",
+                    "status": "unhealthy",
+                    "error": str(e)
+                }
+                results["summary"]["unhealthy"] += 1
+        elif settings.reranker_provider == "remote" or settings.use_remote_embedding_service:
             # Remote reranker (same service as embeddings)
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:

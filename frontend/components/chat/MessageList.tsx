@@ -235,7 +235,7 @@ export function MessageList({
             // Attach sources to the last assistant message
             const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
             const messageWithSources = isLastAssistant && latestSources && latestSources.length > 0
-              ? { ...message, sources: latestSources }
+              ? { ...message, sources: message.sources || latestSources }
               : message;
             
             return (

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Upload, X, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
+import { useToast } from '@/hooks/useToast';
 
 // Configuration constants
 const MAX_FILE_SIZE_MB = 200;
@@ -30,6 +31,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
+  const { toast } = useToast();
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file size
@@ -100,6 +102,11 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         status: 'error',
         message: 'Please log in to upload documents'
       })));
+      toast({
+        title: 'Upload failed',
+        description: 'Please log in to upload documents.',
+        variant: 'destructive',
+      });
       setIsUploading(false);
       return;
     }
@@ -144,15 +151,27 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
             message: `Uploaded successfully! ${result.chunks_created} chunks created.`
           } : f
         ));
+
+        toast({
+          title: 'Document ready',
+          description: `${currentFile.file.name} uploaded and indexed (${result.chunks_created} chunks).`,
+        });
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Upload failed';
         // Update status to error
         setFiles(prev => prev.map(f => 
           f.file === currentFile.file ? { 
             ...f, 
             status: 'error',
-            message: error instanceof Error ? error.message : 'Upload failed'
+            message: message
           } : f
         ));
+
+        toast({
+          title: 'Upload failed',
+          description: `${currentFile.file.name}: ${message}`,
+          variant: 'destructive',
+        });
       }
     }
 

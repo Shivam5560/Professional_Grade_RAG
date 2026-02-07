@@ -28,6 +28,7 @@ export function useChat(initialSessionId?: string) {
 
     // Add user message immediately with context files
     const userMessage: Message = {
+      id: uuidv4(),
       role: 'user',
       content: query,
       timestamp: new Date().toISOString(),
@@ -37,38 +38,117 @@ export function useChat(initialSessionId?: string) {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      // Send query to backend
-      const response: ChatResponse = await apiClient.query({
-        query,
-        session_id: sessionId,
-        user_id: user?.id,
-        context_document_ids: contextDocumentIds,
-        mode: mode || 'fast',
-      });
+      const assistantId = uuidv4();
+      setMessages(prev => [
+        ...prev,
+        {
+          id: assistantId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date().toISOString(),
+          isTyping: true,
+          mode: mode,
+        },
+      ]);
 
-      // Add assistant message
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: response.answer,
-        timestamp: new Date().toISOString(),
-        confidence_score: response.confidence_score,
-        reasoning: response.reasoning,
-        mode: response.mode,
-      };
+      let finalResponse: ChatResponse | undefined;
+      let streamError: Error | null = null;
 
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // Store the full response for access to sources
-      return response;
+      await apiClient.queryStream(
+        {
+          query,
+          session_id: sessionId,
+          user_id: user?.id,
+          context_document_ids: contextDocumentIds,
+          context_files: contextFiles,
+          mode: mode,
+          stream: true,
+        },
+        (event, data) => {
+          if (event === 'token') {
+            const token = (data as { token?: string })?.token ?? '';
+            if (!token) return;
+            setMessages(prev => prev.map(msg => (
+              msg.id === assistantId
+                ? { ...msg, content: msg.content + token }
+                : msg
+            )));
+          }
+
+          if (event === 'final') {
+            const payload = data as ChatResponse & { diagram_xml?: string };
+            finalResponse = payload;
+            setMessages(prev => prev.map(msg => (
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: payload.answer,
+                    confidence_score: payload.confidence_score,
+                    sources: payload.sources,
+                    reasoning: payload.reasoning,
+                    mode: payload.mode,
+                    diagramXml: payload.diagram_xml,
+                    isTyping: false,
+                  }
+                : msg
+            )));
+          }
+
+          if (event === 'error') {
+            const message = (data as { message?: string })?.message || 'Streaming failed';
+            streamError = new Error(message);
+          }
+        }
+      );
+
+      if (streamError) {
+        throw streamError;
+      }
+
+      if (finalResponse) {
+        return finalResponse;
+      }
+
+      return undefined;
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
-      setError(errorMessage);
-      
-      // Remove the user message if query failed
-      setMessages(prev => prev.slice(0, -1));
-      
-      throw err;
+      try {
+        // Remove the streaming placeholder if it exists
+        setMessages(prev => prev.filter(msg => !msg.isTyping));
+
+        const response: ChatResponse = await apiClient.query({
+          query,
+          session_id: sessionId,
+          user_id: user?.id,
+          context_document_ids: contextDocumentIds,
+          context_files: contextFiles,
+          mode: mode,
+          stream: false,
+        });
+
+        const assistantMessage: Message = {
+          id: uuidv4(),
+          role: 'assistant',
+          content: response.answer,
+          timestamp: new Date().toISOString(),
+          confidence_score: response.confidence_score,
+          reasoning: response.reasoning,
+          sources: response.sources,
+          mode: response.mode,
+          diagramXml: response.diagram_xml,
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+        return response;
+      } catch (fallbackErr) {
+        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Failed to send message';
+        setError(errorMessage);
+
+        // Remove the user message if query failed
+        setMessages(prev => prev.filter(msg => msg.role !== 'user' || msg.id !== userMessage.id));
+
+        throw fallbackErr;
+      }
     } finally {
       setIsLoading(false);
     }
@@ -115,8 +195,17 @@ export function useChat(initialSessionId?: string) {
       
       // Convert ChatMessage to Message format
       const convertedMessages: Message[] = history.messages.map(msg => ({
-        ...msg,
-        timestamp: msg.created_at,
+        id: uuidv4(),
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp || (msg as { created_at?: string }).created_at || new Date().toISOString(),
+        confidence_score: msg.confidence_score,
+        confidence_level: msg.confidence_level,
+        sources: msg.sources,
+        reasoning: msg.reasoning,
+        mode: msg.mode,
+        contextFiles: msg.context_files,
+        diagramXml: msg.diagram_xml,
       }));
       
       setMessages(convertedMessages);

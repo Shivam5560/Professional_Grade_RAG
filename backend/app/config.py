@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_embedding_model: str = Field(default="embeddinggemma", alias="OLLAMA_EMBEDDING_MODEL")
     ollama_reranker_model: str = Field(default="bge-reranker-v2-m3", alias="OLLAMA_RERANKER_MODEL")
+
+    # Embedding & Reranker Provider Selection
+    embedding_provider: str = Field(default="ollama", alias="EMBEDDING_PROVIDER")
+    reranker_provider: str = Field(default="local", alias="RERANKER_PROVIDER")
+
+    # Cohere Configuration
+    cohere_api_key: str = Field(default="", alias="COHERE_API_KEY")
+    cohere_embedding_model: str = Field(default="embed-english-v3.0", alias="COHERE_EMBEDDING_MODEL")
+    cohere_rerank_model: str = Field(default="rerank-english-v3.0", alias="COHERE_RERANK_MODEL")
     
     # Remote Embedding Service Configuration (Lightning.ai)
     use_remote_embedding_service: bool = Field(default=False, alias="USE_REMOTE_EMBEDDING_SERVICE")

@@ -38,6 +38,11 @@ class ChatMessage(Base):
     role = Column(String)  # 'user' or 'assistant'
     content = Column(Text)
     confidence_score = Column(JSON, nullable=True)  # Store confidence metadata
+    sources = Column(JSON, nullable=True)  # Store source references for assistant messages
+    reasoning = Column(Text, nullable=True)  # Store think-mode reasoning
+    mode = Column(String, nullable=True)  # fast | think
+    context_files = Column(JSON, nullable=True)  # Store selected context files for user messages
+    diagram_xml = Column(Text, nullable=True)  # Store draw.io XML when diagrams are generated
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     session = relationship("ChatSession", back_populates="messages")

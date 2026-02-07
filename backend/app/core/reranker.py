@@ -105,8 +105,17 @@ def get_reranker(top_n: Optional[int] = None, model: Optional[str] = None):
     """
     top_n = top_n or settings.top_k_rerank
     model = model or "BAAI/bge-reranker-v2-m3"
-    
-    if settings.use_remote_embedding_service:
+
+    if settings.reranker_provider == "cohere":
+        from app.services.cohere_service import get_cohere_service
+        reranker = get_cohere_service().get_reranker()
+        logger.info(
+            "reranker_initialized",
+            type="cohere",
+            model=settings.cohere_rerank_model,
+            top_n=top_n
+        )
+    elif settings.reranker_provider == "remote" or settings.use_remote_embedding_service:
         # Use remote reranker from Lightning.ai
         reranker = RemoteRerankerWrapper(
             base_url=settings.remote_embedding_service_url,
