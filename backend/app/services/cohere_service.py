@@ -4,7 +4,30 @@ Cohere service for embeddings and reranking.
 
 from typing import List, Optional
 import asyncio
+import ssl
+import threading
+import asyncio
 import cohere
+import httpx
+try:
+    from cohere.errors import ApiError
+except Exception:  # pragma: no cover - older cohere versions
+    from cohere import errors as _cohere_errors
+
+    ApiError = (
+        _cohere_errors.BadRequestError,
+        _cohere_errors.ClientClosedRequestError,
+        _cohere_errors.ForbiddenError,
+        _cohere_errors.GatewayTimeoutError,
+        _cohere_errors.InternalServerError,
+        _cohere_errors.InvalidTokenError,
+        _cohere_errors.NotFoundError,
+        _cohere_errors.NotImplementedError,
+        _cohere_errors.ServiceUnavailableError,
+        _cohere_errors.TooManyRequestsError,
+        _cohere_errors.UnauthorizedError,
+        _cohere_errors.UnprocessableEntityError,
+    )
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import PrivateAttr
 from llama_index.postprocessor.cohere_rerank import CohereRerank
@@ -57,8 +80,6 @@ class CohereEmbedding768(BaseEmbedding):
         )
         return response.embeddings
 
-        return [self._truncate_or_pad(self._cohere.get_text_embedding(t)) for t in texts]
-
 
 class CohereService:
     """Service for Cohere embeddings and reranking."""
@@ -95,17 +116,24 @@ class CohereService:
     async def check_health(self) -> bool:
         try:
             _ = await self.embed_model_768.aget_text_embedding("health_check")
-            return True
+        except (ApiError, httpx.RequestError, asyncio.TimeoutError, ssl.SSLError) as e:
+            logger.log_error("Cohere health check", e)
+            return False
         except Exception as e:
             logger.log_error("Cohere health check", e)
             return False
+        else:
+            return True
 
 
 _cohere_service: Optional[CohereService] = None
+_cohere_service_lock = threading.Lock()
 
 
 def get_cohere_service() -> CohereService:
     global _cohere_service
     if _cohere_service is None:
-        _cohere_service = CohereService()
+        with _cohere_service_lock:
+            if _cohere_service is None:
+                _cohere_service = CohereService()
     return _cohere_service

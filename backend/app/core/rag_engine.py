@@ -2,6 +2,7 @@
 Main RAG engine orchestrating retrieval and generation.
 """
 
+import copy
 import time
 import uuid
 from typing import Optional, Dict, Any, List, AsyncGenerator
@@ -369,9 +370,13 @@ Provide a comprehensive answer based on the context above."""
         for node in bm25_nodes:
             node_id = node.node.node_id
             if node_id in node_dict:
-                node_dict[node_id].score = (node_dict[node_id].score + node.score) / 2
+                existing = node_dict[node_id]
+                avg_score = ((existing.score or 0.0) + (node.score or 0.0)) / 2
+                merged = copy.copy(existing)
+                merged.score = avg_score
+                node_dict[node_id] = merged
             else:
-                node_dict[node_id] = node
+                node_dict[node_id] = copy.copy(node)
 
         all_merged = sorted(
             node_dict.values(),

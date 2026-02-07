@@ -26,6 +26,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 async def _determine_default_mode() -> str:
     """Return fast by default; fall back to think if any core service is unhealthy."""
     unhealthy = False
+    embedding_unhealthy = False
 
     # 1. Embedding service health
     if settings.embedding_provider == "cohere":
@@ -40,8 +41,10 @@ async def _determine_default_mode() -> str:
             async with httpx.AsyncClient(timeout=6.0) as client:
                 response = await client.get(f"{settings.remote_embedding_service_url}/health")
                 if response.status_code != 200:
+                    embedding_unhealthy = True
                     unhealthy = True
         except Exception:
+            embedding_unhealthy = True
             unhealthy = True
     else:
         try:
@@ -59,8 +62,15 @@ async def _determine_default_mode() -> str:
                 unhealthy = True
         except Exception:
             unhealthy = True
-    elif settings.reranker_provider == "remote" or settings.use_remote_embedding_service:
-        if unhealthy:
+    elif settings.reranker_provider == "remote" or settings.use_remote_reranker_service:
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                response = await client.get(f"{settings.remote_embedding_service_url}/health")
+                if response.status_code != 200:
+                    unhealthy = True
+        except Exception:
+            unhealthy = True
+        if settings.use_remote_embedding_service and embedding_unhealthy:
             unhealthy = True
 
     # 3. LLM health (cached)
@@ -465,8 +475,8 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
                     yield _sse_event("final", data)
         except Exception as e:
-            logger.error("chat_stream_failed", error=str(e))
-            yield _sse_event("error", {"message": "Streaming failed"})
+            logger.exception("chat_stream_failed", error=str(e))
+            yield _sse_event("error", {"message": "An internal server error occurred"})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

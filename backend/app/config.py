@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     
     # Remote Embedding Service Configuration (Lightning.ai)
     use_remote_embedding_service: bool = Field(default=False, alias="USE_REMOTE_EMBEDDING_SERVICE")
+    use_remote_reranker_service: bool = Field(default=False, alias="USE_REMOTE_RERANKER_SERVICE")
     remote_embedding_service_url: str = Field(
         default="https://8001-01kcxs65eap7vtj55ymz4r6xag.cloudspaces.litng.ai",
         alias="REMOTE_EMBEDDING_SERVICE_URL"

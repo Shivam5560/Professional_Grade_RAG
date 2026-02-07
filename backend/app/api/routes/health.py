@@ -237,7 +237,7 @@ async def ping_services():
                     "error": str(e)
                 }
                 results["summary"]["unhealthy"] += 1
-        elif settings.reranker_provider == "remote" or settings.use_remote_embedding_service:
+        elif settings.reranker_provider == "remote" or settings.use_remote_reranker_service:
             # Remote reranker (same service as embeddings)
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:

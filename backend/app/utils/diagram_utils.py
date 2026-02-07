@@ -5,7 +5,7 @@ Utilities for extracting and validating draw.io XML from model responses.
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 import zlib
 import base64
 from typing import Optional, Tuple

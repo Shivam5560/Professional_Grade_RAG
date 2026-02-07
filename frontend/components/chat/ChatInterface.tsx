@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -38,7 +38,7 @@ export function ChatInterface({
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<DocumentInfo[]>([]);
   const [mode, setMode] = useState<RAGMode>('fast');
-  const [modeTouched, setModeTouched] = useState(false);
+  const modeTouchedRef = useRef(false);
   const [inputValue, setInputValue] = useState('');
   const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
   // Default to healthy to prevent unnecessary health check API calls
@@ -58,13 +58,13 @@ export function ChatInterface({
       try {
         const ping = await apiClient.pingServices();
         const unhealthy = (ping.summary?.unhealthy ?? 0) > 0;
-        if (unhealthy && !modeTouched && mode === 'fast') {
+        if (unhealthy && !modeTouchedRef.current && mode === 'fast') {
           setMode('think');
         }
         setServicesHealthy(ping.status !== 'unhealthy');
       } catch (err) {
         console.warn('[ChatInterface] Health check failed:', err);
-        if (!modeTouched && mode === 'fast') {
+        if (!modeTouchedRef.current && mode === 'fast') {
           setMode('think');
         }
         setServicesHealthy(false);
@@ -72,7 +72,7 @@ export function ChatInterface({
     };
 
     checkHealth();
-  }, [mode, modeTouched]);
+  }, []);
 
   useEffect(() => {
     const loadPrompts = async () => {
@@ -199,7 +199,7 @@ export function ChatInterface({
               <ModeSelector
                 mode={mode}
                 onModeChange={(nextMode) => {
-                  setModeTouched(true);
+                  modeTouchedRef.current = true;
                   setMode(nextMode);
                 }}
                 disabled={isLoading}

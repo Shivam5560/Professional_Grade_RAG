@@ -257,5 +257,9 @@
     .intro-sheen {
       animation: none;
     }
+
+    .marquee-track {
+      animation: none;
+    }
   }
 }

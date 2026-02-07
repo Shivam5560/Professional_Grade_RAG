@@ -59,6 +59,7 @@ export function DrawioDiagram({ xml, title = 'Diagram' }: DrawioDiagramProps) {
       } else if (hasGraphModel) {
         wrapped = `<mxfile host="app.diagrams.net"><diagram id="diagram-1" name="Page-1">${raw}</diagram></mxfile>`;
       }
+      wrapped = sanitizeXml(wrapped);
     }
 
     const parser = new DOMParser();

@@ -57,7 +57,8 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
     }
 
     if (textParts.length === 0) {
-      textParts.push(unwrapMarkdownFence(content));
+      const onlyDiagram = /<mxfile[\s\S]*?<\/mxfile>/i.test(content);
+      textParts.push(onlyDiagram ? '' : unwrapMarkdownFence(content));
     }
 
     const diagramXmlParts = (message.diagramXml || '')

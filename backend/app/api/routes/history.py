@@ -49,13 +49,15 @@ def get_session_messages(session_id: str, db: Session = Depends(get_db)):
 def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     """Delete a chat session and all associated messages."""
     try:
-        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
-        deleted = db.query(ChatSession).filter(ChatSession.id == session_id).delete()
-        if deleted == 0:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not session:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        db.query(ChatSession).filter(ChatSession.id == session_id).delete()
         db.commit()
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

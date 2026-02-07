@@ -46,6 +46,9 @@ httpx==0.25.2
 # Retry Logic
 tenacity==8.2.3
 
+# XML parsing hardening
+defusedxml==0.7.1
+
 # Password Hashing
 passlib[argon2]
 argon2-cffi
