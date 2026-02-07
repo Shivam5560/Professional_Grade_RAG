@@ -11,6 +11,9 @@ import base64
 from typing import Optional, Tuple
 
 
+DIAGRAM_SPLIT_TOKEN = "||DIAGRAM_SPLIT||"
+
+
 def extract_drawio_xml(text: str) -> Tuple[str, Optional[str]]:
     """
     Extract draw.io <mxfile> XML from a response string.
@@ -22,38 +25,41 @@ def extract_drawio_xml(text: str) -> Tuple[str, Optional[str]]:
     if not text:
         return text, None
 
-    match = re.search(r"(<mxfile[\s\S]*?</mxfile>)", text)
-    if not match:
+    matches = re.findall(r"(<mxfile[\s\S]*?</mxfile>)", text)
+    if not matches:
+        # Strip any dangling mxfile fragments to avoid leaking broken XML to the UI.
+        if "<mxfile" in text:
+            cleaned_text = re.sub(r"<mxfile[\s\S]*$", "", text).strip()
+            return cleaned_text, None
         return text, None
 
-    raw_xml = match.group(1).strip()
-    cleaned_xml = _strip_code_fences(raw_xml)
+    cleaned_xml_list = []
+    for raw_xml in matches:
+        cleaned_xml = _strip_code_fences(raw_xml.strip())
 
-    if not _is_valid_mxfile(cleaned_xml):
-        cleaned_xml = _attempt_xml_repair(cleaned_xml)
+        if not _is_valid_mxfile(cleaned_xml):
+            cleaned_xml = _attempt_xml_repair(cleaned_xml)
 
-    if not _is_valid_mxfile(cleaned_xml):
-        return text, None
+        if not _is_valid_mxfile(cleaned_xml):
+            continue
 
-    # Minify and compress the XML for efficient storage and transmission
-    cleaned_xml = _minify_xml(cleaned_xml)
-    
-    # Use draw.io's native compressed format (deflate + base64)
-    # This reduces size by ~80% and is more reliable for embedding
-    try:
-        compressed_xml = _compress_xml(cleaned_xml)
-        # Store with compression marker so frontend knows to decompress
-        cleaned_xml = f"COMPRESSED:{compressed_xml}"
-    except Exception:
-        # If compression fails, use minified version
-        pass
+        cleaned_xml = _minify_xml(cleaned_xml)
+        try:
+            compressed_xml = _compress_xml(cleaned_xml)
+            cleaned_xml = f"COMPRESSED:{compressed_xml}"
+        except Exception:
+            pass
 
-    fenced = re.search(r"```(?:xml)?\s*<mxfile[\s\S]*?</mxfile>\s*```", text)
-    if fenced:
-        cleaned_text = text.replace(fenced.group(0), "").strip()
-    else:
-        cleaned_text = text.replace(match.group(1), "").strip()
-    return cleaned_text, cleaned_xml
+        cleaned_xml_list.append(cleaned_xml)
+
+    fenced_pattern = r"```(?:xml)?\s*<mxfile[\s\S]*?</mxfile>\s*```"
+    cleaned_text = re.sub(fenced_pattern, "", text)
+    cleaned_text = re.sub(r"<mxfile[\s\S]*?</mxfile>", "", cleaned_text).strip()
+
+    if not cleaned_xml_list:
+        return cleaned_text, None
+
+    return cleaned_text, DIAGRAM_SPLIT_TOKEN.join(cleaned_xml_list)
 
 
 def is_diagram_request(text: str) -> bool:

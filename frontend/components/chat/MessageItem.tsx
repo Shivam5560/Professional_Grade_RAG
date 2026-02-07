@@ -14,6 +14,8 @@ import remarkGfm from 'remark-gfm';
 import type { Message } from '@/lib/types';
 import { DrawioDiagram } from './DrawioDiagram';
 
+const DIAGRAM_SPLIT_TOKEN = '||DIAGRAM_SPLIT||';
+
 interface MessageItemProps {
   message: Message;
   showConfidence?: boolean;
@@ -35,7 +37,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
     const content = message.content;
 
     const textParts: string[] = [];
-    const xmlParts: string[] = [];
+    let xmlParts: string[] = [];
     let lastIndex = 0;
     const regex = /<mxfile[\s\S]*?<\/mxfile>/g;
     let match;
@@ -58,12 +60,14 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
       textParts.push(unwrapMarkdownFence(content));
     }
 
-    if (message.diagramXml) {
-      if (xmlParts.length > 0) {
-        xmlParts[0] = message.diagramXml;
-      } else {
-        xmlParts.push(message.diagramXml);
-      }
+    const diagramXmlParts = (message.diagramXml || '')
+      .split(DIAGRAM_SPLIT_TOKEN)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (diagramXmlParts.length > 0) {
+      const remainingXml = xmlParts.slice(diagramXmlParts.length);
+      xmlParts = [...diagramXmlParts, ...remainingXml];
     }
 
     return { text: textParts.join('\n\n'), diagrams: xmlParts };
