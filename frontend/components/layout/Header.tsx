@@ -3,7 +3,7 @@
 import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 import type { PingResponse } from "@/lib/types";
@@ -29,6 +29,18 @@ export function Header({
 }: HeaderProps) {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
+  const isAuraSql = pathname?.startsWith('/aurasql');
+  const brandTitle = isAuraSql ? 'AuraSQL' : 'NexusMind';
+  const brandSubtitle = isAuraSql ? 'SQL Studio' : 'Studio RAG';
+  const brandMark = isAuraSql ? 'AS' : 'NX';
+  const auraNavLinks = isAuraSql
+    ? [
+        { label: 'Overview', href: '/aurasql' },
+        { label: 'Chat', href: '/aurasql/query' },
+        { label: 'Connections', href: '/aurasql/connections/new' },
+      ]
+    : [];
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -123,16 +135,33 @@ export function Header({
           </Button>
         )}
         <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center shadow-lg ring-2 ring-foreground/10 pulse-glow">
-          <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
+          <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">{brandMark}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-lg font-black tracking-tight text-foreground">
-            NexusMind
-          </span>
+          <span className="text-lg font-black tracking-tight text-foreground">{brandTitle}</span>
           <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Studio RAG
+            {brandSubtitle}
           </span>
         </div>
+        {isAuraSql && (
+          <div className="hidden md:flex items-center gap-2 ml-4">
+            {auraNavLinks.map((link) => (
+              <Button
+                key={link.href}
+                variant="ghost"
+                size="sm"
+                className={`text-xs uppercase tracking-[0.2em] ${
+                  pathname === link.href
+                    ? 'bg-foreground/10 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => router.push(link.href)}
+              >
+                {link.label}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       
       <div className="flex items-center gap-3">

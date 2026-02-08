@@ -1,40 +1,101 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AuraSqlSidebar } from '@/components/aurasql/AuraSqlSidebar';
+import { MessageInput } from '@/components/chat/MessageInput';
 import { apiClient } from '@/lib/api';
-import { AuraSqlConnection, AuraSqlContext, AuraSqlHistoryItem, AuraSqlExecuteResponse, AuraSqlQueryResponse } from '@/lib/types';
+import { AuraSqlConnection, AuraSqlContext, AuraSqlExecuteResponse, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
-import { Loader2, Wand2, PlayCircle, Plus, Info, Trash2 } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-sql';
+import { format as formatSqlWithLib } from 'sql-formatter';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Database,
+  Download,
+  Layers,
+  Loader2,
+  PlayCircle,
+  RefreshCw,
+  Save,
+  Table,
+  Wand2,
+  X,
+} from 'lucide-react';
+
+type AuraSqlChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sql?: string;
+  editedSql?: string;
+  explanation?: string;
+  sourceTables?: string[];
+  confidenceScore?: number | null;
+  confidenceLevel?: 'high' | 'medium' | 'low' | null;
+  execution?: AuraSqlExecuteResponse | null;
+  showRows?: number;
+  showResults?: boolean;
+};
+
+const makeMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+const formatSql = (sql: string) => {
+  try {
+    return formatSqlWithLib(sql, { language: 'postgresql' });
+  } catch {
+    return sql;
+  }
+};
+
+const highlightSql = (sql: string) => Prism.highlight(formatSql(sql), Prism.languages.sql, 'sql');
 
 export default function AuraSqlQueryPage() {
-  const router = useRouter();
   const params = useSearchParams();
   const { isAuthenticated } = useAuthStore();
+
+  const [isMounted, setIsMounted] = useState(false);
   const [connections, setConnections] = useState<AuraSqlConnection[]>([]);
   const [contexts, setContexts] = useState<AuraSqlContext[]>([]);
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const [selectedContext, setSelectedContext] = useState<string>('');
-  const [activeContextId, setActiveContextId] = useState<string>('');
+  const [sessions, setSessions] = useState<AuraSqlSession[]>([]);
+  const [selectedConnection, setSelectedConnection] = useState('');
+  const [selectedContext, setSelectedContext] = useState('');
+  const [activeContextId, setActiveContextId] = useState('');
   const [tableList, setTableList] = useState<string[]>([]);
-  const [newTables, setNewTables] = useState<Set<string>>(new Set());
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
+  const [newTables, setNewTables] = useState<Set<string>>(new Set());
+  const [tableFilter, setTableFilter] = useState('');
+  const [showConnectionMenu, setShowConnectionMenu] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showTablesMenu, setShowTablesMenu] = useState(false);
   const [sessionContextId, setSessionContextId] = useState<string | null>(null);
-  const [queryText, setQueryText] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<AuraSqlChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState('');
   const [recommendations, setRecommendations] = useState<string[]>([]);
-  const [generated, setGenerated] = useState<AuraSqlQueryResponse | null>(null);
-  const [generatedSql, setGeneratedSql] = useState('');
-  const [execution, setExecution] = useState<AuraSqlExecuteResponse | null>(null);
-  const [resultLimit, setResultLimit] = useState(5);
-  const [historyItem, setHistoryItem] = useState<AuraSqlHistoryItem | null>(null);
+  const [recsOpen, setRecsOpen] = useState(false);
+  const [recsLocked, setRecsLocked] = useState(false);
+  const [recsByContext, setRecsByContext] = useState<Record<string, string[]>>({});
+  const [lastRecsContextId, setLastRecsContextId] = useState<string | null>(null);
+  const [recsConfirmOpen, setRecsConfirmOpen] = useState(false);
+  const [recsConfirmContextId, setRecsConfirmContextId] = useState<string | null>(null);
+  const [recsConfirmPrevContextId, setRecsConfirmPrevContextId] = useState<string | null>(null);
+  const [historyBanner, setHistoryBanner] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
   const [loadingContext, setLoadingContext] = useState(false);
@@ -44,33 +105,110 @@ export default function AuraSqlQueryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const connectionContexts = useMemo(
+    () => contexts.filter((ctx) => ctx.connection_id === selectedConnection),
+    [contexts, selectedConnection]
+  );
+
+  const selectedContextRecord = useMemo(
+    () => connectionContexts.find((ctx) => ctx.id === selectedContext) || null,
+    [connectionContexts, selectedContext]
+  );
+
+  const baselineTables = useMemo(
+    () => new Set(selectedContextRecord?.table_names ?? []),
+    [selectedContextRecord]
+  );
+
+  const filteredTables = useMemo(() => {
+    const filter = tableFilter.trim().toLowerCase();
+    if (!filter) return tableList;
+    return tableList.filter((table) => table.toLowerCase().includes(filter));
+  }, [tableFilter, tableList]);
+
+  const displayTables = useMemo(
+    () => (tableList.length > 0 ? tableList : Array.from(selectedTables)),
+    [tableList, selectedTables]
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selectedContextRecord) return selectedTables.size > 0;
+    const current = Array.from(selectedTables).sort();
+    const baseline = [...selectedContextRecord.table_names].sort();
+    if (current.length !== baseline.length) return true;
+    return current.some((value, index) => value !== baseline[index]);
+  }, [selectedContextRecord, selectedTables]);
+
+  useEffect(() => {
+    if (sessionContextId) {
+      setActiveContextId(sessionContextId);
+      return;
+    }
+    setActiveContextId(selectedContext);
+  }, [selectedContext, sessionContextId]);
+
+  useEffect(() => {
+    if (activeContextId) {
+      setHistoryBanner(null);
+    }
+  }, [activeContextId]);
+
+  useEffect(() => {
+    if (autoScrollEnabled) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [chatMessages, autoScrollEnabled]);
+
+  useEffect(() => {
+    if (!selectedContextRecord) {
+      setSelectedTables(new Set());
+      setNewTables(new Set());
+      return;
+    }
+    setSelectedTables(new Set(selectedContextRecord.table_names));
+    setNewTables(new Set());
+  }, [selectedContextRecord?.id]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
 
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [connData, ctxData] = await Promise.all([
+        const [connData, ctxData, sessionData] = await Promise.all([
           apiClient.listAuraSqlConnections(),
           apiClient.listAuraSqlContexts(),
+          apiClient.listAuraSqlSessions(),
         ]);
         setConnections(connData);
         setContexts(ctxData);
+        setSessions(sessionData);
 
         const connectionParam = params.get('connection');
         const contextParam = params.get('context');
+        const sessionParam = params.get('session');
 
         if (contextParam) {
           const context = ctxData.find((ctx) => ctx.id === contextParam);
           if (context) {
             setSelectedContext(context.id);
             setSelectedConnection(context.connection_id);
-            setActiveContextId(context.id);
           }
         } else if (connectionParam) {
           setSelectedConnection(connectionParam);
         } else if (connData.length > 0) {
           setSelectedConnection(connData[0].id);
+        }
+
+        if (sessionParam) {
+          const session = sessionData.find((item) => item.id === sessionParam);
+          if (session) {
+            await loadSessionHistory(session, ctxData);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load AuraSQL data');
@@ -80,88 +218,102 @@ export default function AuraSqlQueryPage() {
     };
 
     load();
-  }, [isAuthenticated, params]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!selectedConnection) return;
-    setSelectedContext('');
-    setActiveContextId('');
-    setSessionContextId(null);
-    setSelectedTables(new Set());
-    setTableList([]);
-    setNewTables(new Set());
-  }, [selectedConnection]);
-
-  useEffect(() => {
-    if (!selectedContext) return;
-    const loadContext = async () => {
-      setLoadingContext(true);
-      try {
-        const context = await apiClient.getAuraSqlContext(selectedContext);
-        setSelectedTables(new Set(context.table_names));
-        setSessionContextId(null);
-        setActiveContextId(context.id);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load context');
-      } finally {
-        setLoadingContext(false);
-      }
-    };
-
-    loadContext();
-  }, [selectedContext]);
-
-  const connectionContexts = useMemo(
-    () => contexts.filter((ctx) => ctx.connection_id === selectedConnection),
-    [contexts, selectedConnection]
-  );
-
-  const selectedContextTables = useMemo(() => {
-    const selected = contexts.find((ctx) => ctx.id === selectedContext);
-    return new Set(selected?.table_names || []);
-  }, [contexts, selectedContext]);
-
-  const selectedContextRecord = useMemo(
-    () => contexts.find((ctx) => ctx.id === selectedContext),
-    [contexts, selectedContext]
-  );
-
-  const getDefaultContextName = () => {
-    const base = 'Default context';
-    const existing = new Set(connectionContexts.map((ctx) => ctx.name));
-    if (!existing.has(base)) return base;
-    let counter = 2;
-    while (existing.has(`${base} ${counter}`)) {
-      counter += 1;
-    }
-    return `${base} ${counter}`;
+  const handleStartNewChat = () => {
+    setSessionId(null);
+    setChatMessages([]);
+    setHistoryBanner(null);
+    setRecommendations([]);
+    setRecsOpen(false);
   };
 
-  const hasUnsavedChanges = useMemo(() => {
-    const selected = Array.from(selectedTables).sort();
-    const original = Array.from(selectedContextTables).sort();
-    if (selected.length !== original.length) return true;
-    return selected.some((value, index) => value !== original[index]);
-  }, [selectedTables, selectedContextTables]);
+  useEffect(() => {
+    const sessionParam = params.get('session');
+    if (!sessionParam && sessionId) {
+      handleStartNewChat();
+    }
+  }, [params, sessionId]);
 
-  if (!isAuthenticated) return <AuthPage />;
+  const loadSessionHistory = async (session: AuraSqlSession, ctxData = contexts) => {
+    setSessionId(session.id);
+    if (session.context_id) {
+      let context = ctxData.find((ctx) => ctx.id === session.context_id) || null;
+      if (!context) {
+        try {
+          context = await apiClient.getAuraSqlContext(session.context_id);
+          setContexts((prev) => [context!, ...prev]);
+        } catch {
+          context = null;
+        }
+      }
+      if (context) {
+        setSelectedConnection(context.connection_id);
+        setSelectedContext(context.id);
+        setSessionContextId(null);
+        setHistoryBanner(null);
+      } else {
+        setHistoryBanner('Select a context to continue this chat.');
+      }
+    } else {
+      setHistoryBanner('Select a context to continue this chat.');
+    }
+
+    try {
+      const logs = await apiClient.getAuraSqlSessionHistory(session.id);
+      const nextMessages: AuraSqlChatMessage[] = [];
+      logs.forEach((log) => {
+        if (log.natural_language_query) {
+          nextMessages.push({
+            id: makeMessageId(),
+            role: 'user',
+            content: log.natural_language_query,
+          });
+        }
+        if (log.generated_sql && log.status === 'generated') {
+          nextMessages.push({
+            id: makeMessageId(),
+            role: 'assistant',
+            content: 'SQL generated.',
+            sql: log.generated_sql,
+            editedSql: log.generated_sql,
+            sourceTables: log.source_tables ?? [],
+            confidenceScore: log.confidence_score ?? null,
+            confidenceLevel: log.confidence_level ?? null,
+            execution: null,
+            showRows: 10,
+            showResults: false,
+          });
+        }
+      });
+      setChatMessages(nextMessages);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load chat history');
+    }
+  };
 
   const handleFetchTables = async () => {
     if (!selectedConnection) return;
     setLoadingTables(true);
     setError(null);
     try {
-      const previous = new Set(tableList);
       const tables = await apiClient.listAuraSqlTables(selectedConnection);
-      const newlyAdded = tables.filter((table) => !previous.has(table));
       setTableList(tables);
-      setNewTables(new Set(newlyAdded));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch tables');
+      setError(err instanceof Error ? err.message : 'Failed to load tables');
     } finally {
       setLoadingTables(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedConnection) {
+      setTableList([]);
+      return;
+    }
+    handleFetchTables();
+  }, [selectedConnection]);
 
   const handleToggleTable = (table: string) => {
     setSelectedTables((prev) => {
@@ -171,8 +323,15 @@ export default function AuraSqlQueryPage() {
       } else {
         next.add(table);
       }
+      setNewTables(new Set([...next].filter((name) => !baselineTables.has(name))));
       return next;
     });
+  };
+
+  const handleSelectNewTables = () => {
+    if (newTables.size === 0) return;
+    setSelectedTables((prev) => new Set([...prev, ...newTables]));
+    setNewTables(new Set());
   };
 
   const handleUseSessionContext = async () => {
@@ -180,24 +339,18 @@ export default function AuraSqlQueryPage() {
     setSavingContext(true);
     setError(null);
     try {
-      if (sessionContextId) {
-        const context = await apiClient.updateAuraSqlContext(sessionContextId, {
-          table_names: Array.from(selectedTables),
-          is_temporary: true,
-        });
-        setActiveContextId(context.id);
-      } else {
-        const context = await apiClient.createAuraSqlContext({
-          connection_id: selectedConnection,
-          name: 'Session context',
-          table_names: Array.from(selectedTables),
-          is_temporary: true,
-        });
-        setSessionContextId(context.id);
-        setActiveContextId(context.id);
-      }
+      const payload = {
+        connection_id: selectedConnection,
+        name: 'Session context',
+        table_names: Array.from(selectedTables),
+        is_temporary: true,
+      };
+      const context = await apiClient.createAuraSqlContext(payload);
+      setSessionContextId(context.id);
+      setActiveContextId(context.id);
+      setHistoryBanner(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create session context');
+      setError(err instanceof Error ? err.message : 'Failed to apply session context');
     } finally {
       setSavingContext(false);
     }
@@ -205,18 +358,18 @@ export default function AuraSqlQueryPage() {
 
   const handleSaveContext = async () => {
     if (!selectedConnection || selectedTables.size === 0) return;
+    const name = window.prompt('Name this context', 'New context');
+    if (!name) return;
     setSavingContext(true);
     setError(null);
     try {
       const context = await apiClient.createAuraSqlContext({
         connection_id: selectedConnection,
-        name: getDefaultContextName(),
+        name,
         table_names: Array.from(selectedTables),
-        is_temporary: false,
       });
       setContexts((prev) => [context, ...prev]);
       setSelectedContext(context.id);
-      setActiveContextId(context.id);
       setSessionContextId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save context');
@@ -226,16 +379,15 @@ export default function AuraSqlQueryPage() {
   };
 
   const handleUpdateContext = async () => {
-    if (!selectedContextRecord || selectedTables.size === 0) return;
+    if (!selectedContextRecord) return;
     setSavingContext(true);
     setError(null);
     try {
-      const context = await apiClient.updateAuraSqlContext(selectedContext, {
+      const context = await apiClient.updateAuraSqlContext(selectedContextRecord.id, {
         table_names: Array.from(selectedTables),
-        is_temporary: false,
       });
-      setContexts((prev) => prev.map((ctx) => (ctx.id === context.id ? context : ctx)));
-      setActiveContextId(context.id);
+      setContexts((prev) => prev.map((item) => (item.id === context.id ? context : item)));
+      setNewTables(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update context');
     } finally {
@@ -243,74 +395,109 @@ export default function AuraSqlQueryPage() {
     }
   };
 
-  const handleDeleteContext = async () => {
-    if (!selectedContext) return;
-    const confirmed = window.confirm('Delete this context? This cannot be undone.');
-    if (!confirmed) return;
-    try {
-      await apiClient.deleteAuraSqlContext(selectedContext);
-      setContexts((prev) => prev.filter((ctx) => ctx.id !== selectedContext));
-      setSelectedContext('');
-      setActiveContextId('');
-      setSelectedTables(new Set());
-      setNewTables(new Set());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete context');
-    }
-  };
-
-  const handleDeleteConnection = async () => {
-    if (!selectedConnection) return;
-    const confirmed = window.confirm('Delete this connection? This will remove its saved contexts.');
-    if (!confirmed) return;
-    try {
-      await apiClient.deleteAuraSqlConnection(selectedConnection);
-      setConnections((prev) => prev.filter((conn) => conn.id !== selectedConnection));
-      setContexts((prev) => prev.filter((ctx) => ctx.connection_id !== selectedConnection));
-      setSelectedConnection('');
-      setSelectedContext('');
-      setActiveContextId('');
-      setSelectedTables(new Set());
-      setTableList([]);
-      setNewTables(new Set());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete connection');
-    }
-  };
-
-  const handleSelectNewTables = () => {
-    if (newTables.size === 0) return;
-    setSelectedTables((prev) => {
-      const next = new Set(prev);
-      newTables.forEach((table) => next.add(table));
-      return next;
-    });
-  };
-
-  const handleRecommendations = async () => {
-    if (!activeContextId) return;
+  const runRecommendationsFetch = async (contextId: string) => {
     setLoadingContext(true);
+    setError(null);
     try {
-      const recs = await apiClient.getAuraSqlRecommendations(activeContextId);
+      const recs = await apiClient.getAuraSqlRecommendations(contextId);
       setRecommendations(recs);
+      setRecsByContext((prev) => ({ ...prev, [contextId]: recs }));
+      setLastRecsContextId(contextId);
+      setRecsOpen(true);
+      setRecsLocked(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load recommendations');
+      setError(err instanceof Error ? err.message : 'Failed to generate recommendations');
     } finally {
       setLoadingContext(false);
     }
   };
 
-  const handleGenerate = async () => {
-    if (!activeContextId || !queryText.trim()) return;
+  const handleRecommendations = async () => {
+    if (!activeContextId) return;
+    const currentRecs = recsByContext[activeContextId];
+    if (currentRecs && currentRecs.length > 0) {
+      setRecommendations(currentRecs);
+      setRecsOpen(true);
+      setRecsLocked(true);
+      setLastRecsContextId(activeContextId);
+      return;
+    }
+
+    if (
+      lastRecsContextId &&
+      lastRecsContextId !== activeContextId &&
+      recsByContext[lastRecsContextId]?.length
+    ) {
+      setRecsConfirmContextId(activeContextId);
+      setRecsConfirmPrevContextId(lastRecsContextId);
+      setRecsConfirmOpen(true);
+      return;
+    }
+
+    await runRecommendationsFetch(activeContextId);
+  };
+
+  const handleSendMessage = async (text: string) => {
+    if (!activeContextId) {
+      setError('Select a context to generate SQL.');
+      return;
+    }
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const userMessage: AuraSqlChatMessage = {
+      id: makeMessageId(),
+      role: 'user',
+      content: trimmed,
+    };
+
+    setChatMessages((prev) => [...prev, userMessage]);
+    setInputValue('');
     setLoadingGenerate(true);
-    setGenerated(null);
-    setGeneratedSql('');
-    setExecution(null);
-    setResultLimit(5);
+    setError(null);
+
     try {
-      const result = await apiClient.generateAuraSqlQuery(activeContextId, queryText.trim());
-      setGenerated(result);
-      setGeneratedSql(result.sql);
+      const response = await apiClient.generateAuraSqlQueryWithSession(
+        activeContextId,
+        trimmed,
+        sessionId || undefined
+      );
+
+      if (!response.sql) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: makeMessageId(),
+            role: 'assistant',
+            content: response.explanation || 'Could not generate SQL with the selected context.',
+            confidenceScore: response.confidence_score ?? 0,
+            confidenceLevel: response.confidence_level ?? 'low',
+          },
+        ]);
+        return;
+      }
+
+      const assistantMessage: AuraSqlChatMessage = {
+        id: makeMessageId(),
+        role: 'assistant',
+        content: 'SQL generated.',
+        sql: response.sql,
+        editedSql: response.sql,
+        explanation: response.explanation,
+        sourceTables: response.source_tables,
+        confidenceScore: response.confidence_score ?? null,
+        confidenceLevel: response.confidence_level ?? null,
+        execution: null,
+        showRows: 10,
+        showResults: false,
+      };
+      setChatMessages((prev) => [...prev, assistantMessage]);
+
+      if (response.session_id && response.session_id !== sessionId) {
+        setSessionId(response.session_id);
+        const updatedSessions = await apiClient.listAuraSqlSessions();
+        setSessions(updatedSessions);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate SQL');
     } finally {
@@ -318,21 +505,74 @@ export default function AuraSqlQueryPage() {
     }
   };
 
-  const handleExecute = async () => {
-    const connection = connections.find((conn) => conn.id === selectedConnection);
-    if (!generated || !connection || !generatedSql.trim()) return;
+  const handleExecuteMessage = async (messageId: string) => {
+    if (!selectedConnection) return;
+    const message = chatMessages.find((item) => item.id === messageId);
+    const sql = message?.editedSql || message?.sql;
+    if (!sql) return;
+
     setLoadingExecute(true);
-    setExecution(null);
+    setError(null);
     try {
-      const result = await apiClient.executeAuraSql(connection.id, generatedSql.trim());
-      setExecution(result);
-      setResultLimit(5);
+      const result = await apiClient.executeAuraSqlWithSession(
+        selectedConnection,
+        sql,
+        sessionId || undefined
+      );
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, execution: result, showRows: msg.showRows ?? 10, showResults: true }
+            : msg
+        )
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute SQL');
     } finally {
       setLoadingExecute(false);
     }
   };
+
+  const handleToggleResults = (messageId: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, showResults: !msg.showResults } : msg
+      )
+    );
+  };
+
+  const handleShowMoreRows = (messageId: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, showRows: (msg.showRows || 10) + 10 }
+          : msg
+      )
+    );
+  };
+
+  const handleCopySql = async (sql: string) => {
+    try {
+      await navigator.clipboard.writeText(sql);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy SQL');
+    }
+  };
+
+  const handleDownloadSql = (sql: string) => {
+    const blob = new Blob([sql], { type: 'text/sql' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'query.sql';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!isMounted) return null;
+  if (!isAuthenticated) return <AuthPage />;
 
   return (
     <div className="relative h-screen overflow-hidden bg-background text-foreground">
@@ -358,313 +598,474 @@ export default function AuraSqlQueryPage() {
             }`}
           >
             <AuraSqlSidebar
-              currentHistoryId={historyItem?.id}
-              onSelectHistory={(item) => {
-                setHistoryItem(item);
-                if (item.natural_language_query) {
-                  setQueryText(item.natural_language_query);
-                }
-                if (item.generated_sql) {
-                  setGenerated({
-                    sql: item.generated_sql,
-                    explanation: 'Loaded from history.',
-                    source_tables: [],
-                  });
-                }
-              }}
+              currentHistoryId={sessionId}
+              sessions={sessions}
+              onSelectSession={(session) => loadSessionHistory(session)}
+              onNewChat={handleStartNewChat}
             />
           </div>
         </aside>
 
         <main className="flex flex-1 flex-col overflow-hidden min-h-0">
           <div className="flex-1 overflow-hidden p-3 md:p-6">
-            <div className="glass-panel h-full rounded-3xl p-4 md:p-6 overflow-auto">
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Card className="border-border/60">
-                  <div className="p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-semibold">Connection & Context</h2>
-                      <Button variant="ghost" size="sm" onClick={() => router.push('/aurasql')}>Back to AuraSQL</Button>
-                    </div>
-
-                    {loading ? (
-                      <p className="text-sm text-muted-foreground">Loading connections...</p>
-                    ) : connections.length === 0 ? (
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">No connections found.</p>
-                        <Button onClick={() => router.push('/aurasql/connections/new')}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create connection
-                        </Button>
+            <div className="glass-panel h-full rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col">
+              <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full pr-2">
+                  <div className="space-y-4 pb-4">
+                    {chatMessages.length === 0 && !loadingGenerate && (
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 p-6 text-sm text-muted-foreground">
+                        Start by asking a question about your schema. The assistant will generate SQL you can refine and execute.
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="space-y-2">
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Connection</p>
-                          <select
-                            value={selectedConnection}
-                            onChange={(event) => setSelectedConnection(event.target.value)}
-                            className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
+                    )}
+
+                    {chatMessages.map((message) => (
+                      <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] space-y-3 ${message.role === 'user' ? 'text-right' : ''}`}>
+                          <div
+                            className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                              message.role === 'user'
+                                ? 'bg-foreground text-background'
+                                : 'bg-card/70 border border-border/60 text-foreground'
+                            }`}
                           >
-                            {connections.map((conn) => (
-                              <option key={conn.id} value={conn.id}>
-                                {conn.name} • {conn.database} • {conn.schema_name || 'default'}
-                              </option>
-                            ))}
-                          </select>
-                          {selectedConnection && (
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" variant="ghost" onClick={handleDeleteConnection}>
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Connection
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Saved Contexts</p>
-                          {connectionContexts.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No contexts yet.</p>
-                          ) : (
-                            <select
-                              value={selectedContext}
-                              onChange={(event) => setSelectedContext(event.target.value)}
-                              className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
-                            >
-                              <option value="">Select a context</option>
-                              {connectionContexts.map((ctx) => (
-                                <option key={ctx.id} value={ctx.id}>
-                                  {ctx.name} • {ctx.table_names.join(', ')}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {selectedContext && (
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" variant="ghost" onClick={handleDeleteContext}>
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Context
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="rounded-2xl border border-border/60 bg-card/60 p-3 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium">Table Contexts</p>
-                              <p className="text-xs text-muted-foreground">Refresh to pull newly added tables.</p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button size="sm" variant="outline" onClick={handleFetchTables} disabled={loadingTables}>
-                                {loadingTables ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Refresh tables'}
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={handleSelectNewTables} disabled={newTables.size === 0}>
-                                Add new tables
-                              </Button>
-                            </div>
+                            {message.content}
                           </div>
 
-                          {tableList.length === 0 ? (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Info className="h-3.5 w-3.5" />
-                              Fetch tables to select new context.
-                            </div>
-                          ) : (
-                            <div className="grid gap-2 md:grid-cols-2">
-                              {tableList.map((table) => {
-                                const isSelected = selectedTables.has(table);
-                                const isSelectedContext = selectedContextTables.has(table);
-                                const isNew = newTables.has(table);
-                                return (
-                                  <label
-                                    key={table}
-                                    className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm cursor-pointer"
+                          {message.role === 'assistant' && message.sql && (
+                            <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">SQL Canvas</p>
+                                  {message.confidenceScore !== null && message.confidenceScore !== undefined && (
+                                    <Badge
+                                      variant="secondary"
+                                      className={`text-[10px] uppercase tracking-[0.2em] ${
+                                        message.confidenceLevel === 'high'
+                                          ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
+                                          : message.confidenceLevel === 'medium'
+                                          ? 'bg-amber-500/15 text-amber-800 dark:text-amber-200'
+                                          : 'bg-rose-500/15 text-rose-800 dark:text-rose-200'
+                                      }`}
+                                    >
+                                      {message.confidenceLevel || 'low'} {Math.round(message.confidenceScore)}%
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button size="sm" variant="ghost" onClick={() => handleCopySql(message.editedSql || message.sql)}>
+                                    <Copy className="h-4 w-4 mr-1" />
+                                    Copy
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleDownloadSql(message.editedSql || message.sql)}>
+                                    <Download className="h-4 w-4 mr-1" />
+                                    Download
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleExecuteMessage(message.id)}
+                                    disabled={loadingExecute || !(message.editedSql || message.sql)}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => handleToggleTable(table)}
-                                      className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
-                                    />
-                                    <span className={isSelectedContext ? 'font-semibold' : ''}>{table}</span>
-                                    {isNew && <Badge variant="outline">New</Badge>}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
+                                    {loadingExecute ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-1" />}
+                                    Execute
+                                  </Button>
+                                </div>
+                              </div>
 
-                          {selectedTables.size > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {Array.from(selectedTables).map((table) => (
-                                <Badge
-                                  key={table}
-                                  variant="secondary"
-                                  className="cursor-pointer"
-                                  onClick={() => handleToggleTable(table)}
-                                >
-                                  {table}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
+                              <div className="rounded-xl border border-border/60 bg-card/60 p-3">
+                                <pre
+                                  className="prism-sql text-xs font-mono whitespace-pre-wrap leading-relaxed outline-none min-h-[220px]"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={(event) => {
+                                    const nextValue = event.currentTarget.textContent || '';
+                                    setChatMessages((prev) =>
+                                      prev.map((msg) =>
+                                        msg.id === message.id ? { ...msg, editedSql: nextValue } : msg
+                                      )
+                                    );
+                                  }}
+                                  dangerouslySetInnerHTML={{
+                                    __html: highlightSql(formatSql(message.editedSql ?? message.sql)),
+                                  }}
+                                />
+                              </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={handleUseSessionContext}
-                              disabled={selectedTables.size === 0 || savingContext}
-                            >
-                              {savingContext ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                              Use selection for session
-                            </Button>
-                            <Button
-                              onClick={handleSaveContext}
-                              disabled={selectedTables.size === 0 || savingContext || !!selectedContextRecord}
-                            >
-                              Save as default context
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              onClick={handleUpdateContext}
-                              disabled={!selectedContextRecord || !hasUnsavedChanges || savingContext}
-                            >
-                              Update saved context
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-
-                <Card className="border-border/60">
-                  <div className="p-4 space-y-4">
-                    <h2 className="text-lg font-semibold">Prompt</h2>
-                    <Textarea
-                      value={queryText}
-                      onChange={(e) => setQueryText(e.target.value)}
-                      placeholder="Ask about your schema..."
-                      className="min-h-[140px]"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={handleGenerate}
-                        disabled={
-                          loadingGenerate ||
-                          !queryText.trim() ||
-                          !activeContextId ||
-                          (hasUnsavedChanges && !sessionContextId)
-                        }
-                      >
-                        {loadingGenerate ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
-                        Generate SQL
-                      </Button>
-                      <Button variant="outline" onClick={handleRecommendations} disabled={loadingContext || !activeContextId}>
-                        {loadingContext ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 'Get recommendations'}
-                      </Button>
-                    </div>
-                    {recommendations.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {recommendations.map((rec) => (
-                          <Badge key={rec} variant="secondary" className="cursor-pointer" onClick={() => setQueryText(rec)}>
-                            {rec}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {hasUnsavedChanges && !sessionContextId && selectedTables.size > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Apply the selection to this session or update the saved context before generating.
-                      </p>
-                    )}
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2 mt-6">
-                <Card className="border-border/60">
-                  <div className="p-4 space-y-3">
-                    <h2 className="text-lg font-semibold">Generated SQL</h2>
-                    {generated ? (
-                      <>
-                        <Textarea
-                          value={generatedSql}
-                          onChange={(e) => setGeneratedSql(e.target.value)}
-                          className="min-h-[140px] font-mono"
-                        />
-                        <div className="text-sm text-muted-foreground">{generated.explanation}</div>
-                        {generated.source_tables.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {generated.source_tables.map((table) => (
-                              <Badge key={table} variant="outline">
-                                {table}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        <Button onClick={handleExecute} disabled={loadingExecute || !generatedSql.trim()}>
-                          {loadingExecute ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-                          Execute SQL
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Generate a SQL query to see results here.</p>
-                    )}
-                  </div>
-                </Card>
-
-                <Card className="border-border/60">
-                  <div className="p-4 space-y-3">
-                    <h2 className="text-lg font-semibold">Results</h2>
-                    {execution ? (
-                      execution.rows.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No rows returned.</p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-xl border border-border/60">
-                          <table className="min-w-full divide-y divide-border">
-                            <thead className="bg-muted/60">
-                              <tr>
-                                {execution.columns.map((column) => (
-                                  <th key={column} className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">
-                                    {column}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                              {execution.rows.slice(0, resultLimit).map((row, index) => (
-                                <tr key={index}>
-                                  {execution.columns.map((column) => (
-                                    <td key={column} className="px-4 py-2 text-sm text-foreground">
-                                      {String(row[column] ?? '')}
-                                    </td>
+                              {message.sourceTables && message.sourceTables.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {message.sourceTables.map((table) => (
+                                    <Badge key={table} variant="outline">
+                                      {table}
+                                    </Badge>
                                   ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                </div>
+                              )}
+
+                              {message.execution && (
+                                <div className="space-y-3">
+                                  <Button size="sm" variant="ghost" onClick={() => handleToggleResults(message.id)}>
+                                    {message.showResults ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
+                                    {message.showResults ? 'Hide results' : 'Show results'}
+                                  </Button>
+
+                                  {message.showResults && (
+                                    <>
+                                      {message.execution.rows.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">No rows returned.</p>
+                                      ) : (
+                                        <div className="overflow-x-auto rounded-xl border border-border/60">
+                                          <table className="min-w-full divide-y divide-border">
+                                            <thead className="bg-muted/60">
+                                              <tr>
+                                                {message.execution.columns.map((column) => (
+                                                  <th
+                                                    key={column}
+                                                    className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground"
+                                                  >
+                                                    {column}
+                                                  </th>
+                                                ))}
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border">
+                                              {message.execution.rows
+                                                .slice(0, message.showRows || 10)
+                                                .map((row, index) => (
+                                                  <tr key={index}>
+                                                    {message.execution.columns.map((column) => (
+                                                      <td key={column} className="px-4 py-2 text-sm text-foreground">
+                                                        {String(row[column] ?? '')}
+                                                      </td>
+                                                    ))}
+                                                  </tr>
+                                                ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                      {message.execution.rows.length > (message.showRows || 10) && (
+                                        <Button variant="outline" size="sm" onClick={() => handleShowMoreRows(message.id)}>
+                                          Show more
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Run a query to see results.</p>
+                      </div>
+                    ))}
+
+                    {loadingGenerate && (
+                      <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                        Generating SQL...
+                      </div>
                     )}
-                    {execution && execution.rows.length > resultLimit && (
-                      <Button variant="outline" size="sm" onClick={() => setResultLimit((prev) => prev + 5)}>
-                        Show more
-                      </Button>
-                    )}
+                    <div ref={bottomRef} />
                   </div>
-                </Card>
+                </ScrollArea>
               </div>
 
-              {error && <p className="text-sm text-red-500 mt-4">{error}</p>}
+              <div className="sticky bottom-0 z-20">
+                <div className="bg-gradient-to-t from-background/95 via-background/80 to-transparent px-2 pt-6 pb-4">
+                  <div className="mx-auto w-full max-w-4xl glass-panel rounded-3xl p-4 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setShowConnectionMenu((prev) => !prev)}
+                            disabled={loading || connections.length === 0}
+                            aria-label="Select connection"
+                            title={
+                              connections.find((conn) => conn.id === selectedConnection)?.name ||
+                              'Select connection'
+                            }
+                          >
+                            <Database className="h-4 w-4" />
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                          {showConnectionMenu && (
+                            <div className="absolute left-0 bottom-full z-30 mb-2 w-72 rounded-xl border border-border/60 bg-card/95 p-2 shadow-lg">
+                              <div className="max-h-64 overflow-y-auto">
+                                {connections.length === 0 ? (
+                                  <p className="px-3 py-2 text-sm text-muted-foreground">No connections</p>
+                                ) : (
+                                  connections.map((conn) => (
+                                    <button
+                                      key={conn.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedConnection(conn.id);
+                                        setShowConnectionMenu(false);
+                                      }}
+                                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                        conn.id === selectedConnection
+                                          ? 'bg-foreground/10 text-foreground'
+                                          : 'hover:bg-muted/60'
+                                      }`}
+                                    >
+                                      {conn.name} • {conn.database} • {conn.schema_name || 'default'}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setShowContextMenu((prev) => !prev)}
+                            disabled={loading || connectionContexts.length === 0}
+                            aria-label="Select context"
+                            title={selectedContextRecord?.name || 'Select context'}
+                          >
+                            <Layers className="h-4 w-4" />
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                          {showContextMenu && (
+                            <div className="absolute left-0 bottom-full z-30 mb-2 w-72 rounded-xl border border-border/60 bg-card/95 p-2 shadow-lg">
+                              <div className="max-h-64 overflow-y-auto">
+                                {connectionContexts.length === 0 ? (
+                                  <p className="px-3 py-2 text-sm text-muted-foreground">No contexts</p>
+                                ) : (
+                                  connectionContexts.map((ctx) => (
+                                    <button
+                                      key={ctx.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedContext(ctx.id);
+                                        setShowContextMenu(false);
+                                      }}
+                                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                        ctx.id === selectedContext
+                                          ? 'bg-foreground/10 text-foreground'
+                                          : 'hover:bg-muted/60'
+                                      }`}
+                                    >
+                                      {ctx.name} • {ctx.table_names.join(', ')}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={handleRecommendations}
+                          disabled={loadingContext || !activeContextId}
+                          aria-label="Recommendations"
+                          title={recsByContext[activeContextId]?.length ? 'Recommendations' : 'Generate recommendations'}
+                        >
+                          {loadingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                        </Button>
+
+                        <div className="relative">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setShowTablesMenu((prev) => {
+                                const next = !prev;
+                                if (next && tableList.length === 0) {
+                                  handleFetchTables();
+                                }
+                                return next;
+                              });
+                            }}
+                            disabled={!selectedConnection}
+                            aria-label="Tables"
+                            title="Tables"
+                          >
+                            <Table className="h-4 w-4" />
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                          {showTablesMenu && (
+                            <div className="absolute left-0 bottom-full z-30 mb-2 w-[520px] rounded-xl border border-border/60 bg-card/95 p-3 shadow-lg">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={handleFetchTables}
+                                  disabled={loadingTables || !selectedConnection}
+                                  aria-label="Refresh tables"
+                                  title="Refresh tables"
+                                >
+                                  <RefreshCw className={`h-4 w-4 ${loadingTables ? 'animate-spin' : ''}`} />
+                                </Button>
+                                <input
+                                  value={tableFilter}
+                                  onChange={(event) => setTableFilter(event.target.value)}
+                                  placeholder="Filter tables..."
+                                  className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
+                                />
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={handleUseSessionContext}
+                                  disabled={selectedTables.size === 0 || savingContext}
+                                  aria-label="Apply to session"
+                                  title="Apply to session"
+                                >
+                                  {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                </Button>
+                                {selectedContextRecord ? (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={handleUpdateContext}
+                                    disabled={!hasUnsavedChanges || savingContext}
+                                    aria-label="Update saved context"
+                                    title="Update saved context"
+                                  >
+                                    {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={handleSaveContext}
+                                    disabled={selectedTables.size === 0 || savingContext}
+                                    aria-label="Save context"
+                                    title="Save context"
+                                  >
+                                    {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                  </Button>
+                                )}
+                              </div>
+                              {filteredTables.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No tables found.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-2 max-h-[220px] overflow-y-auto pr-2">
+                                  {filteredTables.map((table) => {
+                                    const isSelected = selectedTables.has(table);
+                                    const isNew = newTables.has(table);
+                                    return (
+                                      <Badge
+                                        key={table}
+                                        variant={isSelected ? 'default' : 'outline'}
+                                        className={`cursor-pointer transition-all ${
+                                          isSelected ? 'bg-foreground text-background' : 'bg-card/70 text-muted-foreground'
+                                        } ${isNew ? 'ring-1 ring-amber-400/70' : ''}`}
+                                        onClick={() => handleToggleTable(table)}
+                                      >
+                                        {table}
+                                        {isSelected && <X className="ml-1 h-3 w-3" />}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {historyBanner && <p className="text-xs text-amber-500">{historyBanner}</p>}
+
+                    <MessageInput
+                      onSend={handleSendMessage}
+                      disabled={loadingGenerate || !activeContextId || (hasUnsavedChanges && !sessionContextId)}
+                      value={inputValue}
+                      onChange={setInputValue}
+                      placeholder="Ask a question about your schema..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
             </div>
           </div>
         </main>
       </div>
+
+      {recsOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-background/50 backdrop-blur-sm">
+          <div className="w-full max-w-md h-full bg-card/95 border-l border-border/70 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Recommendations</p>
+                <p className="text-xs text-muted-foreground">Pick a question to drop into chat.</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setRecsOpen(false)}>
+                Close
+              </Button>
+            </div>
+
+            {loadingContext ? (
+              <p className="text-sm text-muted-foreground">Generating recommendations...</p>
+            ) : recommendations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recommendations yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {recommendations.map((rec) => (
+                  <Badge
+                    key={rec}
+                    variant="secondary"
+                    className="cursor-pointer"
+                    onClick={() => {
+                      setInputValue(rec);
+                      setRecsOpen(false);
+                      setRecsLocked(true);
+                    }}
+                  >
+                    {rec}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {recsConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border/60 bg-card/95 p-5 space-y-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Context changed</p>
+              <p className="text-xs text-muted-foreground">
+                Use previous recommendations or regenerate for the current context.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (recsConfirmPrevContextId && recsByContext[recsConfirmPrevContextId]) {
+                    setRecommendations(recsByContext[recsConfirmPrevContextId]);
+                    setRecsOpen(true);
+                    setRecsLocked(true);
+                  }
+                  setRecsConfirmOpen(false);
+                }}
+              >
+                Use previous
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (recsConfirmContextId) {
+                    await runRecommendationsFetch(recsConfirmContextId);
+                  }
+                  setRecsConfirmOpen(false);
+                }}
+              >
+                Regenerate
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

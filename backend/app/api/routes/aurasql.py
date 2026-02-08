@@ -12,7 +12,7 @@ from llama_index.core.schema import TextNode
 from app.api.deps import get_current_user
 from app.config import settings
 from app.db.database import get_db
-from app.db.models import AuraSqlConnection, AuraSqlConnectionSecret, AuraSqlContext, AuraSqlQueryHistory, User
+from app.db.models import AuraSqlConnection, AuraSqlConnectionSecret, AuraSqlContext, AuraSqlQueryHistory, AuraSqlChatSession, User
 from app.models.aurasql_schemas import (
     AuraSqlConnectionCreate,
     AuraSqlConnectionUpdate,
@@ -30,6 +30,7 @@ from app.models.aurasql_schemas import (
     AuraSqlExecuteRequest,
     AuraSqlExecuteResponse,
     AuraSqlLogResponse,
+    AuraSqlSessionResponse,
 )
 from app.services.aurasql_db import list_tables, get_table_schema, execute_sql
 from app.services.aurasql_vector_store import get_aurasql_vector_store
@@ -137,6 +138,86 @@ def _parse_structured_payload(payload: str) -> dict:
     if parsed:
         return parsed
     return _parse_toon_payload(payload)
+
+
+def _extract_recommendations_fallback(payload: str) -> list[str]:
+    cleaned = payload.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*\n?|```$", "", cleaned, flags=re.MULTILINE).strip()
+    lines = []
+    for raw_line in cleaned.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        stripped = re.sub(r"^[-*\d]+[.)]?\s*", "", stripped)
+        if stripped:
+            lines.append(stripped)
+    return lines
+
+
+def _fallback_recommendations_from_tables(table_names: list[str]) -> list[str]:
+    templates = [
+        "Show recent rows from {table}.",
+        "How many records are in {table}?",
+        "What are the top 10 entries in {table} by date?",
+        "Summarize key metrics for {table}.",
+    ]
+    recommendations: list[str] = []
+    for table in table_names:
+        for template in templates:
+            recommendations.append(template.format(table=table))
+            if len(recommendations) >= 12:
+                return recommendations
+    return recommendations
+
+
+def _extract_tables_from_sql(sql: str) -> list[str]:
+    matches = re.findall(r"\bfrom\s+([\w\.\"`]+)|\bjoin\s+([\w\.\"`]+)", sql, flags=re.IGNORECASE)
+    tables: list[str] = []
+    for from_table, join_table in matches:
+        raw = from_table or join_table
+        raw = raw.strip("`\"")
+        if "." in raw:
+            raw = raw.split(".")[-1]
+        if raw:
+            tables.append(raw)
+    return tables
+
+def _calculate_sql_confidence(
+    sql: str,
+    explanation: str,
+    source_tables: list[str],
+    context_tables: list[str],
+) -> tuple[float, str]:
+    if not sql:
+        return 0.0, "low"
+
+    score = 60.0
+    context_set = {table.lower() for table in context_tables}
+    source_set = {table.lower() for table in source_tables}
+    if source_set:
+        match_ratio = len(source_set & context_set) / max(len(source_set), 1)
+        score += match_ratio * 30.0
+    else:
+        score -= 10.0
+
+    if explanation:
+        score += 5.0
+
+    if "select *" in sql.lower():
+        score -= 5.0
+
+    if " limit " not in sql.lower() and "count(" not in sql.lower():
+        score -= 5.0
+
+    score = max(0.0, min(100.0, score))
+    if score >= 80.0:
+        level = "high"
+    elif score >= 60.0:
+        level = "medium"
+    else:
+        level = "low"
+    return score, level
 
 
 def _extract_sql_fallback(payload: str) -> str:
@@ -612,9 +693,14 @@ async def get_recommendations(
     result = await query_engine.aquery(recommendations_prompt)
 
     parsed = _parse_structured_payload(result.response)
-    if not parsed:
+    recommendations = parsed.get("recommendations", []) if parsed else []
+    if not recommendations:
+        recommendations = _extract_recommendations_fallback(result.response)
+    if not recommendations:
+        recommendations = _fallback_recommendations_from_tables(context.table_names)
+    if not recommendations:
         logging.warning("AuraSQL recommendations JSON parse failed")
-    return AuraSqlRecommendationsResponse(recommendations=parsed.get("recommendations", []))
+    return AuraSqlRecommendationsResponse(recommendations=recommendations)
 
 
 @router.post("/query", response_model=AuraSqlQueryResponse)
@@ -643,6 +729,28 @@ async def generate_query(
 
     prompt = f"{system_prompt}\nUser Query:\n{payload.query}\nDB Type: {connection.db_type}"
 
+    session_id = payload.session_id
+    session = None
+    if session_id:
+        session = (
+            db.query(AuraSqlChatSession)
+            .filter(AuraSqlChatSession.id == session_id, AuraSqlChatSession.user_id == current_user.id)
+            .first()
+        )
+    if not session:
+        session_id = str(uuid.uuid4())
+        session = AuraSqlChatSession(
+            id=session_id,
+            user_id=current_user.id,
+            title=payload.query[:120],
+            connection_id=context.connection_id,
+            context_id=context.id,
+        )
+    else:
+        session.context_id = context.id
+        session.connection_id = context.connection_id
+    db.add(session)
+
     vector_store = get_aurasql_vector_store()
     query_engine = vector_store.get_query_engine(context.vector_context_id)
     result = await query_engine.aquery(prompt)
@@ -657,21 +765,64 @@ async def generate_query(
             explanation = "Generated from model output."
     if not sql:
         logging.warning("AuraSQL query JSON parse failed")
-        raise HTTPException(status_code=502, detail="Failed to parse SQL from model response")
+        explanation = "Unable to parse SQL from model response."
+        return AuraSqlQueryResponse(
+            sql="",
+            explanation=explanation,
+            source_tables=[],
+            session_id=session_id,
+            confidence_score=0.0,
+            confidence_level="low",
+        )
+
+    context_table_set = {name.lower() for name in context.table_names}
+    source_set = {name.lower() for name in source_tables}
+    inferred_tables = _extract_tables_from_sql(sql)
+    inferred_set = {name.lower() for name in inferred_tables}
+    if (source_set and not source_set.issubset(context_table_set)) or (
+        inferred_set and not inferred_set.issubset(context_table_set)
+    ):
+        explanation = "Could not generate SQL because the request references tables outside the selected context."
+        return AuraSqlQueryResponse(
+            sql="",
+            explanation=explanation,
+            source_tables=[],
+            session_id=session_id,
+            confidence_score=0.0,
+            confidence_level="low",
+        )
+
+    confidence_score, confidence_level = _calculate_sql_confidence(
+        sql,
+        explanation,
+        source_tables,
+        context.table_names,
+    )
 
     log_entry = AuraSqlQueryHistory(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
         connection_id=context.connection_id,
+        session_id=session_id,
         context_id=context.id,
         natural_language_query=payload.query,
         generated_sql=sql,
+        source_tables=source_tables,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
         status="generated",
     )
     db.add(log_entry)
     db.commit()
 
-    return AuraSqlQueryResponse(sql=sql, explanation=explanation, source_tables=source_tables)
+    return AuraSqlQueryResponse(
+        sql=sql,
+        explanation=explanation,
+        source_tables=source_tables,
+        session_id=session_id,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+    )
 
 
 @router.post("/execute", response_model=AuraSqlExecuteResponse)
@@ -690,12 +841,14 @@ async def execute_sql_query(
 
     config = _connection_to_config(connection, decrypt_secret(connection.secret.encrypted_password))
 
+    session_id = payload.session_id
     try:
         columns, rows = await execute_sql(config, payload.sql)
         log_entry = AuraSqlQueryHistory(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
             connection_id=connection.id,
+            session_id=session_id,
             context_id=None,
             natural_language_query=None,
             generated_sql=payload.sql,
@@ -708,6 +861,7 @@ async def execute_sql_query(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
             connection_id=connection.id,
+            session_id=session_id,
             context_id=None,
             natural_language_query=None,
             generated_sql=payload.sql,
@@ -736,9 +890,71 @@ def list_history(
         AuraSqlLogResponse(
             id=row.id,
             connection_id=row.connection_id,
+            session_id=row.session_id,
             context_id=row.context_id,
             natural_language_query=row.natural_language_query,
             generated_sql=row.generated_sql,
+            source_tables=row.source_tables,
+            confidence_score=row.confidence_score,
+            confidence_level=row.confidence_level,
+            status=row.status,
+            created_at=row.created_at.isoformat() if row.created_at else "",
+            error_message=row.error_message,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/history/sessions", response_model=list[AuraSqlSessionResponse])
+def list_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sessions = (
+        db.query(AuraSqlChatSession)
+        .filter(AuraSqlChatSession.user_id == current_user.id)
+        .order_by(AuraSqlChatSession.updated_at.desc().nullslast(), AuraSqlChatSession.created_at.desc())
+        .all()
+    )
+    return [
+        AuraSqlSessionResponse(
+            id=session.id,
+            title=session.title,
+            connection_id=session.connection_id,
+            context_id=session.context_id,
+            created_at=session.created_at.isoformat() if session.created_at else "",
+            updated_at=session.updated_at.isoformat() if session.updated_at else None,
+        )
+        for session in sessions
+    ]
+
+
+@router.get("/history/sessions/{session_id}", response_model=list[AuraSqlLogResponse])
+def get_session_history(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = (
+        db.query(AuraSqlQueryHistory)
+        .filter(
+            AuraSqlQueryHistory.user_id == current_user.id,
+            AuraSqlQueryHistory.session_id == session_id,
+        )
+        .order_by(AuraSqlQueryHistory.created_at.asc())
+        .all()
+    )
+    return [
+        AuraSqlLogResponse(
+            id=row.id,
+            connection_id=row.connection_id,
+            session_id=row.session_id,
+            context_id=row.context_id,
+            natural_language_query=row.natural_language_query,
+            generated_sql=row.generated_sql,
+            source_tables=row.source_tables,
+            confidence_score=row.confidence_score,
+            confidence_level=row.confidence_level,
             status=row.status,
             created_at=row.created_at.isoformat() if row.created_at else "",
             error_message=row.error_message,

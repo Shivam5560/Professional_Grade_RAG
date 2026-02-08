@@ -200,6 +200,23 @@
     mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   }
 
+  .prism-sql .token.keyword {
+    color: hsl(var(--chart-1));
+  }
+
+  .prism-sql .token.string {
+    color: hsl(var(--chart-2));
+  }
+
+  .prism-sql .token.number {
+    color: hsl(var(--chart-4));
+  }
+
+  .prism-sql .token.operator,
+  .prism-sql .token.punctuation {
+    color: hsl(var(--muted-foreground));
+  }
+
   .marquee-track {
     animation: marquee-slide 18s linear infinite;
   }

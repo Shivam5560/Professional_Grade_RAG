@@ -265,6 +265,14 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
           <Button
             variant="ghost"
             className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+            onClick={() => router.push('/')}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Dashboard
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
             onClick={() => router.push('/aurasql')}
           >
             <Sparkles className="h-4 w-4" />

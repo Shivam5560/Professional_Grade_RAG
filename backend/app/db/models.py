@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the application.
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON, Boolean, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -170,12 +170,33 @@ class AuraSqlQueryHistory(Base):
     id = Column(String, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
     connection_id = Column(String, ForeignKey("aurasql_connections_nexus_rag.id"), nullable=False)
+    session_id = Column(String, ForeignKey("aurasql_chat_sessions_nexus_rag.id"), nullable=True, index=True)
     context_id = Column(String, ForeignKey("aurasql_contexts_nexus_rag.id"), nullable=True)
     natural_language_query = Column(Text, nullable=True)
     generated_sql = Column(Text, nullable=True)
+    source_tables = Column(JSON, nullable=True)
+    confidence_score = Column(Float, nullable=True)
+    confidence_level = Column(String, nullable=True)
     status = Column(String, nullable=False, default="generated")
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
     context = relationship("AuraSqlContext", back_populates="query_history")
+
+
+class AuraSqlChatSession(Base):
+    """Chat sessions for AuraSQL."""
+
+    __tablename__ = "aurasql_chat_sessions_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    title = Column(String, nullable=True)
+    connection_id = Column(String, ForeignKey("aurasql_connections_nexus_rag.id"), nullable=True)
+    context_id = Column(String, ForeignKey("aurasql_contexts_nexus_rag.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    context = relationship("AuraSqlContext")
