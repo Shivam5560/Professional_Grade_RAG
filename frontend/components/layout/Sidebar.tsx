@@ -262,29 +262,17 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
             <Database className="h-4 w-4" />
             Knowledge Base
           </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/')}
-          >
-            <MessageSquare className="h-4 w-4" />
-            Dashboard
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/aurasql')}
-          >
-            <Sparkles className="h-4 w-4" />
-            AuraSQL
-          </Button>
           <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all">
             <Settings className="h-4 w-4" />
             Settings
           </Button>
-          <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+            onClick={() => router.push('/developer')}
+          >
             <HelpCircle className="h-4 w-4" />
-            Help & Support
+            Developer
           </Button>
         </div>
       </div>

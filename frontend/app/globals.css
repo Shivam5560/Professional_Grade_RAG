@@ -123,6 +123,53 @@
     @apply bg-card/80 backdrop-blur-xl border border-border/60 shadow-[0_18px_60px_-40px_rgba(0,0,0,0.35)];
   }
 
+  .hover-glow {
+    transition: box-shadow 0.35s ease, transform 0.35s ease;
+  }
+
+  .hover-glow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 24px 60px -42px hsl(var(--chart-1) / 0.45), 0 0 0 1px hsl(var(--border) / 0.7);
+  }
+
+  .lux-card {
+    background: linear-gradient(140deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.68));
+    border: 1px solid hsl(var(--border) / 0.6);
+    box-shadow: 0 26px 80px -60px rgba(0, 0, 0, 0.4);
+  }
+
+  .glow-ring {
+    box-shadow: 0 0 0 1px hsl(var(--border) / 0.6), 0 12px 40px -30px hsl(var(--chart-2) / 0.45);
+  }
+
+  .reveal-up {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+    animation: reveal-up 0.9s ease forwards;
+  }
+
+  .reveal-up.delay-1 { animation-delay: 0.08s; }
+  .reveal-up.delay-2 { animation-delay: 0.16s; }
+  .reveal-up.delay-3 { animation-delay: 0.24s; }
+  .reveal-up.delay-4 { animation-delay: 0.32s; }
+
+  .sheen-border {
+    position: relative;
+  }
+
+  .sheen-border::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(var(--chart-1) / 0.4), hsl(var(--chart-2) / 0.2), transparent 60%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
   .text-accent {
     background: linear-gradient(90deg, hsl(var(--chart-1)), hsl(var(--chart-2)));
     -webkit-background-clip: text;
@@ -251,6 +298,17 @@
     }
     100% {
       transform: translateX(-50%);
+    }
+  }
+
+  @keyframes reveal-up {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 18px, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
     }
   }
 

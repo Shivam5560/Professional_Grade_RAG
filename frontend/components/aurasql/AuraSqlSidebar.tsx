@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Database, Plus, RefreshCw, MessageSquare } from 'lucide-react';
+import { Database, Plus, RefreshCw, MessageSquare, Star } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { AuraSqlSession } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -20,6 +20,7 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
   const router = useRouter();
   const [history, setHistory] = useState<AuraSqlSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -37,10 +38,45 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
     loadHistory();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('aurasql_pinned_sessions');
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as string[];
+      setPinnedIds(new Set(parsed));
+    } catch {
+      setPinnedIds(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('aurasql_pinned_sessions', JSON.stringify(Array.from(pinnedIds)));
+  }, [pinnedIds]);
+
+  const togglePin = (id: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const displayHistory = useMemo(() => {
     const source = sessions.length > 0 ? sessions : history;
-    return source.slice(0, 12);
-  }, [sessions, history]);
+    const sorted = [...source].sort((a, b) => {
+      const aPinned = pinnedIds.has(a.id) ? 1 : 0;
+      const bPinned = pinnedIds.has(b.id) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return 0;
+    });
+    return sorted.slice(0, 12);
+  }, [sessions, history, pinnedIds]);
 
   return (
     <div className="flex h-full w-72 flex-col border-r border-border/60 bg-card/70 backdrop-blur-xl">
@@ -87,9 +123,10 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
             <div className="px-2 py-6 text-xs text-muted-foreground">No chat history yet.</div>
           ) : (
             <div className="space-y-2">
-                        {displayHistory.map((item) => {
+              {displayHistory.map((item) => {
                 const created = item.updated_at || item.created_at ? formatTimestamp(item.updated_at || item.created_at) : '';
                 const label = item.title || 'Untitled chat';
+                const isPinned = pinnedIds.has(item.id);
                 return (
                   <div
                     key={item.id}
@@ -100,21 +137,38 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
                         : 'hover:border-border/60 hover:bg-muted/60'
                     )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => onSelectSession?.(item)}
-                      className="flex w-full items-start gap-3 px-3 py-3 text-left"
-                    >
-                      <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground whitespace-normal break-words leading-snug">
-                          {label}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {created}
-                        </p>
-                      </div>
-                    </button>
+                    <div className="flex items-start gap-2 px-3 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onSelectSession?.(item)}
+                        className="flex w-full items-start gap-3 text-left"
+                      >
+                        <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground whitespace-normal break-words leading-snug">
+                            {label}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {created}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          'mt-0.5 rounded-md p-1 transition-colors',
+                          isPinned ? 'text-amber-500' : 'text-muted-foreground hover:text-foreground'
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          togglePin(item.id);
+                        }}
+                        title={isPinned ? 'Unpin' : 'Pin'}
+                        aria-pressed={isPinned}
+                      >
+                        <Star className="h-3.5 w-3.5" fill={isPinned ? 'currentColor' : 'none'} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -131,6 +185,14 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
         <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2" onClick={() => router.push('/chat')}>
           <MessageSquare className="h-4 w-4" />
           RAG Chat
+        </Button>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2"
+          onClick={() => router.push('/developer')}
+        >
+          <Star className="h-4 w-4" />
+          Developer
         </Button>
       </div>
     </div>

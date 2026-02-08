@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AuraSqlSidebar } from '@/components/aurasql/AuraSqlSidebar';
 import { MessageInput } from '@/components/chat/MessageInput';
@@ -13,10 +14,12 @@ import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlExecuteResponse, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
+import { useToast } from '@/hooks/useToast';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-sql';
 import { format as formatSqlWithLib } from 'sql-formatter';
 import {
+  AlertCircle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -25,6 +28,7 @@ import {
   Download,
   Layers,
   Loader2,
+  Pencil,
   PlayCircle,
   RefreshCw,
   Save,
@@ -46,6 +50,9 @@ type AuraSqlChatMessage = {
   execution?: AuraSqlExecuteResponse | null;
   showRows?: number;
   showResults?: boolean;
+  originalSql?: string;
+  resultFilter?: string;
+  isEditingSql?: boolean;
 };
 
 const makeMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -63,6 +70,7 @@ const highlightSql = (sql: string) => Prism.highlight(formatSql(sql), Prism.lang
 export default function AuraSqlQueryPage() {
   const params = useSearchParams();
   const { isAuthenticated } = useAuthStore();
+  const { toast } = useToast();
 
   const [isMounted, setIsMounted] = useState(false);
   const [connections, setConnections] = useState<AuraSqlConnection[]>([]);
@@ -103,6 +111,15 @@ export default function AuraSqlQueryPage() {
   const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [loadingExecute, setLoadingExecute] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const reportError = (message: string) => {
+    setError(message);
+    toast({
+      title: 'Action failed',
+      description: message,
+      variant: 'destructive',
+    });
+  };
 
   useEffect(() => {
     setIsMounted(true);
@@ -211,7 +228,7 @@ export default function AuraSqlQueryPage() {
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load AuraSQL data');
+        reportError(err instanceof Error ? err.message : 'Failed to load AuraSQL data');
       } finally {
         setLoading(false);
       }
@@ -278,6 +295,7 @@ export default function AuraSqlQueryPage() {
             content: 'SQL generated.',
             sql: log.generated_sql,
             editedSql: log.generated_sql,
+            originalSql: log.generated_sql,
             sourceTables: log.source_tables ?? [],
             confidenceScore: log.confidence_score ?? null,
             confidenceLevel: log.confidence_level ?? null,
@@ -289,7 +307,7 @@ export default function AuraSqlQueryPage() {
       });
       setChatMessages(nextMessages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat history');
+      reportError(err instanceof Error ? err.message : 'Failed to load chat history');
     }
   };
 
@@ -301,7 +319,7 @@ export default function AuraSqlQueryPage() {
       const tables = await apiClient.listAuraSqlTables(selectedConnection);
       setTableList(tables);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tables');
+      reportError(err instanceof Error ? err.message : 'Failed to load tables');
     } finally {
       setLoadingTables(false);
     }
@@ -350,7 +368,7 @@ export default function AuraSqlQueryPage() {
       setActiveContextId(context.id);
       setHistoryBanner(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply session context');
+      reportError(err instanceof Error ? err.message : 'Failed to apply session context');
     } finally {
       setSavingContext(false);
     }
@@ -372,7 +390,7 @@ export default function AuraSqlQueryPage() {
       setSelectedContext(context.id);
       setSessionContextId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save context');
+      reportError(err instanceof Error ? err.message : 'Failed to save context');
     } finally {
       setSavingContext(false);
     }
@@ -389,7 +407,7 @@ export default function AuraSqlQueryPage() {
       setContexts((prev) => prev.map((item) => (item.id === context.id ? context : item)));
       setNewTables(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update context');
+      reportError(err instanceof Error ? err.message : 'Failed to update context');
     } finally {
       setSavingContext(false);
     }
@@ -406,7 +424,7 @@ export default function AuraSqlQueryPage() {
       setRecsOpen(true);
       setRecsLocked(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate recommendations');
+      reportError(err instanceof Error ? err.message : 'Failed to generate recommendations');
     } finally {
       setLoadingContext(false);
     }
@@ -439,7 +457,7 @@ export default function AuraSqlQueryPage() {
 
   const handleSendMessage = async (text: string) => {
     if (!activeContextId) {
-      setError('Select a context to generate SQL.');
+      reportError('Select a context to generate SQL.');
       return;
     }
     const trimmed = text.trim();
@@ -483,6 +501,7 @@ export default function AuraSqlQueryPage() {
         content: 'SQL generated.',
         sql: response.sql,
         editedSql: response.sql,
+        originalSql: response.sql,
         explanation: response.explanation,
         sourceTables: response.source_tables,
         confidenceScore: response.confidence_score ?? null,
@@ -499,7 +518,7 @@ export default function AuraSqlQueryPage() {
         setSessions(updatedSessions);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate SQL');
+      reportError(err instanceof Error ? err.message : 'Failed to generate SQL');
     } finally {
       setLoadingGenerate(false);
     }
@@ -527,7 +546,7 @@ export default function AuraSqlQueryPage() {
         )
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to execute SQL');
+      reportError(err instanceof Error ? err.message : 'Failed to execute SQL');
     } finally {
       setLoadingExecute(false);
     }
@@ -551,15 +570,71 @@ export default function AuraSqlQueryPage() {
     );
   };
 
-  const handleCopySql = async (sql: string) => {
+  const handleToggleSqlEdit = (messageId: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, isEditingSql: !msg.isEditingSql } : msg
+      )
+    );
+  };
+
+  const handleFormatSql = (messageId: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '') }
+          : msg
+      )
+    );
+  };
+
+  const handleResetSql = (messageId: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, editedSql: msg.originalSql ?? msg.sql ?? '' }
+          : msg
+      )
+    );
+  };
+
+  const handleResultFilterChange = (messageId: string, value: string) => {
+    setChatMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, resultFilter: value, showRows: 10 } : msg
+      )
+    );
+  };
+
+  const getFilteredRows = (message: AuraSqlChatMessage) => {
+    const execution = message.execution;
+    if (!execution) return [];
+    const needle = (message.resultFilter ?? '').trim().toLowerCase();
+    if (!needle) return execution.rows;
+    return execution.rows.filter((row) =>
+      execution.columns.some((column) =>
+        String(row[column] ?? '').toLowerCase().includes(needle)
+      )
+    );
+  };
+
+  const handleCopySql = async (sql?: string) => {
+    if (!sql) {
+      reportError('No SQL available to copy.');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(sql);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to copy SQL');
+      reportError(err instanceof Error ? err.message : 'Failed to copy SQL');
     }
   };
 
-  const handleDownloadSql = (sql: string) => {
+  const handleDownloadSql = (sql?: string) => {
+    if (!sql) {
+      reportError('No SQL available to download.');
+      return;
+    }
     const blob = new Blob([sql], { type: 'text/sql' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -569,6 +644,52 @@ export default function AuraSqlQueryPage() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportCsv = (messageId: string) => {
+    const message = chatMessages.find((item) => item.id === messageId);
+    const execution = message?.execution;
+    if (!execution || !message) return;
+    const rows = getFilteredRows(message);
+    const columns = execution.columns;
+    const escapeValue = (value: unknown) => {
+      const stringValue = String(value ?? '');
+      if (/[",\n]/.test(stringValue)) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+    const lines = [
+      columns.map(escapeValue).join(','),
+      ...rows.map((row) => columns.map((column) => escapeValue(row[column])).join(',')),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'results.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const getContextInsights = (message: AuraSqlChatMessage) => {
+    if (!message.sourceTables?.length || !selectedContextRecord?.table_names?.length) return null;
+    const contextTables = selectedContextRecord.table_names;
+    const contextSet = new Set(contextTables.map((table) => table.toLowerCase()));
+    const usedTables = message.sourceTables.filter((table) => contextSet.has(table.toLowerCase()));
+    const missingTables = contextTables.filter(
+      (table) => !message.sourceTables?.some((used) => used.toLowerCase() === table.toLowerCase())
+    );
+    const percent = contextTables.length > 0 ? Math.round((usedTables.length / contextTables.length) * 100) : 0;
+    return {
+      used: usedTables.length,
+      total: contextTables.length,
+      percent,
+      missing: missingTables.slice(0, 3),
+      missingCount: missingTables.length,
+    };
   };
 
   if (!isMounted) return null;
@@ -612,7 +733,20 @@ export default function AuraSqlQueryPage() {
               <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full pr-2">
                   <div className="space-y-4 pb-4">
-                    {chatMessages.length === 0 && !loadingGenerate && (
+                    {loading && (
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                        Loading AuraSQL workspace...
+                      </div>
+                    )}
+
+                    {error && (
+                      <Alert variant="destructive" className="rounded-2xl">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {chatMessages.length === 0 && !loadingGenerate && !loading && (
                       <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 p-6 text-sm text-muted-foreground">
                         Start by asking a question about your schema. The assistant will generate SQL you can refine and execute.
                       </div>
@@ -620,7 +754,9 @@ export default function AuraSqlQueryPage() {
 
                     {chatMessages.map((message) => (
                       <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] space-y-3 ${message.role === 'user' ? 'text-right' : ''}`}>
+                        <div
+                          className={`${message.role === 'assistant' && message.sql ? 'max-w-[95%]' : 'max-w-[85%]'} space-y-3 ${message.role === 'user' ? 'text-right' : ''}`}
+                        >
                           <div
                             className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
                               message.role === 'user'
@@ -652,11 +788,23 @@ export default function AuraSqlQueryPage() {
                                   )}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                  <Button size="sm" variant="ghost" onClick={() => handleCopySql(message.editedSql || message.sql)}>
+                                  <Button size="sm" variant="ghost" onClick={() => handleFormatSql(message.id)}>
+                                    <Wand2 className="h-4 w-4 mr-1" />
+                                    Format
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleResetSql(message.id)}>
+                                    <RefreshCw className="h-4 w-4 mr-1" />
+                                    Reset
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleToggleSqlEdit(message.id)}>
+                                    <Pencil className="h-4 w-4 mr-1" />
+                                    {message.isEditingSql ? 'Done' : 'Edit'}
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleCopySql(message.editedSql ?? message.sql)}>
                                     <Copy className="h-4 w-4 mr-1" />
                                     Copy
                                   </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handleDownloadSql(message.editedSql || message.sql)}>
+                                  <Button size="sm" variant="ghost" onClick={() => handleDownloadSql(message.editedSql ?? message.sql)}>
                                     <Download className="h-4 w-4 mr-1" />
                                     Download
                                   </Button>
@@ -671,23 +819,65 @@ export default function AuraSqlQueryPage() {
                                 </div>
                               </div>
 
+                              {(() => {
+                                const insights = getContextInsights(message);
+                                if (!insights) return null;
+                                return (
+                                  <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-xs space-y-2">
+                                    <div className="flex items-center justify-between text-muted-foreground">
+                                      <span>Context coverage</span>
+                                      <span>
+                                        {insights.used}/{insights.total} tables
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/70">
+                                      <div
+                                        className="h-full rounded-full bg-foreground/70"
+                                        style={{ width: `${insights.percent}%` }}
+                                      />
+                                    </div>
+                                    {insights.missingCount > 0 && (
+                                      <p className="text-muted-foreground">
+                                        Missing context: {insights.missing.join(', ')}
+                                        {insights.missingCount > insights.missing.length ? '…' : ''}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
                               <div className="rounded-xl border border-border/60 bg-card/60 p-3">
-                                <pre
-                                  className="prism-sql text-xs font-mono whitespace-pre-wrap leading-relaxed outline-none min-h-[220px]"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onInput={(event) => {
-                                    const nextValue = event.currentTarget.textContent || '';
-                                    setChatMessages((prev) =>
-                                      prev.map((msg) =>
-                                        msg.id === message.id ? { ...msg, editedSql: nextValue } : msg
-                                      )
-                                    );
-                                  }}
-                                  dangerouslySetInnerHTML={{
-                                    __html: highlightSql(formatSql(message.editedSql ?? message.sql)),
-                                  }}
-                                />
+                                {message.isEditingSql ? (
+                                  <Textarea
+                                    value={message.editedSql ?? message.sql ?? ''}
+                                    onChange={(event) => {
+                                      const nextValue = event.target.value;
+                                      setChatMessages((prev) =>
+                                        prev.map((msg) =>
+                                          msg.id === message.id ? { ...msg, editedSql: nextValue } : msg
+                                        )
+                                      );
+                                    }}
+                                    onBlur={() => {
+                                      setChatMessages((prev) =>
+                                        prev.map((msg) =>
+                                          msg.id === message.id
+                                            ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '') }
+                                            : msg
+                                        )
+                                      );
+                                    }}
+                                    className="min-h-[280px] w-full resize-none text-xs font-mono leading-relaxed"
+                                    spellCheck={false}
+                                  />
+                                ) : (
+                                  <pre
+                                    className="prism-sql text-xs font-mono whitespace-pre-wrap leading-relaxed min-h-[280px]"
+                                    dangerouslySetInnerHTML={{
+                                      __html: highlightSql(formatSql(message.editedSql ?? message.sql ?? '')),
+                                    }}
+                                  />
+                                )}
                               </div>
 
                               {message.sourceTables && message.sourceTables.length > 0 && (
@@ -709,40 +899,63 @@ export default function AuraSqlQueryPage() {
 
                                   {message.showResults && (
                                     <>
-                                      {message.execution.rows.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">No rows returned.</p>
-                                      ) : (
-                                        <div className="overflow-x-auto rounded-xl border border-border/60">
-                                          <table className="min-w-full divide-y divide-border">
-                                            <thead className="bg-muted/60">
-                                              <tr>
-                                                {message.execution.columns.map((column) => (
-                                                  <th
-                                                    key={column}
-                                                    className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground"
-                                                  >
-                                                    {column}
-                                                  </th>
-                                                ))}
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-border">
-                                              {message.execution.rows
-                                                .slice(0, message.showRows || 10)
-                                                .map((row, index) => (
-                                                  <tr key={index}>
-                                                    {message.execution.columns.map((column) => (
-                                                      <td key={column} className="px-4 py-2 text-sm text-foreground">
-                                                        {String(row[column] ?? '')}
-                                                      </td>
+                                      {(() => {
+                                        const execution = message.execution;
+                                        if (!execution) return null;
+                                        const filteredRows = getFilteredRows(message);
+                                        if (execution.rows.length === 0) {
+                                          return <p className="text-sm text-muted-foreground">No rows returned.</p>;
+                                        }
+                                        if (filteredRows.length === 0) {
+                                          return <p className="text-sm text-muted-foreground">No rows match the filter.</p>;
+                                        }
+                                        return (
+                                          <div className="space-y-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <input
+                                                value={message.resultFilter ?? ''}
+                                                onChange={(event) => handleResultFilterChange(message.id, event.target.value)}
+                                                placeholder="Filter results..."
+                                                className="min-w-[220px] flex-1 rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
+                                              />
+                                              <Button size="sm" variant="outline" onClick={() => handleExportCsv(message.id)}>
+                                                <Download className="h-4 w-4 mr-1" />
+                                                Download CSV
+                                              </Button>
+                                            </div>
+                                            <div className="overflow-x-auto rounded-xl border border-border/60">
+                                              <table className="min-w-full divide-y divide-border">
+                                                <thead className="bg-muted/60">
+                                                  <tr>
+                                                    {execution.columns.map((column) => (
+                                                      <th
+                                                        key={column}
+                                                        className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground"
+                                                      >
+                                                        {column}
+                                                      </th>
                                                     ))}
                                                   </tr>
-                                                ))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      )}
-                                      {message.execution.rows.length > (message.showRows || 10) && (
+                                                </thead>
+                                                <tbody className="divide-y divide-border">
+                                                  {filteredRows
+                                                    .slice(0, message.showRows || 10)
+                                                    .map((row, index) => (
+                                                      <tr key={index}>
+                                                        {execution.columns.map((column) => (
+                                                          <td key={column} className="px-4 py-2 text-sm text-foreground">
+                                                            {String(row[column] ?? '')}
+                                                          </td>
+                                                        ))}
+                                                      </tr>
+                                                    ))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+                                      {getFilteredRows(message).length > (message.showRows || 10) && (
                                         <Button variant="outline" size="sm" onClick={() => handleShowMoreRows(message.id)}>
                                           Show more
                                         </Button>
@@ -758,7 +971,8 @@ export default function AuraSqlQueryPage() {
                     ))}
 
                     {loadingGenerate && (
-                      <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                      <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Generating SQL...
                       </div>
                     )}
@@ -973,6 +1187,24 @@ export default function AuraSqlQueryPage() {
 
                     {historyBanner && <p className="text-xs text-amber-500">{historyBanner}</p>}
 
+                    {selectedContextRecord?.table_names?.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedContextRecord.table_names.slice(0, 4).map((table) => {
+                          const prompt = `Show recent rows from ${table}`;
+                          return (
+                            <button
+                              key={table}
+                              type="button"
+                              onClick={() => setInputValue(prompt)}
+                              className="rounded-full border border-border/70 bg-card/70 px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                              {prompt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
                     <MessageInput
                       onSend={handleSendMessage}
                       disabled={loadingGenerate || !activeContextId || (hasUnsavedChanges && !sessionContextId)}
@@ -984,7 +1216,6 @@ export default function AuraSqlQueryPage() {
                 </div>
               </div>
 
-              {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
             </div>
           </div>
         </main>

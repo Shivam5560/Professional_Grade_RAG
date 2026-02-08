@@ -166,6 +166,8 @@ export function ChatInterface({
 
   return (
     <Card className="flex h-full flex-col overflow-hidden border-none bg-transparent shadow-none">
+      <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-4">
+      </div>
 
       {error && (
         <Alert variant="destructive" className="m-4">

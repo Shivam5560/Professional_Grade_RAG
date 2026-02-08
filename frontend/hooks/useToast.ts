@@ -1,3 +1,3 @@
 "use client"
 
-export * from "./useToast"
+export * from "./useToast.tsx"

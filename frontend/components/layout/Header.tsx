@@ -34,13 +34,11 @@ export function Header({
   const brandTitle = isAuraSql ? 'AuraSQL' : 'NexusMind';
   const brandSubtitle = isAuraSql ? 'SQL Studio' : 'Studio RAG';
   const brandMark = isAuraSql ? 'AS' : 'NX';
-  const auraNavLinks = isAuraSql
-    ? [
-        { label: 'Overview', href: '/aurasql' },
-        { label: 'Chat', href: '/aurasql/query' },
-        { label: 'Connections', href: '/aurasql/connections/new' },
-      ]
-    : [];
+  const mainNavLinks = [
+    { label: 'Dashboard', href: '/', isActive: pathname === '/' },
+    { label: 'RAG', href: '/chat', isActive: pathname?.startsWith('/chat') },
+    { label: 'AuraSQL', href: '/aurasql', isActive: pathname?.startsWith('/aurasql') },
+  ];
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -143,25 +141,23 @@ export function Header({
             {brandSubtitle}
           </span>
         </div>
-        {isAuraSql && (
-          <div className="hidden md:flex items-center gap-2 ml-4">
-            {auraNavLinks.map((link) => (
-              <Button
-                key={link.href}
-                variant="ghost"
-                size="sm"
-                className={`text-xs uppercase tracking-[0.2em] ${
-                  pathname === link.href
-                    ? 'bg-foreground/10 text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => router.push(link.href)}
-              >
-                {link.label}
-              </Button>
-            ))}
-          </div>
-        )}
+        <div className="hidden lg:flex items-center gap-2 ml-6 whitespace-nowrap">
+          {mainNavLinks.map((link) => (
+            <Button
+              key={link.href}
+              variant="ghost"
+              size="sm"
+              className={`text-xs uppercase tracking-[0.2em] min-w-[84px] ${
+                link.isActive
+                  ? 'bg-foreground/10 text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => router.push(link.href)}
+            >
+              {link.label}
+            </Button>
+          ))}
+        </div>
       </div>
       
       <div className="flex items-center gap-3">

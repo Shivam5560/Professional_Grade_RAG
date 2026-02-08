@@ -202,25 +202,29 @@ export default function AuraSqlHomePage() {
               {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="grid gap-6 md:grid-cols-3">
-                <Card className="glass-panel border-border/60">
+                <Card className="glass-panel border-border/60 hover-glow">
                   <CardHeader>
                     <CardTitle>Generated SQL</CardTitle>
                     <CardDescription>Total created queries.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-black">{generatedCount}</p>
+                    <p className="text-3xl font-black">
+                      <AnimatedCounter value={generatedCount} />
+                    </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel border-border/60">
+                <Card className="glass-panel border-border/60 hover-glow">
                   <CardHeader>
                     <CardTitle>Executed SQL</CardTitle>
                     <CardDescription>Total executed queries.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-black">{executedCount}</p>
+                    <p className="text-3xl font-black">
+                      <AnimatedCounter value={executedCount} />
+                    </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel border-border/60">
+                <Card className="glass-panel border-border/60 hover-glow">
                   <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                     <CardDescription>Latest SQL generations.</CardDescription>
@@ -334,4 +338,25 @@ export default function AuraSqlHomePage() {
 
     </div>
   );
+}
+
+function AnimatedCounter({ value, duration = 1400 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * value));
+      if (progress < 1) {
+        frame = requestAnimationFrame(step);
+      }
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value, duration]);
+
+  return <span>{display}</span>;
 }

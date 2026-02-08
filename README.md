@@ -216,6 +216,52 @@ Verify your API key is valid and set in the `.env` file.
 2. Add to page in `frontend/app/page.tsx`
 3. Update types in `frontend/lib/types.ts`
 
+## 👨‍💻 Developer Profile - Shivam Sourav
+
+**Personal Details**
+- **Location**: Banka, Bihar, India
+- **Email**: shivam99806@gmail.com
+- **Phone**: +91 8521846844
+- **LinkedIn**: https://linkedin.com/in/shivam-sourav-b889aa204/
+- **GitHub**: https://github.com/Shivam5560
+
+**Education**
+- **B.Tech in Artificial Intelligence and Data Science**, Sikkim Manipal Institute of Technology (Expected May 2025)
+- **CGPA**: 9.7
+
+**Professional Experience**
+
+| Role | Company | Duration | Key Achievements |
+|------|---------|----------|------------------|
+| **Associate Software Engineer** | Nomura Research Institute & Financial Technology | Aug 2024 - Present | Designed a micro-services platform with Report and Workflow services on Java 21 and Spring Boot, integrating Camunda External Tasks and Saga orchestration for fault-tolerant workflows. Automated Hibernate/JPA layer generation, cutting dev time by 60% and standardizing code structure. Built a Docker-based CI/CD pipeline with Jenkins, streamlining releases. Developed a Python test-automation framework for OracleDB, featuring a Streamlit-based chatbot that accelerated validation cycles by 60%. Implemented an LLM-powered ATS using LlamaIndex, Cohere, and Pinecone, achieving 90%+ resume-matching accuracy. |
+| **Data Scientist** | Omdena (Remote) | Nov 2023 - Jun 2024 | Programmed XGBoost and LSTM time-series models for flood prediction, reaching 92-95% accuracy while leading a 10-member cross-functional team. |
+
+**University Projects**
+
+- **Nepali LLM - Tuned Language Model**
+       - Trained a SentencePiece tokenizer on a Nepali corpus, reducing token count by 80%.
+       - Fine-tuned Gemma-2B via LoRA, boosting NLU task accuracy by 25%.
+       - Deployed a Nepali chatbot with Streamlit, increasing user engagement by 30%.
+
+- **AuraSQL - AI-Powered Text2SQL Platform**
+       - Built a RAG-powered Text2SQL system with multi-database connectivity, enabling multi-table selection and executable SQL generation from natural language.
+       - Integrated a Cohere embeddings pipeline with schema context stored in Pinecone, powering OpenAI GPT-OSS 20B (Groq) for SQL generation via a Next.js dashboard with Supabase authentication.
+       - Reduced manual query writing by 80% and workflow time by 85%.
+
+- **Professional-Grade RAG System**
+       - Engineered a production-ready Retrieval-Augmented Generation system using hybrid BM25 + semantic search, intelligent reranking, conversational context handling, and source attribution via LlamaIndex, PostgreSQL + pgvector, and Groq LLMs.
+       - Maintained a multi-factor relevance scoring mechanism that dynamically ranks document chunks based on semantic similarity, metadata signals, and conversational history, improving answer precision.
+
+**Technical Proficiencies**
+
+- **Languages and Tools**: Python, Java, R, C, C++, SQL, Git, GitHub, Jenkins, Spring Boot, Apache Tomcat, ActiveMQ
+- **Frameworks and Libraries**: TensorFlow, PyTorch, Keras, Scikit-Learn, XGBoost, Prophet, Hugging Face, NLTK, LlamaIndex, Flask, Streamlit, Gradio, Camunda
+- **Data and Visualization**: Pandas, NumPy, MongoDB, OracleDB, PostgreSQL, Power BI, Tableau, Looker, Plotly
+- **LLM and Retrieval**: LlamaIndex, Cohere, Pinecone, Groq LLMs, OpenAI GPT-OSS 20B
+- **DevOps**: Docker, Jenkins CI/CD, micro-services architecture, Camunda workflow orchestration
+
+> Note: Information is based on Shivam_AI.pdf and reflects current credentials and achievements.
+
 
 ## 📝 License
 
