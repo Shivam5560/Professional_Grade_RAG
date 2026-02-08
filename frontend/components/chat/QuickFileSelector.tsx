@@ -64,25 +64,7 @@ export function QuickFileSelector({
     setUploadSuccess(false);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('user_id', user.id.toString());
-      formData.append('title', file.name);
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/documents/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Upload failed');
-      }
-
-      const result = await response.json();
+      const result = await apiClient.uploadDocument(file, user.id, { title: file.name });
       
       // Show success indicator
       setUploadSuccess(true);
@@ -93,12 +75,12 @@ export function QuickFileSelector({
 
       // Auto-select the newly uploaded file
       const newFile: DocumentInfo = {
-        id: result.document_id,
+        id: result.document_id as string,
         filename: file.name,
         file_size: file.size,
         file_type: file.type,
         upload_date: new Date().toISOString(),
-        vector_count: result.chunks_created,
+        vector_count: result.chunks_created as number,
       };
       onFileToggle(newFile);
 

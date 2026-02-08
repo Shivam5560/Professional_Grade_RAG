@@ -8,6 +8,7 @@ import { Upload, X, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-r
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
 import { useToast } from '@/hooks/useToast';
+import { apiClient } from '@/lib/api';
 
 // Configuration constants
 const MAX_FILE_SIZE_MB = 200;
@@ -123,22 +124,9 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       ));
 
       try {
-        const formData = new FormData();
-        formData.append('file', currentFile.file);
-        formData.append('user_id', user.id.toString());
-        formData.append('title', currentFile.file.name);
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/documents/upload`, {
-          method: 'POST',
-          body: formData,
+        const result = await apiClient.uploadDocument(currentFile.file, user.id, {
+          title: currentFile.file.name,
         });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.detail || 'Upload failed');
-        }
-
-        const result = await response.json();
         successCount++;
 
         // Update status to success
@@ -146,8 +134,8 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
           f.file === currentFile.file ? { 
             ...f, 
             status: 'success',
-            documentId: result.document_id,
-            chunksCreated: result.chunks_created,
+            documentId: result.document_id as string,
+            chunksCreated: result.chunks_created as number,
             message: `Uploaded successfully! ${result.chunks_created} chunks created.`
           } : f
         ));

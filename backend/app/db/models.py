@@ -1,7 +1,7 @@
 """
 SQLAlchemy models for the application.
 """
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -102,3 +102,80 @@ class TreeNode(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     tree_structure = relationship("DocumentTreeStructure", back_populates="nodes")
+
+
+class AuraSqlConnection(Base):
+    """Stored database connections for AuraSQL."""
+
+    __tablename__ = "aurasql_connections_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    db_type = Column(String, nullable=False)
+    host = Column(String, nullable=False)
+    port = Column(Integer, nullable=False)
+    username = Column(String, nullable=False)
+    database = Column(String, nullable=False)
+    schema_name = Column(String, nullable=True)
+    ssl_required = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    secret = relationship("AuraSqlConnectionSecret", back_populates="connection", uselist=False, cascade="all, delete-orphan")
+    contexts = relationship("AuraSqlContext", back_populates="connection", cascade="all, delete-orphan")
+
+
+class AuraSqlConnectionSecret(Base):
+    """Encrypted credentials for AuraSQL connections."""
+
+    __tablename__ = "aurasql_connection_secrets_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    connection_id = Column(String, ForeignKey("aurasql_connections_nexus_rag.id"), nullable=False, unique=True)
+    encrypted_password = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    connection = relationship("AuraSqlConnection", back_populates="secret")
+
+
+class AuraSqlContext(Base):
+    """Saved table contexts with schema snapshots for AuraSQL."""
+
+    __tablename__ = "aurasql_contexts_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    connection_id = Column(String, ForeignKey("aurasql_connections_nexus_rag.id"), nullable=False)
+    name = Column(String, nullable=False)
+    table_names = Column(JSON, nullable=False)
+    schema_snapshot = Column(JSON, nullable=False)
+    vector_context_id = Column(String, nullable=False)
+    is_temporary = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    connection = relationship("AuraSqlConnection", back_populates="contexts")
+    query_history = relationship("AuraSqlQueryHistory", back_populates="context", cascade="all, delete-orphan")
+
+
+class AuraSqlQueryHistory(Base):
+    """Logs for generated and executed SQL queries."""
+
+    __tablename__ = "aurasql_query_history_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    connection_id = Column(String, ForeignKey("aurasql_connections_nexus_rag.id"), nullable=False)
+    context_id = Column(String, ForeignKey("aurasql_contexts_nexus_rag.id"), nullable=True)
+    natural_language_query = Column(Text, nullable=True)
+    generated_sql = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="generated")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+    context = relationship("AuraSqlContext", back_populates="query_history")

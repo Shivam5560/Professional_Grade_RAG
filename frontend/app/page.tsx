@@ -1,98 +1,121 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChatInterface } from '@/components/chat/ChatInterface';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
-import { useChat } from '@/hooks/useChat';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { MessageSquare, Database, BookOpen, Sparkles, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 
-export default function HomePage() {
+export default function DashboardPage() {
+  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory } = useChat();
-  
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem('sidebar');
-    if (stored === 'closed') {
-      setIsSidebarOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem('sidebar', isSidebarOpen ? 'open' : 'closed');
-  }, [isSidebarOpen]);
-
-  if (!isMounted) {
-    return null;
-  }
-
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
-  
-  const handleNewChat = async () => {
-    await clearChat();
-  };
-
-  const handleLoadSession = async (sessionIdToLoad: string) => {
-    // Load the chat history for the clicked session
-    try {
-      await loadHistory(sessionIdToLoad);
-    } catch (error) {
-      console.error('Failed to load session:', error);
-    }
-  };
+  if (!isMounted) return null;
+  if (!isAuthenticated) return <AuthPage />;
 
   return (
-    <div className="relative h-screen overflow-hidden bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
 
-      <Header
-        showSidebarToggle
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-      />
-      <div className="relative z-10 flex h-[calc(100vh-4rem)] overflow-hidden">
-        <aside
-          className={`hidden md:block transition-all duration-300 ease-out ${
-            isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'
-          }`}
-        >
-          <div
-            className={`h-full transition-all duration-300 ${
-              isSidebarOpen ? 'translate-x-0' : '-translate-x-6 pointer-events-none'
-            }`}
-          >
-            <Sidebar 
-              onNewChat={handleNewChat} 
-              onLoadSession={handleLoadSession}
-              currentSessionId={sessionId}
-            />
-          </div>
-        </aside>
-        <main className="flex flex-1 flex-col overflow-hidden min-h-0">
-          <div className="flex-1 overflow-hidden p-3 md:p-6">
-            <div className="glass-panel h-full rounded-3xl">
-              <ChatInterface 
-                sessionId={sessionId}
-                messages={messages}
-                isLoading={isLoading}
-                error={error}
-                sendMessage={sendMessage}
-              />
+      <Header />
+
+      <main className="relative z-10 px-4 md:px-8 py-10">
+        <div className="max-w-6xl mx-auto space-y-8">
+          <div className="glass-panel rounded-3xl p-6 md:p-10">
+            <div className="flex flex-col gap-3">
+              <Badge className="w-fit bg-foreground text-background">Workspace</Badge>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                NexusMind Control Center
+              </h1>
+              <p className="text-muted-foreground max-w-2xl">
+                Pick the right tool for the job. Switch between conversational RAG, SQL intelligence, and your knowledge base without re-indexing.
+              </p>
             </div>
           </div>
-        </main>
-      </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card className="glass-panel border-border/60">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
+                    <MessageSquare className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle>RAG Chat</CardTitle>
+                    <CardDescription>Ask questions over your documents.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Hybrid retrieval with fast/think modes, confidence scoring, and citations.
+                </p>
+                <Button className="w-full justify-between" onClick={() => router.push('/chat')}>
+                  Open Chat
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-panel border-border/60">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
+                    <Database className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle>AuraSQL</CardTitle>
+                    <CardDescription>Generate and run SQL on connected DBs.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Save table contexts once, re-use them without re-fetching schemas.
+                </p>
+                <Button className="w-full justify-between" onClick={() => router.push('/aurasql')}>
+                  Open AuraSQL
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-panel border-border/60">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
+                    <BookOpen className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle>Knowledge Base</CardTitle>
+                    <CardDescription>Manage your indexed assets.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Review documents and SQL contexts stored for quick reuse.
+                </p>
+                <Button variant="outline" className="w-full justify-between" onClick={() => router.push('/knowledge-base')}>
+                  Open Knowledge Base
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

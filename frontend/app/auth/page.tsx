@@ -7,7 +7,6 @@ import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
-import { useAuthStore } from "@/lib/store"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Layers, Radar, LineChart, FileSearch, Sun, Moon } from "lucide-react"
 
@@ -24,7 +23,6 @@ export default function AuthPage() {
     return stored === 'light' || stored === 'dark' ? stored : 'light'
   })
   const router = useRouter()
-  const login = useAuthStore((state) => state.login)
 
   const inlineSvgs = {
     groq: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 100 100" width="14" height="14"><g clip-path="url(#a)"><path fill="currentColor" d="M46.596 60.752H17L65.572 0 53.313 39.248h29.59L34.338 100z"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h100v100H0z"/></clipPath></defs></svg>`,
@@ -126,8 +124,7 @@ export default function AuthPage() {
     const password = formData.get("password") as string
 
     try {
-      const user = await apiClient.login(email, password)
-      login(user)
+      await apiClient.login(email, password)
       setSuccess("Login successful! Redirecting...")
       setTimeout(() => router.push("/"), 1000)
     } catch (error: unknown) {
@@ -179,8 +176,7 @@ export default function AuthPage() {
       await apiClient.register(email, password)
       setSuccess("Account created successfully! Logging you in...")
       // Auto login after register
-      const user = await apiClient.login(email, password)
-      login(user)
+      await apiClient.login(email, password)
       setTimeout(() => router.push("/"), 1000)
     } catch (error: unknown) {
       const errorMessage = error instanceof Error

@@ -25,6 +25,12 @@ psycopg2-binary
 pgvector
 sqlalchemy
 rank-bm25
+asyncpg
+aiomysql
+oracledb
+pandas
+numpy
+sqlparse
 
 # File Processing (additional dependencies for file readers)
 pypdf==4.3.1
@@ -39,6 +45,8 @@ python-multipart==0.0.6
 aiofiles==23.2.1
 typing-extensions==4.12.2
 nest-asyncio==1.6.0
+python-jose[cryptography]
+cryptography
 
 # HTTP Client
 httpx==0.25.2

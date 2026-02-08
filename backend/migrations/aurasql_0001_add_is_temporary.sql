@@ -1,0 +1,2 @@
+ALTER TABLE aurasql_contexts_nexus_rag
+ADD COLUMN IF NOT EXISTS is_temporary BOOLEAN NOT NULL DEFAULT FALSE;

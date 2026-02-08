@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", alias="POSTGRES_PASSWORD")
     postgres_table_name: str = Field(default="rag_embeddings", alias="POSTGRES_TABLE_NAME")
+    aurasql_table_name: str = Field(default="aurasql_embeddings", alias="AURASQL_TABLE_NAME")
+
+    # Auth & Encryption Configuration
+    jwt_secret: str = Field(default="dev-secret", alias="JWT_SECRET")
+    jwt_refresh_secret: str = Field(default="dev-refresh-secret", alias="JWT_REFRESH_SECRET")
+    jwt_access_exp_minutes: int = Field(default=15, alias="JWT_ACCESS_EXP_MINUTES")
+    jwt_refresh_exp_days: int = Field(default=30, alias="JWT_REFRESH_EXP_DAYS")
+    aurasql_master_key: str = Field(default="", alias="AURASQL_MASTER_KEY")
     
     # Data Storage Configuration
     data_dir: str = Field(default="./data", alias="DATA_DIR")
@@ -73,6 +81,10 @@ class Settings(BaseSettings):
     # Chat Configuration
     max_chat_history: int = Field(default=10, alias="MAX_CHAT_HISTORY")
     max_tokens: int = Field(default=3000, alias="MAX_TOKENS")
+
+    # AuraSQL Configuration
+    aurasql_max_tokens: int = Field(default=1024, alias="AURASQL_MAX_TOKENS")
+    aurasql_top_k: int = Field(default=3, alias="AURASQL_TOP_K")
     
     # PageIndex / Think Mode Configuration
     pageindex_max_pages_per_chunk: int = Field(default=15, alias="PAGEINDEX_MAX_PAGES_PER_CHUNK")

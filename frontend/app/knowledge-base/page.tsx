@@ -11,13 +11,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
 import { Header } from '@/components/layout/Header';
 import { useToast } from '@/hooks/useToast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AuraSqlContext } from '@/lib/types';
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [contexts, setContexts] = useState<AuraSqlContext[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadingContexts, setLoadingContexts] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -38,6 +42,18 @@ export default function KnowledgeBasePage() {
     }
   }, []);
 
+  const loadContexts = useCallback(async () => {
+    setLoadingContexts(true);
+    try {
+      const response = await apiClient.listAuraSqlContexts();
+      setContexts(response);
+    } catch (err) {
+      console.error('Failed to load contexts:', err);
+    } finally {
+      setLoadingContexts(false);
+    }
+  }, []);
+
   // Wait for Zustand to hydrate from localStorage
   useEffect(() => {
     setIsHydrated(true);
@@ -55,10 +71,11 @@ export default function KnowledgeBasePage() {
     
     // Fetch user's documents
     loadDocuments(user.id);
-  }, [router, user, isHydrated, loadDocuments]);
+    loadContexts();
+  }, [router, user, isHydrated, loadDocuments, loadContexts]);
 
   // Show loading state while hydrating
-  if (!isHydrated || (loading && documents.length === 0)) {
+  if (!isHydrated || (loading && documents.length === 0 && loadingContexts)) {
     return (
       <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 app-aurora" />
@@ -202,135 +219,174 @@ export default function KnowledgeBasePage() {
             </Alert>
           )}
 
-          {documents.length === 0 ? (
-            <div className="text-center py-14">
-              <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
-                <FileText className="h-8 w-8 text-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No documents yet</h3>
-              <p className="text-muted-foreground mb-6">Upload your first document to get started.</p>
-              <Button onClick={() => router.push('/')} className="bg-foreground text-background shadow-lg">
-                Go to Chat
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === documents.length && documents.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
-                    />
-                    <span className="text-sm font-medium text-foreground">Select All</span>
-                  </label>
-                  
-                  {selectedIds.size > 0 && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20">
-                      {selectedIds.size} selected
-                    </Badge>
-                  )}
+          <Tabs defaultValue="documents" className="space-y-4">
+            <TabsList className="bg-muted/40">
+              <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="contexts">SQL Contexts</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="documents" className="space-y-4">
+              {documents.length === 0 ? (
+                <div className="text-center py-14">
+                  <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
+                    <FileText className="h-8 w-8 text-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No documents yet</h3>
+                  <p className="text-muted-foreground mb-6">Upload your first document to get started.</p>
+                  <Button onClick={() => router.push('/chat')} className="bg-foreground text-background shadow-lg">
+                    Go to Chat
+                  </Button>
                 </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.size === documents.length && documents.length > 0}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
+                        />
+                        <span className="text-sm font-medium text-foreground">Select All</span>
+                      </label>
+                      {selectedIds.size > 0 && (
+                        <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20">
+                          {selectedIds.size} selected
+                        </Badge>
+                      )}
+                    </div>
 
-                <Button
-                  onClick={handleBulkDelete}
-                  disabled={selectedIds.size === 0 || deleting}
-                  variant="destructive"
-                  size="sm"
-                >
-                  {deleting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Selected
-                    </>
-                  )}
-                </Button>
-              </div>
+                    <Button
+                      onClick={handleBulkDelete}
+                      disabled={selectedIds.size === 0 || deleting}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Selected
+                        </>
+                      )}
+                    </Button>
+                  </div>
 
-              <div className="border border-border/70 rounded-2xl overflow-hidden bg-card/70">
-                <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-muted/60">
-                    <tr>
-                      <th className="w-12 px-4 py-3"></th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Filename
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Size
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Vectors
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Uploaded
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-card/60 divide-y divide-border">
-                    {documents.map((doc) => (
-                      <tr
-                        key={doc.id}
-                        className={`hover:bg-muted/40 transition-colors ${
-                          selectedIds.has(doc.id) ? 'bg-primary/10' : ''
-                        }`}
-                      >
-                        <td className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(doc.id)}
-                            onChange={(e) => handleSelectOne(doc.id, e.target.checked)}
-                            className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
-                          />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-foreground">
-                              {doc.filename}
-                            </span>
-                            {doc.title && (
-                                <span className="text-xs text-muted-foreground">{doc.title}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <Badge variant="outline" className="text-xs">
-                            {doc.file_type || 'N/A'}
-                          </Badge>
-                        </td>
-                          <td className="px-4 py-4 text-sm text-foreground">
-                          {formatFileSize(doc.file_size)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <Badge variant="secondary" className="text-xs">
-                            {doc.vector_count}
-                          </Badge>
-                        </td>
-                          <td className="px-4 py-4 text-sm text-muted-foreground">
-                          {formatDate(doc.upload_date)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  <div className="border border-border/70 rounded-2xl overflow-hidden bg-card/70">
+                    <table className="min-w-full divide-y divide-border">
+                      <thead className="bg-muted/60">
+                        <tr>
+                          <th className="w-12 px-4 py-3"></th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Filename
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Size
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Vectors
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Uploaded
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-card/60 divide-y divide-border">
+                        {documents.map((doc) => (
+                          <tr
+                            key={doc.id}
+                            className={`hover:bg-muted/40 transition-colors ${
+                              selectedIds.has(doc.id) ? 'bg-primary/10' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(doc.id)}
+                                onChange={(e) => handleSelectOne(doc.id, e.target.checked)}
+                                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
+                              />
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-foreground">
+                                  {doc.filename}
+                                </span>
+                                {doc.title && (
+                                  <span className="text-xs text-muted-foreground">{doc.title}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <Badge variant="outline" className="text-xs">
+                                {doc.file_type || 'N/A'}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-4 text-sm text-foreground">
+                              {formatFileSize(doc.file_size)}
+                            </td>
+                            <td className="px-4 py-4">
+                              <Badge variant="secondary" className="text-xs">
+                                {doc.vector_count}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-4 text-sm text-muted-foreground">
+                              {formatDate(doc.upload_date)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                <div className="mt-4 text-sm text-muted-foreground">
-                Total: {documents.length} document{documents.length !== 1 ? 's' : ''}
-              </div>
-            </>
-          )}
-          </div>
-        </main>
-      </div>
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Total: {documents.length} document{documents.length !== 1 ? 's' : ''}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="contexts" className="space-y-4">
+              {loadingContexts ? (
+                <p className="text-sm text-muted-foreground">Loading contexts...</p>
+              ) : contexts.length === 0 ? (
+                <div className="text-center py-14">
+                  <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
+                    <FileText className="h-8 w-8 text-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No SQL contexts yet</h3>
+                  <p className="text-muted-foreground mb-6">Create a schema context to reuse SQL knowledge.</p>
+                  <Button onClick={() => router.push('/aurasql/contexts/new')} className="bg-foreground text-background shadow-lg">
+                    Create SQL Context
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {contexts.map((context) => (
+                    <div key={context.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{context.name}</p>
+                        <p className="text-xs text-muted-foreground">{context.table_names.join(', ')}</p>
+                      </div>
+                      <Button size="sm" onClick={() => router.push(`/aurasql/query?context=${context.id}`)}>
+                        Query
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+      </main>
+    </div>
   );
 }

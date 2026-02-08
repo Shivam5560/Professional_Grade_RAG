@@ -12,6 +12,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.api.middleware import setup_middleware
 from app.api.routes import chat, documents, health, auth, history
+from app.api.routes import aurasql
 from app import __version__
 from app.db.database import engine, Base
 
@@ -109,6 +110,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
+app.include_router(aurasql.router, prefix="/api/v1", tags=["AuraSQL"])
 
 
 @app.get("/")

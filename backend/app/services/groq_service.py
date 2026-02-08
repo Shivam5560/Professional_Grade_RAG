@@ -29,7 +29,14 @@ class GroqService:
             model=self.model,
             api_key=self.api_key,
             temperature=0.1,  # Lower temperature for more deterministic responses
-            max_tokens=4096,
+            max_tokens=settings.max_tokens,
+        )
+
+        self._aurasql_llm = Groq(
+            model=self.model,
+            api_key=self.api_key,
+            temperature=0.1,
+            max_tokens=settings.aurasql_max_tokens,
         )
         
         # Health check caching to prevent excessive API calls
@@ -47,6 +54,10 @@ class GroqService:
             Groq LLM instance
         """
         return self.llm
+
+    def get_aurasql_llm(self) -> Groq:
+        """Get Groq LLM tuned for AuraSQL token budgets."""
+        return self._aurasql_llm
     
     async def check_health(self) -> bool:
         """
