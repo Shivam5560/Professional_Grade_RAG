@@ -7,7 +7,6 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AlertTriangle,
   Award,
@@ -27,7 +26,6 @@ import {
   Mail,
   Phone,
   Search,
-  ShieldCheck,
   Sparkles,
   Star,
   Target,
@@ -209,20 +207,12 @@ export default function NexusReportPage() {
     return raw.filter((x: any) => x && (typeof x === 'object' || typeof x === 'string'));
   }, [d]);
 
-  const justifications = useMemo(() => {
-    const raw = d.refined_justifications ?? [];
-    if (!Array.isArray(raw)) return [];
-    return raw.map((x: any) => (typeof x === 'string' ? x : JSON.stringify(x))).filter(Boolean);
-  }, [d]);
-
   const resumeName  = rd.name ?? '';
   const resumeEmail = rd.email ?? null;
   const resumePhone = rd.phone ?? null;
   const resumeSkills = toArr(rd.skills);
   const experience   = Array.isArray(rd.experience) ? rd.experience : [];
   const education    = Array.isArray(rd.education) ? rd.education : [];
-
-  const jdText = analysis?.job_description || jobDescription || '';
 
   /* ── readiness badge  ────────────────────────────────────────── */
   const readiness = (() => {
@@ -945,42 +935,6 @@ export default function NexusReportPage() {
                   );
                 })}
               </div>
-            </motion.section>
-          )}
-
-          {/* ═══════════════════ 9. JUSTIFICATIONS ═══════════════════ */}
-          {justifications.length > 0 && (
-            <motion.section variants={item} className="glass-panel sheen-border rounded-3xl p-6 md:p-8 relative overflow-hidden">
-              <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-indigo-500/10 blur-2xl" />
-              <h2 className="text-2xl font-black tracking-tight flex items-center gap-2 mb-1">
-                <ShieldCheck className="h-6 w-6 text-indigo-500" /> Score Justifications
-              </h2>
-              <p className="text-sm text-muted-foreground mb-6">Evidence-based reasoning behind the scores</p>
-
-              <div className="space-y-3">
-                {justifications.map((j, idx) => (
-                  <div key={`j-${idx}`} className="rounded-2xl border border-border/60 bg-card/60 px-5 py-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
-                        <span className="text-[11px] font-bold text-indigo-500">{idx + 1}</span>
-                      </div>
-                      <p className="text-sm text-foreground/80 leading-relaxed">{j}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.section>
-          )}
-
-          {/* ═══════════════════ 10. JOB DESCRIPTION TEXT ═══════════════════ */}
-          {jdText && (
-            <motion.section variants={item} className="glass-panel sheen-border rounded-3xl p-6 md:p-8">
-              <h2 className="text-xl font-black tracking-tight flex items-center gap-2 mb-4">
-                <FileText className="h-5 w-5 text-foreground/60" /> Full Job Description
-              </h2>
-              <ScrollArea className="max-h-48">
-                <p className="text-sm text-foreground/70 leading-relaxed whitespace-pre-line pr-4">{jdText}</p>
-              </ScrollArea>
             </motion.section>
           )}
 

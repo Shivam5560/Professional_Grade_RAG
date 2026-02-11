@@ -107,8 +107,7 @@ def get_aurasql_llm():
 
 def get_nexus_llm():
     """
-    Return the Nexus Resume-specific LLM instance (llama-3.1-8b-instant).
-    Fast model without reasoning overhead, optimized for structured extraction.
+    Return the Nexus Resume LLM instance (uses main model for better quality).
     """
     from app.services.groq_service import get_groq_service
 

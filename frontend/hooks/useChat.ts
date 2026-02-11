@@ -207,9 +207,9 @@ export function useChat(initialSessionId?: string) {
         setSessionId(sessionIdToLoad);
       }
       
-      // Convert ChatMessage to Message format
-      const convertedMessages: Message[] = history.messages.map(msg => ({
-        id: uuidv4(),
+      // Convert ChatMessage to Message format - use stable IDs based on index + sessionId
+      const convertedMessages: Message[] = history.messages.map((msg, idx) => ({
+        id: `${targetSessionId}-${idx}`,
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp || (msg as { created_at?: string }).created_at || new Date().toISOString(),

@@ -31,6 +31,11 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
         const sessions = await apiClient.getChatHistory(user.id);
         setHistory(sessions);
         setHasLoadedOnce(true);
+        // Cache in sessionStorage for instant load on navigation
+        try {
+          sessionStorage.setItem(`chat_history_${user.id}`, JSON.stringify(sessions));
+          sessionStorage.setItem(`chat_history_ts_${user.id}`, Date.now().toString());
+        } catch { /* quota exceeded — ignore */ }
       } catch (error) {
         console.error("Failed to load chat history:", error);
       } finally {
@@ -42,12 +47,24 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
     }
   }, [user]);
 
-  // Only load on mount if user is logged in
+  // Load cached history first, then refresh in background
   useEffect(() => {
-    if (user && !hasLoadedOnce) {
-      loadHistory();
-    }
-  }, [user, hasLoadedOnce, loadHistory]);
+    if (!user) return;
+    // Try cached version first for instant display
+    try {
+      const cached = sessionStorage.getItem(`chat_history_${user.id}`);
+      const cachedTs = sessionStorage.getItem(`chat_history_ts_${user.id}`);
+      if (cached && cachedTs) {
+        const age = Date.now() - Number(cachedTs);
+        if (age < 5 * 60 * 1000) { // 5 minute cache
+          setHistory(JSON.parse(cached));
+          setHasLoadedOnce(true);
+        }
+      }
+    } catch { /* corrupt cache — ignore */ }
+    // Always refresh from server
+    loadHistory();
+  }, [user, loadHistory]);
 
   useEffect(() => {
     const handleHistoryUpdate = (event: Event) => {

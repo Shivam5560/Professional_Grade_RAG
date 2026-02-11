@@ -7,10 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Database, Plus, Sparkles, Layers, Trash2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Database, Plus, Sparkles, Layers, Trash2, Code2, PlayCircle, Clock } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlHistoryItem, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
+import { useToast } from '@/hooks/useToast';
 import AuthPage from '@/app/auth/page';
 
 export default function AuraSqlHomePage() {
@@ -24,6 +26,7 @@ export default function AuraSqlHomePage() {
   const [contextPage, setContextPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast, confirm: toastConfirm } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -57,25 +60,41 @@ export default function AuraSqlHomePage() {
   }, [isAuthenticated]);
 
   const handleDeleteConnection = async (connectionId: string) => {
-    const confirmed = window.confirm('Delete this connection? This will remove its saved contexts.');
+    const confirmed = await toastConfirm({
+      title: 'Delete connection?',
+      description: 'This will remove the connection and its saved contexts.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
     if (!confirmed) return;
     try {
       await apiClient.deleteAuraSqlConnection(connectionId);
       setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
       setContexts((prev) => prev.filter((ctx) => ctx.connection_id !== connectionId));
+      toast({ title: 'Connection deleted' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete connection');
+      const msg = err instanceof Error ? err.message : 'Failed to delete connection';
+      setError(msg);
+      toast({ title: 'Delete failed', description: msg, variant: 'destructive' });
     }
   };
 
   const handleDeleteContext = async (contextId: string) => {
-    const confirmed = window.confirm('Delete this context?');
+    const confirmed = await toastConfirm({
+      title: 'Delete context?',
+      description: 'This will remove the saved context.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
     if (!confirmed) return;
     try {
       await apiClient.deleteAuraSqlContext(contextId);
       setContexts((prev) => prev.filter((ctx) => ctx.id !== contextId));
+      toast({ title: 'Context deleted' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete context');
+      const msg = err instanceof Error ? err.message : 'Failed to delete context';
+      setError(msg);
+      toast({ title: 'Delete failed', description: msg, variant: 'destructive' });
     }
   };
 
@@ -126,29 +145,6 @@ export default function AuraSqlHomePage() {
 
       <Header />
 
-      {loading ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
-            <p className="text-sm font-semibold">Loading AuraSQL workspace</p>
-            <p className="text-xs text-muted-foreground mt-1">Syncing connections, contexts, and sessions.</p>
-            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
-                Loading connections
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Pulling contexts
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Hydrating chat history
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <main className="relative z-10 px-4 md:px-8 py-10">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col lg:flex-row gap-6">
@@ -161,7 +157,14 @@ export default function AuraSqlHomePage() {
                 <CardContent className="h-[520px]">
                   <ScrollArea className="h-full pr-3">
                     {loading ? (
-                      <p className="text-sm text-muted-foreground">Loading history...</p>
+                      <div className="space-y-3">
+                        {[1,2,3,4].map(i => (
+                          <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
+                            <Skeleton className="h-4 w-3/4 mb-2" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        ))}
+                      </div>
                     ) : sessions.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No history yet.</p>
                     ) : (
@@ -171,12 +174,12 @@ export default function AuraSqlHomePage() {
                             key={session.id}
                             type="button"
                             onClick={() => router.push(`/aurasql/query?session=${session.id}`)}
-                            className="w-full text-left rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-border"
+                            className="w-full text-left rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-foreground/20 hover:bg-card/80 hover:shadow-sm transition-all"
                           >
                             <p className="text-sm font-semibold text-foreground line-clamp-2">
                               {session.title || 'AuraSQL chat'}
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground mt-1">
                               Updated {session.updated_at || session.created_at}
                             </p>
                           </button>
@@ -225,45 +228,69 @@ export default function AuraSqlHomePage() {
                 </div>
               </div>
 
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              {error && (
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-500/[0.03] px-5 py-3 text-sm text-rose-600 dark:text-rose-300 flex items-center gap-2">
+                  <span className="flex-shrink-0 h-2 w-2 rounded-full bg-rose-500" />
+                  {error}
+                </div>
+              )}
 
               <div className="grid gap-6 md:grid-cols-3">
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
-                  <CardHeader>
-                    <CardTitle>Generated SQL</CardTitle>
-                    <CardDescription>Total created queries.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-black">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
+                        <Code2 className="h-5 w-5 text-indigo-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Generated SQL</p>
+                        <p className="text-xs text-muted-foreground">Total created queries</p>
+                      </div>
+                    </div>
+                    <p className="text-4xl font-black text-foreground">
                       <AnimatedCounter value={generatedCount} />
                     </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
-                  <CardHeader>
-                    <CardTitle>Executed SQL</CardTitle>
-                    <CardDescription>Total executed queries.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-black">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                        <PlayCircle className="h-5 w-5 text-emerald-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Executed SQL</p>
+                        <p className="text-xs text-muted-foreground">Total executed queries</p>
+                      </div>
+                    </div>
+                    <p className="text-4xl font-black text-foreground">
                       <AnimatedCounter value={executedCount} />
                     </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
-                  <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Latest SQL generations.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {generatedHistory.slice(0, 3).map((item) => (
-                      <div key={item.id} className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="line-clamp-1">
-                          {item.natural_language_query || item.generated_sql || 'SQL execution'}
-                        </span>
-                        <span className="uppercase">generated</span>
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
+                        <Clock className="h-5 w-5 text-amber-500" />
                       </div>
-                    ))}
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Recent Activity</p>
+                        <p className="text-xs text-muted-foreground">Latest generations</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2 mt-1">
+                      {generatedHistory.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No activity yet</p>
+                      ) : generatedHistory.slice(0, 3).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="line-clamp-1 max-w-[180px]">
+                            {item.natural_language_query || item.generated_sql || 'SQL execution'}
+                          </span>
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20">generated</Badge>
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -276,17 +303,29 @@ export default function AuraSqlHomePage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {loading ? (
-                      <p className="text-sm text-muted-foreground">Loading connections...</p>
+                      <div className="space-y-3">
+                        {[1,2].map(i => (
+                          <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
+                            <Skeleton className="h-4 w-2/3 mb-2" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        ))}
+                      </div>
                     ) : connections.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No connections yet.</p>
                     ) : (
                       connections.map((connection) => (
-                        <div key={connection.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{connection.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {connection.db_type} • {connection.database} • {connection.schema_name || 'default'}
-                            </p>
+                        <div key={connection.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-foreground/20 hover:shadow-sm transition-all group">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+                              <Database className="h-4 w-4 text-indigo-500" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{connection.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {connection.db_type} • {connection.database} • {connection.schema_name || 'default'}
+                              </p>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${connection.id}`)}>
@@ -312,15 +351,27 @@ export default function AuraSqlHomePage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {loading ? (
-                      <p className="text-sm text-muted-foreground">Loading contexts...</p>
+                      <div className="space-y-3">
+                        {[1,2].map(i => (
+                          <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
+                            <Skeleton className="h-4 w-2/3 mb-2" />
+                            <Skeleton className="h-3 w-1/3" />
+                          </div>
+                        ))}
+                      </div>
                     ) : contexts.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No contexts yet.</p>
                     ) : (
                       pagedContexts.map((context) => (
-                        <div key={context.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{context.name}</p>
-                            <p className="text-xs text-muted-foreground">{context.table_names.join(', ')}</p>
+                        <div key={context.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-foreground/20 hover:shadow-sm transition-all group">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                              <Layers className="h-4 w-4 text-emerald-500" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{context.name}</p>
+                              <p className="text-xs text-muted-foreground">{context.table_names.join(', ')}</p>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" onClick={() => router.push(`/aurasql/query?context=${context.id}`)}>

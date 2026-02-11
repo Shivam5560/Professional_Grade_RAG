@@ -12,6 +12,7 @@ import { ModeSelector } from './ModeSelector';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
+import { useToast } from '@/hooks/useToast';
 import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode } from '@/lib/types';
 import { apiClient } from '@/lib/api';
 
@@ -41,8 +42,8 @@ export function ChatInterface({
   const modeTouchedRef = useRef(false);
   const [inputValue, setInputValue] = useState('');
   const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
-  // Default to healthy to prevent unnecessary health check API calls
   const [servicesHealthy, setServicesHealthy] = useState(true);
+  const { toast } = useToast();
 
   // Debug: Log when messages or sessionId changes
   useEffect(() => {
@@ -158,6 +159,7 @@ export function ChatInterface({
       }
     } catch (err) {
       console.error('Failed to send message:', err);
+      toast({ title: 'Message failed', description: err instanceof Error ? err.message : 'Could not send message', variant: 'destructive' });
       // Chat request failed - mark services as unhealthy and notify Header
       setServicesHealthy(false);
       window.dispatchEvent(new CustomEvent('llm-health-update', { detail: { healthy: false } }));

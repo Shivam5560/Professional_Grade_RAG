@@ -516,6 +516,35 @@ def calculate_keyword_density(resume_text: str, jd_text: str) -> Dict[str, Any]:
         'their', 'they', 'them', 'we', 'us', 'will', 'must', 'should',
     }
     
+    # Extended stop words: common English gerunds, vague verbs, filler words
+    # that are NOT meaningful ATS keywords
+    generic_words = {
+        # Common gerunds / present participles used as filler
+        'working', 'building', 'making', 'using', 'doing', 'getting', 'going',
+        'having', 'being', 'coming', 'taking', 'keeping', 'giving', 'finding',
+        'putting', 'running', 'moving', 'living', 'bringing', 'thinking',
+        'becoming', 'leaving', 'feeling', 'trying', 'helping', 'providing',
+        'following', 'showing', 'starting', 'creating', 'growing', 'opening',
+        'playing', 'turning', 'setting', 'offering', 'holding', 'learning',
+        # Vague / non-technical verbs & adjectives
+        'ensure', 'ensuring', 'various', 'within', 'across', 'well', 'like',
+        'based', 'related', 'knowledge', 'understanding', 'skills', 'apply',
+        'environment', 'environments', 'support', 'supporting', 'level',
+        'include', 'includes', 'opportunity', 'ideal', 'candidate', 'part',
+        'time', 'full', 'high', 'best', 'other', 'more', 'most', 'some',
+        'many', 'very', 'just', 'only', 'also', 'well', 'much', 'even',
+        'each', 'both', 'make', 'take', 'come', 'keep', 'give', 'find',
+        'help', 'show', 'know', 'want', 'seem', 'feel', 'tell', 'call',
+        'every', 'same', 'different', 'first', 'last', 'long', 'little',
+        'when', 'where', 'then', 'than', 'them', 'these', 'those', 'over',
+        'under', 'back', 'still', 'here', 'there', 'through', 'right',
+        'effectively', 'efficiently', 'actively', 'closely', 'directly',
+        'currently', 'especially', 'primarily', 'responsible', 'minimum',
+        'qualifications', 'requirements', 'description', 'overview',
+        'benefits', 'apply', 'equal', 'employer', 'location',
+    }
+    stop_words |= generic_words
+    
     # Extract n-grams from JD
     jd_lower = jd_text.lower()
     resume_lower = resume_text.lower()

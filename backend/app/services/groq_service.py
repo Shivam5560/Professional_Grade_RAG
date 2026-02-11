@@ -33,7 +33,7 @@ class GroqService:
             temperature=0.1,  # Lower temperature for more deterministic responses
             max_tokens=8000,  # Increased to handle reasoning + JSON output
             context_window=128000, 
-            reasoning_effort = 'low' # Llama 3.1 actually has 128k context
+            reasoning_effort = 'medium' # Llama 3.1 actually has 128k context
         )
 
         self._aurasql_llm = Groq(
@@ -41,16 +41,6 @@ class GroqService:
             api_key=self.api_key,
             temperature=0.1,
             max_tokens=settings.aurasql_max_tokens,
-        )
-        
-        # Dedicated Nexus Resume LLM - using llama-3.1-8b-instant
-        # Fast, no reasoning overhead, great for structured JSON extraction
-        self._nexus_llm = Groq(
-            model="llama-3.1-8b-instant",
-            api_key=self.api_key,
-            temperature=0.1,
-            max_tokens=8000,
-            context_window=128000,
         )
         
         # Health check caching to prevent excessive API calls
@@ -74,8 +64,8 @@ class GroqService:
         return self._aurasql_llm
     
     def get_nexus_llm(self) -> Groq:
-        """Get Groq LLM optimized for Nexus Resume (llama-3.1-8b-instant)."""
-        return self._nexus_llm
+        """Get Groq LLM for Nexus Resume analysis (uses main model)."""
+        return self.llm
     
     async def check_health(self) -> bool:
         """

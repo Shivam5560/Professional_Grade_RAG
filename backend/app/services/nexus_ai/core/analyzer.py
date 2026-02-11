@@ -261,7 +261,6 @@ def _extract_experience_years(resume_data: Dict[str, Any]) -> float:
                     pass
     
     return round(total_months / 12, 1)
-    return result
 
 
 async def _call_llm_for_analysis(

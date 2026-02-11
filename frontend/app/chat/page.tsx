@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { useChat } from '@/hooks/useChat';
 import { useAuthStore } from '@/lib/store';
+import { useToast } from '@/hooks/useToast';
 import AuthPage from '@/app/auth/page';
 
 export default function ChatPage() {
@@ -13,6 +14,7 @@ export default function ChatPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory } = useChat();
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -46,6 +48,7 @@ export default function ChatPage() {
       await loadHistory(sessionIdToLoad);
     } catch (error) {
       console.error('Failed to load session:', error);
+      toast({ title: 'Failed to load session', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
     }
   };
 

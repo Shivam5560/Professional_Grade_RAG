@@ -12,6 +12,7 @@ import { CheckCircle2, Upload, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
+import { useToast } from '@/hooks/useToast';
 import type { ResumeDashboardResponse, ResumeFileInfo, ResumeHistoryResponse } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
 
@@ -19,6 +20,7 @@ export default function NexusResumeSelectPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { selectedResume, setSelectedResume, setJobDescription, setAnalysis } = useNexusFlowStore();
+  const { toast, confirm } = useToast();
   const [isMounted, setIsMounted] = useState(false);
   const [resumes, setResumes] = useState<ResumeFileInfo[]>([]);
   const [dashboard, setDashboard] = useState<ResumeDashboardResponse | null>(null);
@@ -46,6 +48,7 @@ export default function NexusResumeSelectPage() {
       setHistory(historyData);
     } catch (error) {
       console.error('Failed to load resume data:', error);
+      toast({ title: 'Failed to load resumes', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -93,9 +96,11 @@ export default function NexusResumeSelectPage() {
     try {
       await apiClient.uploadResume(fileRef.current.files[0], user.id);
       fileRef.current.value = '';
+      toast({ title: 'Resume uploaded', description: 'Your resume has been uploaded successfully.' });
       await loadData(user.id);
     } catch (error) {
       console.error('Upload failed:', error);
+      toast({ title: 'Upload failed', description: error instanceof Error ? error.message : 'Could not upload resume', variant: 'destructive' });
     } finally {
       setUploading(false);
     }
@@ -115,7 +120,13 @@ export default function NexusResumeSelectPage() {
   const handleDelete = async (resume: ResumeFileInfo, e: React.MouseEvent) => {
     e.stopPropagation(); // Don't select the resume when clicking delete
     if (!user) return;
-    if (!confirm(`Delete "${resume.filename}"? This will remove the resume and all its analyses.`)) return;
+    const confirmed = await confirm({
+      title: `Delete "${resume.filename}"?`,
+      description: 'This will remove the resume and all its analyses.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
     
     setDeleting(resume.resume_id);
     try {
@@ -124,9 +135,11 @@ export default function NexusResumeSelectPage() {
       if (selectedResume?.resume_id === resume.resume_id) {
         setSelectedResume(null);
       }
+      toast({ title: 'Resume deleted', description: `"${resume.filename}" has been removed.` });
       await loadData(user.id);
     } catch (error) {
       console.error('Delete failed:', error);
+      toast({ title: 'Delete failed', description: error instanceof Error ? error.message : 'Could not delete resume', variant: 'destructive' });
     } finally {
       setDeleting(null);
     }

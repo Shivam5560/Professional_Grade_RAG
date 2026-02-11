@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
+import { useToast } from '@/hooks/useToast';
 import AuthPage from '@/app/auth/page';
 
 export default function NexusJobDescriptionPage() {
@@ -23,6 +24,7 @@ export default function NexusJobDescriptionPage() {
   } = useNexusFlowStore();
   const [isMounted, setIsMounted] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -51,6 +53,7 @@ export default function NexusJobDescriptionPage() {
       router.push('/nexus/report');
     } catch (error) {
       console.error('Analyze failed:', error);
+      toast({ title: 'Analysis failed', description: error instanceof Error ? error.message : 'Could not analyze resume', variant: 'destructive' });
     } finally {
       setAnalyzing(false);
     }
