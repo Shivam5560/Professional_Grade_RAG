@@ -23,7 +23,7 @@ export default function DashboardPage() {
     if (!isMounted || !isAuthenticated) return;
     router.prefetch('/chat');
     router.prefetch('/aurasql');
-    router.prefetch('/developer');
+    router.prefetch('/nexus');
   }, [isMounted, isAuthenticated, router]);
 
   const handleNavigate = (path: string, label: string) => {
@@ -39,6 +39,9 @@ export default function DashboardPage() {
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.16),transparent_65%)] blur-2xl float-slow" />
+      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.18),transparent_65%)] blur-3xl float-slower" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[6%] h-[440px] w-[440px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.14),transparent_70%)] blur-3xl float-slowest" />
 
       <Header />
 
@@ -80,8 +83,8 @@ export default function DashboardPage() {
                     Enter AuraSQL
                     <Sparkles className="h-4 w-4 ml-2" />
                   </Button>
-                  <Button variant="ghost" className="px-6" onClick={() => handleNavigate('/developer', 'Developer Profile')}>
-                    Developer Profile
+                  <Button variant="secondary" className="px-6" onClick={() => handleNavigate('/nexus', 'Resume Studio')}>
+                    Open Resume Studio
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -120,6 +123,15 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-sm font-semibold">Developer</p>
                         <p className="text-xs text-muted-foreground">Profile, experience, metrics</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
+                        <MessageSquare className="h-4 w-4 text-primary-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Resume Studio</p>
+                        <p className="text-xs text-muted-foreground">Upload + score with JD alignment</p>
                       </div>
                     </div>
                   </div>
@@ -173,11 +185,11 @@ export default function DashboardPage() {
                 path: '/aurasql',
               },
               {
-                title: 'Developer',
-                description: 'View the builder profile, impact metrics, and technical proficiencies.',
-                cta: 'View Profile',
+                title: 'Resume Studio',
+                description: 'Score resumes against role descriptions with structured insights.',
+                cta: 'Open Resume Studio',
                 icon: Sparkles,
-                path: '/developer',
+                path: '/nexus',
               },
             ].map((card, index) => (
               <div key={card.title} className={`lux-card sheen-border rounded-3xl p-6 space-y-4 hover-glow reveal-up delay-${index + 1}`}>

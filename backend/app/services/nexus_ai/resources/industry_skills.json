@@ -1,0 +1,58 @@
+{
+  "tech": [
+
+    "python", "java", "javascript", "typescript", "c++", "c#", "php", "ruby", "go", "golang", "rust", "swift", "kotlin", "scala", "perl", "r", "objective-c", "dart", "elixir", "clojure", "groovy", "f#", "haskell", "lua", "sql", "pl/sql", "tsql", "bash", "powershell", "assembly", "matlab",
+
+
+    "html", "html5", "css", "css3", "react", "react.js", "angular", "angularjs", "vue", "vue.js", "svelte", "jquery", "ember.js", "backbone.js", "next.js", "nuxt.js", "gatsby", "redux", "mobx", "zustand", "rxjs", "webpack", "babel", "vite", "parcel", "rollup", "tailwind css", "bootstrap", "material ui", "mui", "chakra ui", "ant design", "styled components", "emotion", "less", "sass", "scss", "webassembly", "wasm", "progressive web app", "pwa", "single page application", "spa", "graphql", "apollo client", "relay", "ssr", "csr", "ssg", "responsive design", "accessibility", "wcag", "web performance", "state management", "dom manipulation", "ajax", "json", "xml", "websockets", "webrtc",
+
+
+    "node.js", "nodejs", "express.js", "nestjs", "koa", "hapi", "django", "flask", "fastapi", "pyramid", "ruby on rails", "ror", "sinatra", "laravel", "symfony", "codeigniter", "asp.net", "asp.net core", ".net", ".net core", "spring", "spring boot", "java ee", "jakarta ee", "play framework", "ktor", "phoenix", "rest api", "restful services", "soap", "grpc", "microservices", "serverless", "aws lambda", "azure functions", "google cloud functions", "orm", "odm", "sqlalchemy", "django orm", "typeorm", "prisma", "mongoose", "sequelize", "hibernate", "entity framework", "message queues", "rabbitmq", "kafka", "apache kafka", "activemq", "zeromq", "nats", "redis pub/sub", "aws sqs", "google pub/sub", "celery", "api gateway", "aws api gateway", "apigee", "kong", "authentication", "authorization", "oauth", "oauth2", "openid connect", "oidc", "saml", "jwt", "session management", "templating engines", "jinja2", "thymeleaf", "ejs", "pug",
+
+
+    "android development", "ios development", "react native", "flutter", "xamarin", "nativescript", "ionic", "android sdk", "xcode", "swiftui", "uikit", "jetpack compose", "gradle", "cocoapods", "swift package manager", "mobile ui/ux", "push notifications", "core data", "room persistence library", "sqlite", "realm",
+
+
+    "sql", "nosql", "postgresql", "postgres", "mysql", "mariadb", "microsoft sql server", "mssql", "oracle database", "sqlite", "ibm db2", "cassandra", "mongodb", "redis", "memcached", "couchbase", "couchdb", "neo4j", "arangodb", "elasticsearch", "dynamodb", "google cloud spanner", "google firestore", "cosmos db", "database design", "data modeling", "normalization", "denormalization", "indexing", "query optimization", "database administration", "dba", "replication", "sharding", "acid", "base", "cap theorem", "data warehousing", "etl", "elt", "olap", "oltp",
+
+
+    "aws", "amazon web services", "azure", "microsoft azure", "gcp", "google cloud platform", "heroku", "digitalocean", "linode", "vercel", "netlify", "oracle cloud", "oci", "ibm cloud", "alibaba cloud", "iaas", "paas", "saas", "faas", "containers", "docker", "kubernetes", "k8s", "docker swarm", "openshift", "aws ecs", "aws eks", "azure kubernetes service", "aks", "google kubernetes engine", "gke", "serverless framework", "aws sam", "terraform", "pulumi", "aws cloudformation", "azure resource manager", "arm templates", "google cloud deployment manager", "ansible", "chef", "puppet", "saltstack", "virtual machines", "vm", "aws ec2", "azure vm", "gce", "load balancing", "aws elb", "azure load balancer", "google cloud load balancing", "cdn", "aws cloudfront", "azure cdn", "google cloud cdn", "cloud storage", "aws s3", "azure blob storage", "google cloud storage", "iam", "vpc", "cloud networking", "cloud security", "cost optimization", "multi-cloud", "hybrid cloud",
+
+
+    "devops", "sre", "site reliability engineering", "ci/cd", "continuous integration", "continuous delivery", "continuous deployment", "jenkins", "gitlab ci", "github actions", "circleci", "travis ci", "bitbucket pipelines", "azure devops", "argo cd", "flux", "spinnaker", "build automation", "maven", "gradle", "npm", "yarn", "pip", "infrastructure as code", "iac", "monitoring", "observability", "logging", "tracing", "alerting", "prometheus", "grafana", "datadog", "new relic", "dynatrace", "splunk", "elk stack", "elasticsearch", "logstash", "kibana", "fluentd", "jaeger", "zipkin", "opentelemetry", "pagerduty", "opsgenie", "incident management", "postmortem", "chaos engineering", "git", "svn", "version control", "gitflow", "github", "gitlab", "bitbucket", "artifact repository", "nexus", "artifactory",
+
+
+    "data science", "machine learning", "ml", "artificial intelligence", "ai", "deep learning", "neural networks", "cnn", "rnn", "lstm", "transformers", "nlp", "natural language processing", "computer vision", "cv", "supervised learning", "unsupervised learning", "reinforcement learning", "scikit-learn", "tensorflow", "keras", "pytorch", "pandas", "numpy", "scipy", "matplotlib", "seaborn", "xgboost", "lightgbm", "catboost", "nltk", "spacy", "opencv", "mlops", "kubeflow", "mlflow", "data analysis", "statistical modeling", "feature engineering", "model evaluation", "hyperparameter tuning", "a/b testing", "big data", "hadoop", "mapreduce", "hdfs", "spark", "apache spark", "pyspark", "flink", "apache flink", "hive", "apache hive", "presto", "jupyter notebooks", "data visualization", "business intelligence", "bi", "tableau", "power bi", "qlik sense",
+
+    "linux", "unix", "ubuntu", "debian", "centos", "fedora", "rhel", "red hat enterprise linux", "macos", "windows", "windows server", "bsd", "kernel development", "system programming", "shell scripting", "cron", "system administration", "sysadmin",
+
+    "agile", "scrum", "kanban", "waterfall", "lean", "xp", "extreme programming", "software development life cycle", "sdlc", "design patterns", "gang of four", "gof", "solid principles", "object-oriented programming", "oop", "functional programming", "fp", "domain-driven design", "ddd", "test-driven development", "tdd", "behavior-driven development", "bdd", "unit testing", "integration testing", "end-to-end testing", "e2e testing", "performance testing", "security testing", "code review", "pair programming", "software architecture", "system design", "scalability", "reliability", "high availability", "distributed systems", "api design", "performance optimization", "debugging", "profiling",
+
+    "cybersecurity", "information security", "infosec", "penetration testing", "pentesting", "vulnerability assessment", "security analysis", "network security", "application security", "appsec", "cloud security", "cryptography", "encryption", "tls/ssl", "owasp top 10", "siem", "ids", "ips", "firewalls", "threat modeling", "incident response", "digital forensics", "iam", "identity and access management",
+
+
+    "iot", "internet of things", "embedded systems", "real-time operating system", "rtos", "blockchain", "smart contracts", "ethereum", "solidity", "web3", "game development", "unity", "unreal engine", "virtual reality", "vr", "augmented reality", "ar", "quantum computing", "bioinformatics", "high-performance computing", "hpc", "graphics programming", "opengl", "vulkan", "directx", "fintech", "healthtech", "edtech", "e-commerce"
+  ],
+  "finance": [
+
+    "financial analysis", "financial modeling", "accounting", "bookkeeping", "quickbooks",
+    "sap", "excel", "vba", "financial reporting", "budgeting", "forecasting", "investment analysis",
+    "portfolio management", "risk assessment", "risk management", "compliance", "regulatory reporting", "banking",
+    "insurance", "underwriting", "taxation", "audit", "internal controls", "cpa", "cfa", "fintech",
+    "bloomberg terminal", "factset", "capitaliq", "treasury", "asset management"
+  ],
+  "healthcare": [
+    "patient care", "clinical assessment", "medical terminology", "healthcare management", "nursing", "physician assistant",
+    "pharmacology", "electronic health records", "ehr", "emr", "epic", "cerner", "hipaa", "medical coding", "icd-10", "cpt", "medical billing",
+    "patient records management", "clinical trials", "medical research", "diagnostics", "treatment planning",
+    "care coordination", "telehealth", "public health", "epidemiology", "medical devices", "fda regulations", "healthcare administration"
+  ],
+  "marketing": [
+    "digital marketing", "social media marketing", "smm", "seo", "search engine optimization", "sem", "search engine marketing",
+    "content marketing", "copywriting", "email marketing", "brand management", "market research", "marketing analytics",
+    "google analytics", "campaign management", "crm", "customer relationship management",
+    "hubspot", "salesforce marketing cloud", "pardot", "mailchimp", "google ads", "ppc", "facebook ads", "instagram marketing",
+    "linkedin marketing", "tiktok marketing", "public relations", "pr", "advertising", "graphic design", "adobe creative suite", "product marketing"
+  ],
+  "default": []
+}

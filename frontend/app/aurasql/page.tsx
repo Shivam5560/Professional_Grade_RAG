@@ -120,14 +120,40 @@ export default function AuraSqlHomePage() {
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
+      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
 
       <Header />
+
+      {loading ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
+            <p className="text-sm font-semibold">Loading AuraSQL workspace</p>
+            <p className="text-xs text-muted-foreground mt-1">Syncing connections, contexts, and sessions.</p>
+            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
+                Loading connections
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Pulling contexts
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Hydrating chat history
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <main className="relative z-10 px-4 md:px-8 py-10">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col lg:flex-row gap-6">
             <aside className="w-full lg:w-[34%]">
-              <Card className="glass-panel border-border/60 h-full">
+              <Card className="glass-panel sheen-border border-border/60 bg-accent-soft h-full">
                 <CardHeader>
                   <CardTitle>History</CardTitle>
                   <CardDescription>Chat sessions powered by AuraSQL.</CardDescription>
@@ -163,7 +189,7 @@ export default function AuraSqlHomePage() {
             </aside>
 
             <section className="flex-1 space-y-8">
-              <div className="glass-panel rounded-3xl p-6 md:p-10 flex flex-col gap-4">
+              <div className="glass-panel sheen-border rounded-3xl p-6 md:p-10 bg-accent-soft flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
                     <Database className="h-5 w-5 text-primary-foreground" />
@@ -202,7 +228,7 @@ export default function AuraSqlHomePage() {
               {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="grid gap-6 md:grid-cols-3">
-                <Card className="glass-panel border-border/60 hover-glow">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
                   <CardHeader>
                     <CardTitle>Generated SQL</CardTitle>
                     <CardDescription>Total created queries.</CardDescription>
@@ -213,7 +239,7 @@ export default function AuraSqlHomePage() {
                     </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel border-border/60 hover-glow">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
                   <CardHeader>
                     <CardTitle>Executed SQL</CardTitle>
                     <CardDescription>Total executed queries.</CardDescription>
@@ -224,7 +250,7 @@ export default function AuraSqlHomePage() {
                     </p>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel border-border/60 hover-glow">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
                   <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
                     <CardDescription>Latest SQL generations.</CardDescription>
@@ -243,7 +269,7 @@ export default function AuraSqlHomePage() {
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                <Card className="glass-panel border-border/60">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
                   <CardHeader>
                     <CardTitle>Connections</CardTitle>
                     <CardDescription>Pick a saved connection to start querying.</CardDescription>
@@ -279,7 +305,7 @@ export default function AuraSqlHomePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="glass-panel border-border/60">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
                   <CardHeader>
                     <CardTitle>Saved Contexts</CardTitle>
                     <CardDescription>Latest used contexts.</CardDescription>

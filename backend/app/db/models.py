@@ -200,3 +200,38 @@ class AuraSqlChatSession(Base):
 
     user = relationship("User")
     context = relationship("AuraSqlContext")
+
+
+class NexusResumeFile(Base):
+    """Uploaded resume files for Nexus resume scoring."""
+
+    __tablename__ = "resume_files_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    resume_id = Column(String, nullable=False, unique=True, index=True)
+    filename = Column(String, nullable=False)
+    filepath = Column(String, nullable=False)
+    status = Column(String, default="uploaded", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+    analyses = relationship("NexusResumeAnalysis", back_populates="resume", cascade="all, delete-orphan")
+
+
+class NexusResumeAnalysis(Base):
+    """Stored resume analysis payloads and scores for Nexus."""
+
+    __tablename__ = "resume_analysis_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    resume_id = Column(String, ForeignKey("resume_files_nexus_rag.resume_id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    job_description = Column(Text, nullable=False)
+    analysis = Column(JSON, nullable=False)
+    overall_score = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    resume = relationship("NexusResumeFile", back_populates="analyses")
+    user = relationship("User")

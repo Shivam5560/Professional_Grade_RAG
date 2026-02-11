@@ -30,6 +30,7 @@ class GroqService:
             api_key=self.api_key,
             temperature=0.1,  # Lower temperature for more deterministic responses
             max_tokens=settings.max_tokens,
+            context_window=128000,  # Llama 3.1 actually has 128k context
         )
 
         self._aurasql_llm = Groq(

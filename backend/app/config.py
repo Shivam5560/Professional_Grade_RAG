@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     
     # Groq Configuration
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
-    groq_model: str = Field(default="openai/gpt-oss-20b", alias="GROQ_MODEL")
+    groq_model: str = Field(default="llama-3.1-70b-versatile", alias="GROQ_MODEL")
     
     # Ollama Configuration (for embeddings only)
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     cohere_api_key: str = Field(default="", alias="COHERE_API_KEY")
     cohere_embedding_model: str = Field(default="embed-english-v3.0", alias="COHERE_EMBEDDING_MODEL")
     cohere_rerank_model: str = Field(default="rerank-english-v3.0", alias="COHERE_RERANK_MODEL")
+
     
     # Remote Embedding Service Configuration (Lightning.ai)
     use_remote_embedding_service: bool = Field(default=False, alias="USE_REMOTE_EMBEDDING_SERVICE")
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     postgres_password: str = Field(default="postgres", alias="POSTGRES_PASSWORD")
     postgres_table_name: str = Field(default="rag_embeddings", alias="POSTGRES_TABLE_NAME")
     aurasql_table_name: str = Field(default="aurasql_embeddings", alias="AURASQL_TABLE_NAME")
+    nexus_resume_table_name: str = Field(default="nexus_resume_embeddings", alias="NEXUS_RESUME_TABLE_NAME")
 
     # Auth & Encryption Configuration
     jwt_secret: str = Field(default="dev-secret", alias="JWT_SECRET")
@@ -70,6 +72,20 @@ class Settings(BaseSettings):
         default=[".txt", ".md", ".pdf", ".docx"],
         alias="ALLOWED_FILE_EXTENSIONS"
     )
+
+    # Nexus Resume Configuration
+    nexus_resume_upload_dir: str = Field(
+        default="./data/resumes",
+        alias="NEXUS_RESUME_UPLOAD_DIR",
+    )
+    nexus_resume_allowed_extensions: List[str] = Field(
+        default=[".pdf", ".docx", ".doc", ".txt"],
+        alias="NEXUS_RESUME_ALLOWED_EXTENSIONS",
+    )
+    nexus_resume_max_size_mb: int = Field(
+        default=20,
+        alias="NEXUS_RESUME_MAX_SIZE_MB",
+    )
     
     # RAG Configuration
     chunk_size: int = Field(default=512, alias="CHUNK_SIZE")
@@ -80,7 +96,7 @@ class Settings(BaseSettings):
     
     # Chat Configuration
     max_chat_history: int = Field(default=10, alias="MAX_CHAT_HISTORY")
-    max_tokens: int = Field(default=3000, alias="MAX_TOKENS")
+    max_tokens: int = Field(default=4096, alias="MAX_TOKENS")  # Increased for capable models
 
     # AuraSQL Configuration
     aurasql_max_tokens: int = Field(default=1024, alias="AURASQL_MAX_TOKENS")

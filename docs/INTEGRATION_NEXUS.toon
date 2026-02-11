@@ -1,0 +1,44 @@
+integration:
+  scope: Integrate Nexus resume scoring into existing RAG backend and frontend.
+  goals[5]: unify_routes, reuse_infra, separate_tables, consistent_ui, single_auth
+
+backend:
+  placement: backend/app (same level as chat + aurasql)
+  env:
+    NEXUS_RESUME_UPLOAD_DIR: ./data/resumes
+    NEXUS_RESUME_ALLOWED_EXTENSIONS[4]: .pdf,.docx,.doc,.txt
+    NEXUS_RESUME_MAX_SIZE_MB: 20
+    NEXUS_RESUME_TABLE_NAME: nexus_resume_embeddings
+  tables[2]{name,notes}:
+    resume_files_nexus_rag,Resume uploads with user mapping and status
+    resume_analysis_nexus_rag,Analysis payloads + overall score per resume
+  api_routes[5]{method,path,notes}:
+    POST,/api/v1/nexus/resumes/upload,Upload resume file
+    GET,/api/v1/nexus/resumes/{user_id},List resumes by user
+    POST,/api/v1/nexus/resumes/analyze,Analyze resume with JD
+    GET,/api/v1/nexus/resumes/history/{user_id},Analysis history
+    GET,/api/v1/nexus/dashboard/{user_id},Summary cards and monthly stats
+  services[2]{name,notes}:
+    NexusResumeService,Handles file storage + DB records
+    NexusResumeAnalyzerClient,Calls AI service and stores results
+
+frontend:
+  placement: frontend/app/nexus (new section)
+  nav:
+    add_label: Resume Studio
+    add_path: /nexus
+  pages[1]: /nexus
+  api_client:
+    methods[5]{name,notes}:
+      uploadResume,Multipart upload
+      listResumes,Fetch resume list
+      analyzeResume,Send JD + resume_id
+      getResumeHistory,Fetch analysis history
+      getResumeDashboard,Fetch summary metrics
+  ui_patterns:
+    reuse: glass-panel, lux-card, sheen-border, accent badges
+    theme: use existing color tokens + typography
+
+migration:
+  order[5]: add_models, add_settings, add_routes, add_frontend_api, add_ui
+  notes: "No changes to existing auth; resumes bind to users_nexus_rag"

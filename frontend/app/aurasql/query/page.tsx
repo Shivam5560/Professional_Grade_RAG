@@ -695,17 +695,45 @@ export default function AuraSqlQueryPage() {
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
+  const showLoader = loading || loadingTables || loadingContext || savingContext || loadingGenerate || loadingExecute;
+
   return (
     <div className="relative h-screen overflow-hidden bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.16),transparent_65%)] blur-2xl float-slow" />
+      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.18),transparent_65%)] blur-3xl float-slower" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.14),transparent_70%)] blur-3xl float-slowest" />
 
       <Header
         showSidebarToggle
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
       />
+
+      {showLoader ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
+            <p className="text-sm font-semibold">Working on AuraSQL</p>
+            <p className="text-xs text-muted-foreground mt-1">Preparing schema context and SQL output.</p>
+            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
+                Loading connections and tables
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Applying schema context
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Generating SQL output
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative z-10 flex h-[calc(100vh-4rem)] overflow-hidden">
         <aside
@@ -729,7 +757,7 @@ export default function AuraSqlQueryPage() {
 
         <main className="flex flex-1 flex-col overflow-hidden min-h-0">
           <div className="flex-1 overflow-hidden p-3 md:p-6">
-            <div className="glass-panel h-full rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col">
+            <div className="glass-panel sheen-border h-full rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col bg-accent-soft">
               <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full pr-2">
                   <div className="space-y-4 pb-4">

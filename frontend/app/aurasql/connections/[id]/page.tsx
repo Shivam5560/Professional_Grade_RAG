@@ -84,12 +84,38 @@ export default function EditAuraSqlConnectionPage() {
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
+      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
 
       <Header />
 
+      {(loading || saving) ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
+            <p className="text-sm font-semibold">Updating connection</p>
+            <p className="text-xs text-muted-foreground mt-1">Syncing connection details.</p>
+            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
+                Validating updates
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Checking schema access
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/40" />
+                Saving connection profile
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <main className="relative z-10 px-4 md:px-8 py-10">
         <div className="max-w-3xl mx-auto">
-          <Card className="glass-panel border-border/60">
+          <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
             <CardHeader>
               <CardTitle>Edit Connection</CardTitle>
               <CardDescription>Update connection details or password.</CardDescription>

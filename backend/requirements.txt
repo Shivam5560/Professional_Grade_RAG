@@ -32,6 +32,14 @@ pandas
 numpy
 sqlparse
 
+# Nexus Resume Analyzer
+spacy
+language_tool_python
+thefuzz
+python-Levenshtein
+scikit-learn
+toon_format @ git+https://github.com/toon-format/toon-python.git
+
 # File Processing (additional dependencies for file readers)
 pypdf==4.3.1
 PyPDF2>=3.0.0

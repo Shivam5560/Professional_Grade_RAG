@@ -1,0 +1,16 @@
+[
+  "python", "java", "javascript", "c++", "c#", "php", "ruby", "go", "swift", "kotlin", "typescript", "sql", "nosql",
+  "scala", "perl", "r",
+  "react", "angular", "vue", "django", "flask", "spring", "springboot", "nodejs", "express", "rubyonrails", "laravel",
+  "jquery", "bootstrap",
+  "mysql", "postgresql", "mongodb", "redis", "cassandra", "oracle", "sqlserver", "elasticsearch", "dynamodb",
+  "aws", "azure", "gcp", "amazonwebservices", "googlecloudplatform", "microsoftazure", "heroku", "kubernetes",
+  "docker", "terraform", "lambda", "ec2", "s3", "rds",
+  "linux", "unix", "windows", "macos", "bash", "shell", "nginx", "apache",
+  "pandas", "numpy", "scipy", "sklearn", "scikitlearn", "tensorflow", "pytorch", "keras", "machinelearning",
+  "deeplearning", "dataanalysis", "nlp", "computervision", "statistics",
+  "git", "svn", "jenkins", "cicd", "ci/cd", "devops", "agile", "scrum", "rest", "graphql", "api", "microservices",
+  "oop", "testing", "debugging", "jira",
+  "architecture", "scalability", "performance", "security", "algorithms", "datastructures", "ux", "ui",
+  "android", "ios", "reactnative", "flutter", "sdk", "ide", "automation", "bigdata", "hadoop", "spark"
+]
