@@ -170,11 +170,8 @@ export function useChat(initialSessionId?: string) {
 
   const clearChat = useCallback(async () => {
     try {
-      console.log('[useChat] Clearing chat for session:', sessionId);
-      
       // Generate a new session ID FIRST
       const newSessionId = uuidv4();
-      console.log('[useChat] New session created:', newSessionId);
       
       // Clear backend history for old session
       await apiClient.clearHistory(sessionId);
@@ -184,7 +181,6 @@ export function useChat(initialSessionId?: string) {
       setError(() => null);
       setSessionId(() => newSessionId);
       
-      console.log('[useChat] State cleared successfully');
       return newSessionId;
     } catch (err) {
       console.error('[useChat] Failed to clear chat:', err);

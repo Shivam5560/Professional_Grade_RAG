@@ -5,8 +5,16 @@ export function Footer() {
         <p className="text-center text-sm text-muted-foreground">
           Built with <span className="text-foreground font-semibold">LlamaIndex</span>, <span className="text-foreground font-semibold">Ollama</span>, <span className="text-foreground font-semibold">PostgreSQL</span>, <span className="text-foreground font-semibold">Groq</span> & <span className="text-foreground font-semibold">Mxbai Reranker</span>
         </p>
+        <span className="hidden md:inline text-muted-foreground/40">|</span>
         <p className="text-center text-xs text-muted-foreground">
-          v1.0.0 • <span className="text-foreground font-semibold">Enterprise Edition</span>
+          &copy; {new Date().getFullYear()} Designed &amp; Developed by{' '}
+          <a href="https://www.linkedin.com/in/shivam-sourav-b889aa204/" target="_blank" rel="noopener noreferrer" className="text-foreground font-semibold hover:underline">
+            Shivam Sourav
+          </a>
+        </p>
+        <span className="hidden md:inline text-muted-foreground/40">|</span>
+        <p className="text-center text-xs text-muted-foreground">
+          v1.0.0 &bull; <span className="text-foreground font-semibold">Enterprise Edition</span>
         </p>
       </div>
     </footer>

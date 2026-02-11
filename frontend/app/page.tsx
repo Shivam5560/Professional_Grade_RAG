@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Database, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
+import { MessageSquare, Database, Sparkles, ArrowRight, Loader2, FileText, BookOpen, Code2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 
@@ -121,17 +121,17 @@ export default function DashboardPage() {
                         <Sparkles className="h-4 w-4 text-primary-foreground" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold">Developer</p>
-                        <p className="text-xs text-muted-foreground">Profile, experience, metrics</p>
+                        <p className="text-sm font-semibold">Resume Studio</p>
+                        <p className="text-xs text-muted-foreground">Score + align with JD targets</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
-                        <MessageSquare className="h-4 w-4 text-primary-foreground" />
+                        <FileText className="h-4 w-4 text-primary-foreground" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold">Resume Studio</p>
-                        <p className="text-xs text-muted-foreground">Upload + score with JD alignment</p>
+                        <p className="text-sm font-semibold">ResumeGen</p>
+                        <p className="text-xs text-muted-foreground">LaTeX-compiled PDF builder</p>
                       </div>
                     </div>
                   </div>
@@ -168,55 +168,70 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-3">
+          <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 title: 'RAG Chat',
-                description: 'Ask complex questions and get grounded answers with citations and confidence levels.',
+                description: 'Grounded answers with citations and confidence scoring.',
                 cta: 'Open Chat',
                 icon: MessageSquare,
                 path: '/chat',
+                accent: 'indigo',
               },
               {
                 title: 'AuraSQL',
-                description: 'Generate, refine, and execute SQL with schema context and execution insights.',
+                description: 'Schema-aware SQL generation, refinement, and execution.',
                 cta: 'Open AuraSQL',
                 icon: Database,
                 path: '/aurasql',
+                accent: 'emerald',
               },
               {
                 title: 'Resume Studio',
-                description: 'Score resumes against role descriptions with structured insights.',
-                cta: 'Open Resume Studio',
+                description: 'Score resumes against job descriptions with ATS alignment.',
+                cta: 'Nexus Studio',
                 icon: Sparkles,
                 path: '/nexus',
+                accent: 'amber',
+              },
+              {
+                title: 'ResumeGen',
+                description: 'Build polished, LaTeX-compiled PDF resumes step by step.',
+                cta: 'Generate Resume',
+                icon: FileText,
+                path: '/nexus/generate',
+                accent: 'rose',
               },
             ].map((card, index) => (
-              <div key={card.title} className={`lux-card sheen-border rounded-3xl p-6 space-y-4 hover-glow reveal-up delay-${index + 1}`}>
-                <div className="h-12 w-12 rounded-2xl logo-mark flex items-center justify-center ring-2 ring-foreground/10">
-                  <card.icon className="h-5 w-5 text-primary-foreground" />
+              <div key={card.title} className={`lux-card sheen-border rounded-3xl p-5 space-y-3 hover-glow reveal-up delay-${index + 1}`}>
+                <div className={`h-11 w-11 rounded-xl flex items-center justify-center ring-1 ring-${card.accent}-500/20 bg-${card.accent}-500/10`}>
+                  <card.icon className={`h-5 w-5 text-${card.accent}-500`} />
                 </div>
                 <div>
-                  <p className="text-xl font-semibold">{card.title}</p>
-                  <p className="text-sm text-muted-foreground mt-2">{card.description}</p>
+                  <p className="text-lg font-bold">{card.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{card.description}</p>
                 </div>
-                <Button className="w-full justify-between" onClick={() => handleNavigate(card.path, card.title)}>
+                <Button size="sm" className="w-full justify-between" onClick={() => handleNavigate(card.path, card.title)}>
                   {card.cta}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}
           </section>
 
-          <section className="grid gap-4 md:grid-cols-3 reveal-up delay-3">
+          <section className="grid gap-4 md:grid-cols-4 reveal-up delay-3">
             {[
-              { label: 'Response precision', value: 'Multi-factor scoring' },
-              { label: 'Execution flow', value: 'RAG + SQL unified' },
-              { label: 'Latency posture', value: 'Optimized inference path' },
+              { label: 'Response precision', value: 'Multi-factor scoring', icon: Sparkles },
+              { label: 'Execution flow', value: 'RAG + SQL unified', icon: Database },
+              { label: 'Knowledge base', value: 'Document-grounded', icon: BookOpen },
+              { label: 'Developer tools', value: 'Profile + portfolio', icon: Code2 },
             ].map((stat) => (
-              <div key={stat.label} className="lux-card rounded-2xl p-5 hover-glow">
-                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">{stat.label}</p>
-                <p className="mt-3 text-lg font-semibold">{stat.value}</p>
+              <div key={stat.label} className="lux-card rounded-2xl p-4 hover-glow">
+                <div className="flex items-center gap-2 mb-2">
+                  <stat.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">{stat.label}</p>
+                </div>
+                <p className="text-sm font-semibold">{stat.value}</p>
               </div>
             ))}
           </section>

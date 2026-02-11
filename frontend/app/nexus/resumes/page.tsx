@@ -180,18 +180,13 @@ export default function NexusResumeSelectPage() {
           <section className="grid gap-4 md:grid-cols-3">
             {[
               { label: 'Total resumes', value: stats.total },
-              { label: 'Analyzed resumes', value: stats.analyzed },
-              { label: 'Pending reviews', value: stats.pending },
+              { label: 'Analyzed', value: stats.analyzed },
+              { label: 'Pending', value: stats.pending },
             ].map((stat) => (
-              <Card key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft">
-                <CardHeader>
-                  <CardTitle>{stat.label}</CardTitle>
-                  <CardDescription>Portfolio status</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-black">{stat.value}</p>
-                </CardContent>
-              </Card>
+              <div key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft rounded-2xl px-5 py-4 hover-glow transition-transform hover:-translate-y-0.5">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{stat.label}</p>
+                <p className="text-3xl font-black">{stat.value}</p>
+              </div>
             ))}
           </section>
 

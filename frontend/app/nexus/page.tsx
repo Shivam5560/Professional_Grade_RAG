@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
 import type { ResumeAnalyzeResponse, ResumeDashboardResponse, ResumeFileInfo } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
+import { Upload, FileText } from 'lucide-react';
 
 export default function NexusDashboardPage() {
   const router = useRouter();
@@ -107,9 +108,14 @@ export default function NexusDashboardPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={() => handleNavigate('/nexus/resumes', 'Resume Select')}>Select Resume</Button>
+                <Button onClick={() => handleNavigate('/nexus/resumes', 'Resume Select')}>
+                  <Upload className="h-4 w-4 mr-2" />Select Resume
+                </Button>
                 <Button variant="secondary" onClick={() => handleNavigate('/nexus/jd', 'Job Description')}>
                   Enter Job Description
+                </Button>
+                <Button variant="outline" onClick={() => handleNavigate('/nexus/generate', 'ResumeGen')}>
+                  <FileText className="h-4 w-4 mr-2" />Build Resume (ResumeGen)
                 </Button>
               </div>
             </div>
@@ -118,18 +124,13 @@ export default function NexusDashboardPage() {
           <section className="grid gap-4 md:grid-cols-3">
             {[
               { label: 'Total resumes', value: stats.total },
-              { label: 'Analyzed resumes', value: stats.analyzed },
-              { label: 'Pending reviews', value: stats.pending },
+              { label: 'Analyzed', value: stats.analyzed },
+              { label: 'Pending', value: stats.pending },
             ].map((stat) => (
-              <Card key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft">
-                <CardHeader>
-                  <CardTitle>{stat.label}</CardTitle>
-                  <CardDescription>Portfolio status</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-black">{stat.value}</p>
-                </CardContent>
-              </Card>
+              <div key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft rounded-2xl px-5 py-4 hover-glow transition-transform hover:-translate-y-0.5">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{stat.label}</p>
+                <p className="text-3xl font-black">{stat.value}</p>
+              </div>
             ))}
           </section>
 

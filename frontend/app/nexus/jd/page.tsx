@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { ClipboardList, FileCheck, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
@@ -120,29 +121,40 @@ export default function NexusJobDescriptionPage() {
 
           <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="glass-panel border-border/60">
-              <CardHeader>
-                <CardTitle>Job Description Input</CardTitle>
-                <CardDescription>Use the full JD or key requirements for the role.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
+                    <ClipboardList className="h-5 w-5 text-indigo-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Job Description Input</p>
+                    <p className="text-xs text-muted-foreground">Use the full JD or key requirements for the role.</p>
+                  </div>
+                </div>
                 <Textarea
                   placeholder="Paste the job description here..."
                   value={jobDescription}
                   onChange={(event) => setJobDescription(event.target.value)}
                   className="min-h-[300px]"
                 />
-                <Button onClick={handleAnalyze} disabled={!jobDescription.trim() || analyzing}>
+                <Button onClick={handleAnalyze} disabled={!jobDescription.trim() || analyzing} className="gap-2">
+                  <Sparkles className="h-4 w-4" />
                   {analyzing ? 'Analyzing...' : 'Generate Report'}
                 </Button>
               </CardContent>
             </Card>
 
             <Card className="glass-panel border-border/60">
-              <CardHeader>
-                <CardTitle>Selected Resume</CardTitle>
-                <CardDescription>Confirm the resume before analyzing.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                    <FileCheck className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Selected Resume</p>
+                    <p className="text-xs text-muted-foreground">Confirm the resume before analyzing.</p>
+                  </div>
+                </div>
                 {selectedResume ? (
                   <div className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
                     <p className="text-sm font-semibold">{selectedResume.filename}</p>
@@ -153,7 +165,10 @@ export default function NexusJobDescriptionPage() {
                   <p className="text-sm text-muted-foreground">No resume selected.</p>
                 )}
                 <div className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Next Step</p>
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="h-3.5 w-3.5 text-amber-500" />
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Next Step</p>
+                  </div>
                   <p className="text-sm mt-2">
                     Generate the report to review hybrid similarity, grammar feedback, and recommendations.
                   </p>

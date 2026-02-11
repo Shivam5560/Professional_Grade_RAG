@@ -7,9 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Briefcase,
-  Calendar,
-  Cpu,
   GraduationCap,
   Github,
   Linkedin,
@@ -87,6 +84,9 @@ export default function DeveloperPage() {
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
+      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
 
       <Header />
 
@@ -169,55 +169,25 @@ export default function DeveloperPage() {
             </div>
           </section>
 
-          <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="glass-panel border-border/60 hover-glow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span className="text-3xl font-black tracking-tight">
-                    <AnimatedCounter value={90} suffix="%+" />
-                  </span>
-                </CardTitle>
-                <CardDescription>ATS resume matching accuracy.</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="glass-panel border-border/60 hover-glow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <Cpu className="h-4 w-4 text-primary" />
-                  <span className="text-3xl font-black tracking-tight">
-                    <AnimatedCounter value={95} suffix="%" />
-                  </span>
-                </CardTitle>
-                <CardDescription>Flood prediction accuracy (92-95%).</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="glass-panel border-border/60 hover-glow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <Briefcase className="h-4 w-4 text-primary" />
-                  <span className="text-3xl font-black tracking-tight">
-                    <AnimatedCounter value={60} suffix="%" />
-                  </span>
-                </CardTitle>
-                <CardDescription>Dev time reduction for scaffolding.</CardDescription>
-              </CardHeader>
-            </Card>
-            <Card className="glass-panel border-border/60 hover-glow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <Calendar className="h-4 w-4 text-primary" />
-                  <span className="text-3xl font-black tracking-tight">
-                    <AnimatedCounter value={60} suffix="%" />
-                  </span>
-                </CardTitle>
-                <CardDescription>Faster OracleDB validation cycles.</CardDescription>
-              </CardHeader>
-            </Card>
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: 'ATS Matching', value: 90, suffix: '%+', desc: 'Resume matching accuracy' },
+              { label: 'Flood Prediction', value: 95, suffix: '%', desc: '92-95% accuracy range' },
+              { label: 'Dev Time Savings', value: 60, suffix: '%', desc: 'Scaffolding reduction' },
+              { label: 'Validation Speed', value: 60, suffix: '%', desc: 'Faster OracleDB cycles' },
+            ].map((stat) => (
+              <div key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft rounded-2xl px-5 py-4 hover-glow transition-transform hover:-translate-y-0.5">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{stat.label}</p>
+                <p className="text-3xl font-black tracking-tight">
+                  <AnimatedCounter value={stat.value} suffix={stat.suffix} />
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{stat.desc}</p>
+              </div>
+            ))}
           </section>
 
           <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <Card className="glass-panel border-border/60 hover-glow">
+            <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
               <CardHeader>
                 <CardTitle>Professional Experience</CardTitle>
                 <CardDescription>Outcome-driven roles and platform impact.</CardDescription>
@@ -270,7 +240,7 @@ export default function DeveloperPage() {
               </CardContent>
             </Card>
 
-            <Card className="glass-panel border-border/60 hover-glow">
+            <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow">
               <CardHeader>
                 <CardTitle>University Projects</CardTitle>
                 <CardDescription>AI systems with measurable outcomes.</CardDescription>
@@ -341,7 +311,7 @@ export default function DeveloperPage() {
           </section>
 
           <section className="grid gap-6 md:grid-cols-2">
-            <Card className="glass-panel border-border/60">
+            <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
               <CardHeader>
                 <CardTitle>Contact</CardTitle>
                 <CardDescription>Reach out for collaboration or roles.</CardDescription>
@@ -372,7 +342,7 @@ export default function DeveloperPage() {
               </CardContent>
             </Card>
 
-            <Card className="glass-panel border-border/60">
+            <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
               <CardHeader>
                 <CardTitle>Availability</CardTitle>
                 <CardDescription>Open to impactful AI and data roles.</CardDescription>

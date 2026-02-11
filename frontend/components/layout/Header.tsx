@@ -32,14 +32,18 @@ export function Header({
   const pathname = usePathname();
   const isAuraSql = pathname?.startsWith('/aurasql');
   const isResume = pathname?.startsWith('/nexus');
-  const brandTitle = isAuraSql ? 'AuraSQL' : isResume ? 'Nexus' : 'NexusMind';
-  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResume ? 'Resume Studio' : 'Studio RAG';
-  const brandMark = isAuraSql ? 'AS' : isResume ? 'RS' : 'NX';
+  const isResumeGen = pathname?.startsWith('/nexus/generate');
+  const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : 'NexusMind';
+  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : 'Studio RAG';
+  const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : 'NX';
   const mainNavLinks = [
     { label: 'Dashboard', href: '/', isActive: pathname === '/' },
     { label: 'RAG', href: '/chat', isActive: pathname?.startsWith('/chat') },
     { label: 'AuraSQL', href: '/aurasql', isActive: pathname?.startsWith('/aurasql') },
-    { label: 'Resume', href: '/nexus', isActive: pathname?.startsWith('/nexus') },
+    { label: 'Resume', href: '/nexus', isActive: pathname?.startsWith('/nexus') && !pathname?.startsWith('/nexus/generate') },
+    { label: 'ResumeGen', href: '/nexus/generate', isActive: pathname?.startsWith('/nexus/generate') },
+    { label: 'KB', href: '/knowledge-base', isActive: pathname?.startsWith('/knowledge-base') },
+    { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
   ];
   const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
   const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests

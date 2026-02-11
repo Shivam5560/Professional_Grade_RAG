@@ -189,7 +189,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground relative overflow-x-hidden py-8 pb-28 flex flex-col items-center">
+    <div className="min-h-screen w-full bg-background text-foreground relative overflow-x-hidden flex flex-col">
       {/* Brand - Top Right Corner */}
       <div className="absolute top-4 right-4 lg:top-6 lg:right-8 z-50 flex items-center space-x-2 lg:space-x-3">
         <Button
@@ -201,25 +201,27 @@ export default function AuthPage() {
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
-        <div className="h-10 w-10 lg:h-14 lg:w-14 rounded-2xl logo-mark flex items-center justify-center shadow-2xl ring-2 ring-foreground/10 pulse-glow">
-          <span className="text-primary-foreground font-black text-sm lg:text-lg tracking-[0.2em]">NX</span>
+        <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl ring-2 ring-foreground/10 pulse-glow">
+          <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
         </div>
         <div className="flex flex-col">
-          <h1 className="text-2xl lg:text-4xl font-black tracking-tight text-foreground">
+          <h1 className="text-xl lg:text-2xl font-black tracking-tight text-foreground">
             NexusMind
           </h1>
-          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Studio RAG</span>
+          <span className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Studio RAG</span>
         </div>
       </div>
 
       {/* Aurora Background */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute inset-0 app-aurora" />
-        <div className="absolute inset-0 bg-grid-soft opacity-60" />
-        <div className="absolute inset-0 bg-noise opacity-40" />
+        <div className="absolute inset-0 bg-grid-soft opacity-40" />
+        <div className="absolute inset-0 bg-noise opacity-30" />
+        <div className="absolute -top-32 right-[-10%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.14),transparent_65%)] blur-3xl float-slow" />
+        <div className="absolute top-[15%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.16),transparent_65%)] blur-3xl float-slower" />
       </div>
 
-      <div className="w-full max-w-[1800px] grid lg:grid-cols-12 gap-6 lg:gap-12 items-start px-4 lg:px-8 relative z-10 flex-1">
+      <div className="w-full max-w-[1800px] mx-auto grid lg:grid-cols-12 gap-6 lg:gap-10 items-center px-4 lg:px-8 relative z-10 flex-1 py-8 min-h-screen">
         
         {/* Left Side - Features & Branding */}
         <motion.div
@@ -228,135 +230,80 @@ export default function AuthPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
         >
-          <div className="space-y-6">
-            <div className="inline-flex items-center space-x-3 px-5 py-2.5 bg-accent-soft rounded-full border border-border/60 backdrop-blur-sm mb-2 shadow-lg">
-              <Brain className="h-5 w-5 text-foreground" />
-              <span className="text-sm font-semibold text-foreground">Next-Gen RAG Architecture</span>
+          <div className="space-y-5">
+            <div className="inline-flex items-center space-x-3 px-4 py-2 bg-accent-soft rounded-full border border-border/60 backdrop-blur-sm shadow-md">
+              <Brain className="h-4 w-4 text-foreground" />
+              <span className="text-xs font-semibold text-foreground tracking-wide">Next-Gen RAG Architecture</span>
             </div>
             
-            <h1 className="text-5xl lg:text-8xl font-black tracking-tight leading-[1.1]">
+            <h1 className="text-4xl lg:text-7xl font-black tracking-tight leading-[1.08]">
               <span className="block text-foreground">
                 Enterprise
               </span>
               <span className="block text-accent">
                 Intelligence
               </span>
-              <span className="block text-muted-foreground">
+              <span className="block text-muted-foreground/80 text-3xl lg:text-5xl mt-1">
                 Without Limits.
               </span>
             </h1>
             
-            <p className="text-muted-foreground text-xl max-w-2xl leading-relaxed font-light">
-              A professional-grade RAG workspace with PageIndex reasoning, hybrid retrieval, and traceable source citations. Build reliable answers with streaming output, confidence scoring, and rich file context.
+            <p className="text-muted-foreground text-base lg:text-lg max-w-xl leading-relaxed">
+              Professional-grade RAG workspace with PageIndex reasoning, hybrid retrieval, confidence scoring, and traceable source citations.
             </p>
 
-            <div className="flex flex-wrap gap-3 pt-2">
-              <div className="px-4 py-2 bg-muted/70 border border-border/60 rounded-full text-sm font-medium text-foreground backdrop-blur-sm whitespace-nowrap inline-flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                PageIndex Think Mode
-              </div>
-              <div className="px-4 py-2 bg-muted/70 border border-border/60 rounded-full text-sm font-medium text-foreground backdrop-blur-sm whitespace-nowrap inline-flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                Hybrid Retrieval
-              </div>
-              <div className="px-4 py-2 bg-muted/70 border border-border/60 rounded-full text-sm font-medium text-foreground backdrop-blur-sm whitespace-nowrap inline-flex items-center gap-2">
-                <Radar className="h-4 w-4" />
-                Cross-Encoder Rerank
-              </div>
-              <div className="px-4 py-2 bg-muted/70 border border-border/60 rounded-full text-sm font-medium text-foreground backdrop-blur-sm whitespace-nowrap inline-flex items-center gap-2">
-                <LineChart className="h-4 w-4" />
-                Confidence Scoring
-              </div>
-              <div className="px-4 py-2 bg-muted/70 border border-border/60 rounded-full text-sm font-medium text-foreground backdrop-blur-sm whitespace-nowrap inline-flex items-center gap-2">
-                <FileSearch className="h-4 w-4" />
-                Source Citations
-              </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[
+                { icon: Sparkles, label: 'PageIndex Think' },
+                { icon: Layers, label: 'Hybrid Retrieval' },
+                { icon: Radar, label: 'Reranking' },
+                { icon: LineChart, label: 'Confidence' },
+                { icon: FileSearch, label: 'Citations' },
+              ].map(({ icon: Icon, label }) => (
+                <div key={label} className="px-3 py-1.5 bg-muted/50 border border-border/50 rounded-full text-xs font-medium text-foreground/80 backdrop-blur-sm inline-flex items-center gap-1.5">
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Core Capabilities</h2>
-            
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="relative bg-card/70 border border-border/70 p-6 rounded-2xl hover:border-foreground/20 transition-all duration-300 backdrop-blur-md group cursor-default shadow-lg">
-                <div className="absolute -top-2 -right-2 w-20 h-20 bg-muted/60 rounded-full blur-2xl group-hover:bg-muted/80 transition-all"></div>
-                <div className="flex items-start space-x-4 relative z-10">
-                  <div className="p-3 bg-muted/60 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                    <Zap className="h-7 w-7 text-foreground" />
+          {/* Compact feature cards */}
+          <div className="grid sm:grid-cols-2 gap-3 pt-2">
+            {[
+              { icon: Zap, title: 'Hybrid Search', desc: 'BM25 + semantic vectors with smart dedupe for precise retrieval.' },
+              { icon: Database, title: 'Smart Reranking', desc: 'Cross-encoder refinement pushes the most relevant context first.' },
+              { icon: Shield, title: 'Confidence Scoring', desc: 'Multi-signal scoring blends retrieval strength and LLM assessment.' },
+              { icon: MessageSquare, title: 'Context + Reasoning', desc: 'PageIndex traces reasoning, sources, and context per response.' },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="bg-card/50 border border-border/50 p-4 rounded-2xl hover:border-foreground/15 transition-all backdrop-blur-sm group cursor-default">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-muted/50 rounded-lg group-hover:scale-105 transition-transform">
+                    <Icon className="h-5 w-5 text-foreground/80" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-xl text-foreground mb-2">Hybrid Search</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Fuses BM25 keyword recall with semantic vectors and smart dedupe for precise, high-recall retrieval.
-                    </p>
+                    <h3 className="font-bold text-sm text-foreground mb-1">{title}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
                   </div>
                 </div>
               </div>
-
-              <div className="relative bg-card/70 border border-border/70 p-6 rounded-2xl hover:border-foreground/20 transition-all duration-300 backdrop-blur-md group cursor-default shadow-lg">
-                <div className="absolute -top-2 -right-2 w-20 h-20 bg-muted/60 rounded-full blur-2xl group-hover:bg-muted/80 transition-all"></div>
-                <div className="flex items-start space-x-4 relative z-10">
-                  <div className="p-3 bg-muted/60 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                    <Database className="h-7 w-7 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xl text-foreground mb-2">Smart Reranking</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Cross-encoder reranking refines top candidates, pushing the most relevant context to the top.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative bg-card/70 border border-border/70 p-6 rounded-2xl hover:border-foreground/20 transition-all duration-300 backdrop-blur-md group cursor-default shadow-lg">
-                <div className="absolute -top-2 -right-2 w-20 h-20 bg-muted/60 rounded-full blur-2xl group-hover:bg-muted/80 transition-all"></div>
-                <div className="flex items-start space-x-4 relative z-10">
-                  <div className="p-3 bg-muted/60 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                    <Shield className="h-7 w-7 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xl text-foreground mb-2">Confidence Scoring</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Multi-signal scoring blends retrieval strength, answer coverage, and LLM self-assessment.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative bg-card/70 border border-border/70 p-6 rounded-2xl hover:border-foreground/20 transition-all duration-300 backdrop-blur-md group cursor-default shadow-lg">
-                <div className="absolute -top-2 -right-2 w-20 h-20 bg-muted/60 rounded-full blur-2xl group-hover:bg-muted/80 transition-all"></div>
-                <div className="flex items-start space-x-4 relative z-10">
-                  <div className="p-3 bg-muted/60 rounded-xl group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                    <MessageSquare className="h-7 w-7 text-foreground" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xl text-foreground mb-2">Context + Reasoning</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      PageIndex Think Mode traces reasoning, sources, and file context for every response.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            ))}
           </div>
 
-          <div className="pt-6 border-t border-border/60 mt-6">
+          <div className="pt-4 border-t border-border/40 mt-4">
             <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center space-x-4">
-                <div className="h-14 w-14 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-xl shadow-xl ring-4 ring-foreground/10">
+              <div className="flex items-center space-x-3">
+                <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg ring-2 ring-foreground/10">
                   NX
                 </div>
                 <div>
-                  <div className="font-bold text-foreground text-lg">Shivam Sourav</div>
-                  <div className="text-sm text-muted-foreground font-medium">SDE at Nomura Fintech, Kolkata</div>
+                  <div className="font-bold text-foreground text-sm">Shivam Sourav</div>
+                  <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata</div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs text-muted-foreground mb-1">Powered by</div>
-                <div className="text-sm font-bold text-accent">
-                  LlamaIndex & Groq
-                </div>
+                <div className="text-[10px] text-muted-foreground mb-0.5">Powered by</div>
+                <div className="text-xs font-bold text-accent">LlamaIndex & Groq</div>
               </div>
             </div>
           </div>
@@ -364,22 +311,22 @@ export default function AuthPage() {
 
         {/* Right Side - Auth Form */}
         <motion.div
-          className="lg:col-span-5 w-full max-w-lg mx-auto lg:mr-0 flex items-center min-h-[calc(100vh-4rem)]"
+          className="lg:col-span-5 w-full max-w-md mx-auto lg:mr-0"
           initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: 'easeOut', delay: 0.05 }}
         >
-          <div className="relative glass-panel p-10 rounded-3xl overflow-hidden w-full">
+          <div className="relative glass-panel p-8 rounded-3xl overflow-hidden w-full">
             {/* Decorative Elements */}
-            <div className="absolute top-0 left-0 w-full h-1 bg-accent-soft" />
-            <div className="absolute -top-20 -right-20 w-64 h-64 bg-[radial-gradient(circle,rgba(124,124,255,0.2),transparent_70%)] rounded-full blur-3xl"></div>
-            <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[radial-gradient(circle,rgba(34,211,238,0.2),transparent_70%)] rounded-full blur-3xl"></div>
+            <div className="absolute top-0 left-0 w-full h-0.5 bg-accent-soft" />
+            <div className="absolute -top-20 -right-20 w-48 h-48 bg-[radial-gradient(circle,hsl(var(--chart-1)/0.15),transparent_70%)] rounded-full blur-3xl" />
+            <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[radial-gradient(circle,hsl(var(--chart-2)/0.15),transparent_70%)] rounded-full blur-3xl" />
             
-            <div className="flex flex-col space-y-3 text-center mb-10 relative z-10">
-              <h2 className="text-4xl font-black tracking-tight text-accent">
+            <div className="flex flex-col space-y-2 text-center mb-8 relative z-10">
+              <h2 className="text-3xl font-black tracking-tight text-accent">
                 Welcome Back
               </h2>
-              <p className="text-base text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Sign in to access your intelligent workspace
               </p>
             </div>
@@ -540,10 +487,10 @@ export default function AuthPage() {
             </Tabs>
             </div>
             
-            <div className="mt-10 text-center relative z-10">
-              <p className="text-xs text-muted-foreground leading-relaxed">
+            <div className="mt-8 text-center relative z-10">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 By continuing, you agree to our{" "}
-                <a href="#" className="underline underline-offset-4 hover:text-blue-400 transition-colors font-medium">Terms of Service</a>
+                <a href="#" className="underline underline-offset-4 hover:text-blue-400 transition-colors font-medium">Terms</a>
                 {" "}and{" "}
                 <a href="#" className="underline underline-offset-4 hover:text-blue-400 transition-colors font-medium">Privacy Policy</a>
               </p>
@@ -552,14 +499,15 @@ export default function AuthPage() {
         </motion.div>
       </div>
 
-      <div className="fixed bottom-5 left-1/2 z-20 w-[min(1200px,92vw)] -translate-x-1/2 overflow-hidden">
-        <div className="rounded-2xl border border-border/50 bg-background/80 backdrop-blur-xl px-5 py-4 shadow-[0_20px_60px_-45px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Stack</div>
-            <div className="text-[11px] text-muted-foreground">Core providers</div>
+      {/* Stack bar - fixed bottom */}
+      <div className="fixed bottom-4 left-1/2 z-20 w-[min(1100px,92vw)] -translate-x-1/2 overflow-hidden">
+        <div className="rounded-2xl border border-border/40 bg-background/70 backdrop-blur-xl px-4 py-3 shadow-[0_16px_48px_-40px_rgba(0,0,0,0.4)]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Stack</div>
+            <div className="text-[10px] text-muted-foreground">Core providers</div>
           </div>
-          <div className="mt-4 overflow-hidden marquee">
-            <div className="flex w-[200%] gap-4 marquee-track">
+          <div className="overflow-hidden marquee">
+            <div className="flex w-[200%] gap-3 marquee-track">
               {stackLogos.map((logo) => (
                 <LogoBadge
                   key={`${logo.name}-1`}

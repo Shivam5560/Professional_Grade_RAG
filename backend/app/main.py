@@ -14,6 +14,7 @@ from app.api.middleware import setup_middleware
 from app.api.routes import chat, documents, health, auth, history
 from app.api.routes import nexus_resume
 from app.api.routes import aurasql
+from app.api.routes import resumegen
 from app import __version__
 from app.db.database import engine, Base
 
@@ -113,6 +114,7 @@ app.include_router(documents.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(aurasql.router, prefix="/api/v1", tags=["AuraSQL"])
 app.include_router(nexus_resume.router, prefix="/api/v1", tags=["Nexus Resume"])
+app.include_router(resumegen.router, prefix="/api/v1", tags=["Resume Generator"])
 
 
 @app.get("/")

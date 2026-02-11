@@ -45,15 +45,6 @@ export function ChatInterface({
   const [servicesHealthy, setServicesHealthy] = useState(true);
   const { toast } = useToast();
 
-  // Debug: Log when messages or sessionId changes
-  useEffect(() => {
-    console.log('[ChatInterface] State updated:', {
-      sessionId,
-      messageCount: messages.length,
-      messages: messages.map(m => ({ role: m.role, contentPreview: m.content.slice(0, 50) }))
-    });
-  }, [sessionId, messages]);
-
   useEffect(() => {
     const checkHealth = async () => {
       try {
