@@ -88,38 +88,11 @@ def clean_text(s):
         return s[start_index:end_index]
     return s
 
-# Global cache for embed model (singleton pattern)
-_cached_embed_model = None
 
 def get_embed_model() -> BaseEmbedding:
-    """Retrieve the configured embedding model (remote, cohere, or ollama). Cached for reuse."""
-    global _cached_embed_model
-    
-    # Return cached instance if available
-    if _cached_embed_model is not None:
-        logger.debug("Reusing cached embed model")
-        return _cached_embed_model
-    
-    logger.info("Initializing new embed model instance")
-    provider = settings.embedding_provider
-    if provider == "remote" or settings.use_remote_embedding_service:
-        from app.services.remote_embedding_service import RemoteEmbeddingService
-
-        _cached_embed_model = RemoteEmbeddingService(
-            base_url=settings.remote_embedding_service_url,
-            model_name=settings.ollama_embedding_model,
-        )
-    elif provider == "cohere":
-        from app.services.cohere_service import get_cohere_service
-
-        _cached_embed_model = get_cohere_service().get_embed_model()
-    else:
-        from app.services.ollama_service import get_ollama_service
-
-        _cached_embed_model = get_ollama_service().get_embed_model()
-    
-    logger.info(f"Embed model initialized: {type(_cached_embed_model).__name__}")
-    return _cached_embed_model
+    """Get the shared embedding model from the unified RAG provider factory."""
+    from app.services.rag_provider_factory import get_embed_model as factory_get_embed_model
+    return factory_get_embed_model()
 
 
 def _get_text_embeddings(

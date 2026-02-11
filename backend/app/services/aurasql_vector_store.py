@@ -1,4 +1,8 @@
-"""AuraSQL vector store for schema contexts using pgvector."""
+"""AuraSQL vector store for schema contexts using pgvector.
+
+Uses the unified RAG provider factory for embedding model and pgvector store.
+Table: settings.aurasql_table_name (aurasql_embeddings)
+"""
 
 from __future__ import annotations
 
@@ -7,8 +11,7 @@ from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.schema import TextNode
 from llama_index.vector_stores.postgres import PGVectorStore
 from app.config import settings
-from app.services.ollama_service import get_ollama_service
-from app.services.remote_embedding_service import RemoteEmbeddingService
+from app.services.rag_provider_factory import get_embed_model, create_pgvector_store
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,29 +19,8 @@ logger = get_logger(__name__)
 
 class AuraSqlVectorStore:
     def __init__(self):
-        provider = settings.embedding_provider
-        if provider == "remote" or settings.use_remote_embedding_service:
-            self.embed_model = RemoteEmbeddingService(
-                base_url=settings.remote_embedding_service_url,
-                model_name=settings.ollama_embedding_model,
-            )
-        elif provider == "cohere":
-            from app.services.cohere_service import get_cohere_service
-            self.embed_model = get_cohere_service().get_embed_model()
-        else:
-            self.embed_model = get_ollama_service().get_embed_model()
-
-        embed_dim = getattr(self.embed_model, "embed_dim", 768)
-
-        self.vector_store = PGVectorStore.from_params(
-            database=settings.postgres_db,
-            host=settings.postgres_host,
-            password=settings.postgres_password,
-            port=settings.postgres_port,
-            user=settings.postgres_user,
-            table_name=settings.aurasql_table_name,
-            embed_dim=embed_dim,
-        )
+        self.embed_model = get_embed_model()
+        self.vector_store = create_pgvector_store(settings.aurasql_table_name)
 
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         self.index: Optional[VectorStoreIndex] = None

@@ -1,7 +1,7 @@
 from llama_index.core import SimpleDirectoryReader, Settings, Document
 from llama_index.core.node_parser import SentenceSplitter
 
-from app.services.groq_service import get_groq_service
+from app.services.rag_provider_factory import get_llm
 from app.services.nexus_resume_vector_store import get_nexus_resume_vector_store
 from app.utils.logger import get_logger
 
@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 
 def _prepare_llm():
-    llm = get_groq_service().get_llm()
+    llm = get_llm()
     Settings.llm = llm
     return llm
 

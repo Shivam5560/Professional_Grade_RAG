@@ -1,6 +1,9 @@
 """
 PostgreSQL vector store service with pgvector.
 Handles vector storage and retrieval operations using LlamaIndex.
+
+Uses the unified RAG provider factory for embedding model and pgvector store.
+Table: settings.postgres_table_name (rag_embeddings)
 """
 
 import os
@@ -10,8 +13,7 @@ from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core.schema import TextNode, NodeWithScore
 from app.config import settings
-from app.services.ollama_service import get_ollama_service
-from app.services.remote_embedding_service import RemoteEmbeddingService
+from app.services.rag_provider_factory import get_embed_model, create_pgvector_store
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,64 +24,18 @@ class VectorStoreService:
     
     def __init__(self):
         """Initialize PostgreSQL vector store with pgvector extension."""
-        # Get embedding model based on configuration
-        provider = settings.embedding_provider
-        if provider == "remote" or settings.use_remote_embedding_service:
-            logger.info(
-                "using_remote_embedding_service",
-                url=settings.remote_embedding_service_url,
-                model=settings.ollama_embedding_model
-            )
-            self.embed_model = RemoteEmbeddingService(
-                base_url=settings.remote_embedding_service_url,
-                model_name=settings.ollama_embedding_model
-            )
-        elif provider == "cohere":
-            from app.services.cohere_service import get_cohere_service
-            logger.info("using_cohere_embeddings", model=settings.cohere_embedding_model)
-            self.embed_model = get_cohere_service().get_embed_model()
-        else:
-            logger.info("using_local_ollama_embeddings")
-            ollama_service = get_ollama_service()
-            self.embed_model = ollama_service.get_embed_model()
+        # Get shared embedding model from factory
+        self.embed_model = get_embed_model()
         
-        # Get embedding dimension from the model
-        # Most embedding models use 768 or 1024 dimensions
-        # For Ollama's gemma model, we'll use 768 as default
-        embed_dim = getattr(self.embed_model, 'embed_dim', 768)
+        # Create pgvector store using factory
+        self.vector_store = create_pgvector_store(settings.postgres_table_name)
         
-        # Build PostgreSQL connection string
-        connection_string = (
-            f"postgresql://{settings.postgres_user}:{settings.postgres_password}"
-            f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+        logger.info(
+            "postgres_vector_store_initialized",
+            table_name=settings.postgres_table_name,
+            host=settings.postgres_host,
+            database=settings.postgres_db,
         )
-        
-        # Initialize PGVectorStore with LlamaIndex
-        try:
-            self.vector_store = PGVectorStore.from_params(
-                database=settings.postgres_db,
-                host=settings.postgres_host,
-                password=settings.postgres_password,
-                port=settings.postgres_port,
-                user=settings.postgres_user,
-                table_name=settings.postgres_table_name,
-                embed_dim=embed_dim,
-            )
-            
-            logger.info(
-                "postgres_vector_store_initialized",
-                table_name=settings.postgres_table_name,
-                host=settings.postgres_host,
-                database=settings.postgres_db,
-                embed_dim=embed_dim,
-            )
-        except Exception as e:
-            logger.error(
-                "postgres_vector_store_initialization_failed",
-                error=str(e),
-                error_type=type(e).__name__
-            )
-            raise
         
         # Create storage context
         self.storage_context = StorageContext.from_defaults(

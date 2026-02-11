@@ -1,4 +1,4 @@
-from app.services.groq_service import get_groq_service
+from app.services.rag_provider_factory import get_llm
 from ..utils.toon_util import decode_toon
 from app.utils.logger import get_logger
 
@@ -18,7 +18,7 @@ def clean_text(s):
 
 
 def getRecommendations(analysis_dict):
-    llm = get_groq_service().get_llm()
+    llm = get_llm()
 
     prompt = f"""
     You are an expert resume analysis assistant. Given comprehensive analysis data, produce a concise, professional summary in structured TOON format with TWO CRITICAL sections: 'refined_recommendations' and 'refined_justifications'.

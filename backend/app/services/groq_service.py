@@ -25,12 +25,15 @@ class GroqService:
             raise ValueError("GROQ_API_KEY must be set in environment variables")
         
         # Initialize Groq LLM with LlamaIndex
+        # Note: For openai/gpt-oss-20b model, max_tokens=8000 allows room for
+        # both reasoning tokens (internal) and content tokens (JSON output)
         self.llm = Groq(
             model=self.model,
             api_key=self.api_key,
             temperature=0.1,  # Lower temperature for more deterministic responses
-            max_tokens=settings.max_tokens,
-            context_window=128000,  # Llama 3.1 actually has 128k context
+            max_tokens=8000,  # Increased to handle reasoning + JSON output
+            context_window=128000, 
+            reasoning_effort = 'low' # Llama 3.1 actually has 128k context
         )
 
         self._aurasql_llm = Groq(
@@ -38,6 +41,16 @@ class GroqService:
             api_key=self.api_key,
             temperature=0.1,
             max_tokens=settings.aurasql_max_tokens,
+        )
+        
+        # Dedicated Nexus Resume LLM - using llama-3.1-8b-instant
+        # Fast, no reasoning overhead, great for structured JSON extraction
+        self._nexus_llm = Groq(
+            model="llama-3.1-8b-instant",
+            api_key=self.api_key,
+            temperature=0.1,
+            max_tokens=8000,
+            context_window=128000,
         )
         
         # Health check caching to prevent excessive API calls
@@ -59,6 +72,10 @@ class GroqService:
     def get_aurasql_llm(self) -> Groq:
         """Get Groq LLM tuned for AuraSQL token budgets."""
         return self._aurasql_llm
+    
+    def get_nexus_llm(self) -> Groq:
+        """Get Groq LLM optimized for Nexus Resume (llama-3.1-8b-instant)."""
+        return self._nexus_llm
     
     async def check_health(self) -> bool:
         """

@@ -213,6 +213,7 @@ class NexusResumeFile(Base):
     filename = Column(String, nullable=False)
     filepath = Column(String, nullable=False)
     status = Column(String, default="uploaded", nullable=False)
+    extracted_data = Column(JSON, nullable=True)  # Cached LLM-extracted resume data
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

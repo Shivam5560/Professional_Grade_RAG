@@ -1,13 +1,21 @@
-"""In-process Nexus resume analysis runner."""
+"""In-process Nexus resume analysis runner.
 
-import json
+Optimized for exactly 3 LLM calls per analysis:
+  1. Resume extraction (TOON format)
+  2. JD extraction (TOON format)  
+  3. Recommendations generation
+
+Uses the unified RAG provider factory for LLM access.
+"""
+
 import random
 import string
-from typing import Dict
+import time
+from typing import Dict, Optional
 
 from fastapi import HTTPException
 
-from app.services.groq_service import get_groq_service
+from app.services.rag_provider_factory import get_llm
 from app.services.nexus_ai.services.resume_analyzer_service import PracticalResumeAnalyzer
 from app.services.nexus_ai.services.query_service import generate_query_engine
 from app.services.nexus_ai.services.recommendation_service import getRecommendations
@@ -19,10 +27,12 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_EMPTY_RESPONSE_MARKERS = {"empty response"}
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
 
-_RESUME_TOON_SCHEMA = """
-personal_info:
+# Minimal schema for recovery parsing
+_RESUME_TOON_SCHEMA = """personal_info:
     name:
     email:
     phone:
@@ -43,11 +53,9 @@ certifications[0]:
     name:
     description:
 summary:
-key_responsibilities[0]:
-"""
+key_responsibilities[0]:"""
 
-_JD_TOON_SCHEMA = """
-job_title:
+_JD_TOON_SCHEMA = """job_title:
 company_name:
 location:
 required_skills[0]:
@@ -55,43 +63,11 @@ required_experience_years:
 key_responsibilities[0]:
 other_qualifications[0]:
 industry:
-summary:
-"""
-
-
-def _is_empty_response(text: str) -> bool:
-        if not text:
-                return True
-        stripped = text.strip()
-        if not stripped:
-                return True
-        return stripped.lower() in _EMPTY_RESPONSE_MARKERS
-
-
-def _trim_source(text: str, max_chars: int) -> str:
-        if len(text) <= max_chars:
-                return text
-        head = text[: int(max_chars * 0.7)]
-        tail = text[-int(max_chars * 0.3) :]
-        return f"{head}\n...\n{tail}"
-
-
-def _fallback_toon_extract(source_text: str, schema: str, label: str, max_chars: int) -> str:
-        llm = get_groq_service().get_llm()
-        trimmed = _trim_source(source_text, max_chars)
-        prompt = (
-                "Return TOON only. No markdown or code fences.\n\n"
-                "Use this schema exactly:\n"
-                f"{schema}\n"
-                "\nSource text:\n"
-                f"{trimmed}"
-        )
-        logger.warning("%s fallback prompt length: %s chars", label, len(prompt))
-        response = llm.complete(prompt)
-        return response.text or ""
+summary:"""
 
 
 def _convert_to_normal_types(data: Dict) -> Dict:
+    """Convert numpy types to native Python types recursively."""
     new_data: Dict = {}
     for key, value in data.items():
         if hasattr(value, "item"):
@@ -105,7 +81,34 @@ def _convert_to_normal_types(data: Dict) -> Dict:
     return new_data
 
 
+def _extract_response_text(response) -> str:
+    """Best-effort extraction of LLM text across response shapes."""
+    text = getattr(response, "text", "") or ""
+    if text.strip():
+        return text
+
+    raw = getattr(response, "raw", None)
+    if isinstance(raw, dict):
+        choices = raw.get("choices") or []
+        if choices:
+            message = choices[0].get("message") or {}
+            content = message.get("content") or ""
+            if content.strip():
+                logger.warning("LLM response text empty; using raw content fallback")
+                return content
+
+    message = getattr(response, "message", None)
+    if message is not None:
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and content.strip():
+            logger.warning("LLM response text empty; using message content fallback")
+            return content
+
+    return text
+
+
 def _process_resume_documents(documents) -> str:
+    """Extract raw text from document objects."""
     texts = []
     for doc in documents:
         if hasattr(doc, "get_content") and callable(doc.get_content):
@@ -117,108 +120,255 @@ def _process_resume_documents(documents) -> str:
     return "".join(texts)
 
 
-def _process_job_description(jd: str) -> Dict:
-    from llama_index.core.schema import QueryBundle
+def _extract_resume(resume_text: str, context_str: str) -> Dict:
+    """
+    LLM Call #1: Extract structured resume data.
+    Uses a robust prompt that includes fallback instructions inline.
+    Includes retry logic for transient LLM failures.
+    """
+    llm = get_llm()
     
-    jd_id = "".join(random.choices(string.ascii_letters + string.digits, k=10))
-    retriever, documents_jd = generate_query_engine(jd, jd_id, read_from_text=True, jd=True)
+    # Robust prompt with schema inline to avoid fallback calls
+    prompt = f"""{TEMPLATE}
 
-    if not retriever or not documents_jd:
-        raise HTTPException(status_code=400, detail="Query engine for job description failed")
+CRITICAL OUTPUT RULES:
+- Return ONLY valid TOON format (indented key: value pairs)
+- NO markdown code fences (no ```toon or ```)
+- NO JSON format
+- Use empty string "" for missing fields
+- Use empty array notation for missing lists
 
-    logger.info("Querying LLM for JD extraction")
-    
-    # Retrieve nodes
-    nodes = retriever.retrieve(QueryBundle(query_str=JD_TEMPLATE[:200]))  # Use snippet as query
-    
-    # Build context from nodes
-    context_str = "\n\n".join([node.node.get_content() for node in nodes])
-    
-    # Direct LLM call with full template (128k context model)
-    llm = get_groq_service().get_llm()
-    prompt = f"{JD_TEMPLATE}\n\nJob Description Text:\n{context_str}"
-    logger.info(f"JD prompt length: {len(prompt)} chars")
-    
-    response_jd = llm.complete(prompt)
-    
-    logger.info(f"JD LLM response length: {len(response_jd.text)} chars")
+TOON SCHEMA TO FOLLOW:
+{_RESUME_TOON_SCHEMA}
 
-    raw_jd = response_jd.text or ""
-    if _is_empty_response(raw_jd):
-        logger.warning("JD response empty; retrying with fallback prompt")
-        raw_jd = _fallback_toon_extract(jd, _JD_TOON_SCHEMA, "JD", max_chars=8000)
-
-    result = decode_toon(raw_jd)
+Resume Text:
+{context_str if context_str else resume_text[:15000]}"""
     
-    # Validate parsing succeeded
-    if "_parse_error" in result:
-        logger.error(f"JD TOON parsing failed: {result.get('_parse_error')}")
-        logger.error(f"Raw JD response (first 1000 chars): {raw_jd[:1000]}")
+    logger.info(f"Resume extraction prompt: {len(prompt)} chars")
+    
+    # Retry loop for transient LLM failures
+    last_error = None
+    raw_response = ""
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = llm.complete(prompt)
+            raw_response = _extract_response_text(response)
+            
+            logger.info(f"Resume LLM response: {len(raw_response)} chars (attempt {attempt + 1})")
+            
+            if raw_response.strip():
+                break
+            
+            # Empty response - retry with backoff
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"Empty LLM response, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+        except Exception as e:
+            last_error = e
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"LLM call failed: {e}, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"LLM call failed after {MAX_RETRIES} retries: {str(last_error)}"
+                )
+    
+    if not raw_response.strip():
         raise HTTPException(
-            status_code=500, 
-            detail="Failed to parse job description from LLM response. The response may be truncated."
+            status_code=500,
+            detail=f"LLM returned empty response for resume extraction after {MAX_RETRIES} attempts"
+        )
+    
+    # Clean any accidental markdown fences
+    cleaned = clean_text(raw_response)
+    result = decode_toon(cleaned)
+    
+    if "_parse_error" in result:
+        logger.error(f"Resume TOON parse error: {result.get('_parse_error')}")
+        logger.error(f"First 500 chars: {cleaned[:500]}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse resume extraction. LLM response format invalid."
         )
     
     return result
 
 
-def analyze_resume(abs_path: str, jd: str, resume_id: str) -> Dict:
+def _extract_jd(jd_text: str, context_str: str) -> Dict:
+    """
+    LLM Call #2: Extract structured job description data.
+    Uses a robust prompt that includes fallback instructions inline.
+    Includes retry logic for transient LLM failures.
+    """
+    llm = get_llm()
+    
+    # Robust prompt with schema inline to avoid fallback calls
+    prompt = f"""{JD_TEMPLATE}
+
+CRITICAL OUTPUT RULES:
+- Return ONLY valid TOON format (indented key: value pairs)
+- NO markdown code fences (no ```toon or ```)
+- NO JSON format
+- Use empty string "" for missing fields
+- Use empty array notation for missing lists
+
+TOON SCHEMA TO FOLLOW:
+{_JD_TOON_SCHEMA}
+
+Job Description Text:
+{context_str if context_str else jd_text[:15000]}"""
+
+    # Shorter fallback prompt for retries if the full template yields empty output
+    fallback_prompt = f"""
+Extract job description data into TOON format. Use ONLY explicit info.
+
+Output rules:
+- TOON format only
+- No markdown code fences
+- Empty string "" for missing fields
+- Empty array notation for missing lists
+
+TOON schema:
+{_JD_TOON_SCHEMA}
+
+Job Description Text:
+{context_str if context_str else jd_text[:15000]}
+"""
+    
+    logger.info(f"JD extraction prompt: {len(prompt)} chars")
+    
+    # Retry loop for transient LLM failures
+    last_error = None
+    raw_response = ""
+    for attempt in range(MAX_RETRIES):
+        try:
+            prompt_to_use = prompt if attempt == 0 else fallback_prompt
+            response = llm.complete(prompt_to_use)
+            raw_response = _extract_response_text(response)
+            
+            logger.info(f"JD LLM response: {len(raw_response)} chars (attempt {attempt + 1})")
+            
+            if raw_response.strip():
+                break
+            
+            # Empty response - retry with backoff
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"Empty LLM response for JD, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+        except Exception as e:
+            last_error = e
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"LLM call failed for JD: {e}, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"LLM call failed for JD after {MAX_RETRIES} retries: {str(last_error)}"
+                )
+    
+    if not raw_response.strip():
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM returned empty response for JD extraction after {MAX_RETRIES} attempts"
+        )
+    
+    # Clean any accidental markdown fences
+    cleaned = clean_text(raw_response)
+    result = decode_toon(cleaned)
+    
+    if "_parse_error" in result:
+        logger.error(f"JD TOON parse error: {result.get('_parse_error')}")
+        logger.error(f"First 500 chars: {cleaned[:500]}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse JD extraction. LLM response format invalid."
+        )
+    
+    return result
+
+
+def analyze_resume(abs_path: str, jd: str, resume_id: str, cached_resume_data: Optional[Dict] = None) -> Dict:
+    """
+    Main resume analysis entry point.
+    
+    Performs 2-3 LLM calls per analysis:
+      1. Resume extraction (SKIPPED if cached_resume_data provided)
+      2. JD extraction
+      3. Recommendations generation
+    
+    Technical scoring and grammar analysis are done algorithmically (no LLM).
+    
+    Args:
+        abs_path: Path to resume file
+        jd: Job description text
+        resume_id: Unique resume identifier
+        cached_resume_data: If provided, skips LLM Call #1 (for subsequent analyses)
+    
+    Returns:
+        Dict with analysis results and `_extracted_resume_data` key for caching
+    """
     from llama_index.core.schema import QueryBundle
     
     analyzer = PracticalResumeAnalyzer()
 
+    # --- Step 1: Load and chunk resume ---
     retriever, documents = generate_query_engine(abs_path, resume_id, read_from_text=False)
     if not retriever or not documents:
-        raise HTTPException(status_code=400, detail="Failed to process documents")
+        raise HTTPException(status_code=400, detail="Failed to process resume document")
 
     resume_text = _process_resume_documents(documents)
+    
+    # Check if we can use cached resume data
+    if cached_resume_data and isinstance(cached_resume_data, dict) and len(cached_resume_data) > 0:
+        logger.info("Using cached resume extraction (skipping LLM Call #1)")
+        resume_dict = cached_resume_data
+    else:
+        # Retrieve relevant chunks for context
+        nodes = retriever.retrieve(QueryBundle(
+            query_str="extract resume information personal info education work experience skills projects"
+        ))
+        logger.info(f"Retrieved {len(nodes)} resume chunks")
+        context_str = "\n\n".join([node.node.get_content() for node in nodes])
 
-    logger.info("Querying LLM for resume extraction")
+        # --- LLM CALL #1: Resume extraction ---
+        logger.info("LLM Call #1: Resume extraction")
+        resume_dict = _extract_resume(resume_text, context_str)
     
-    # Retrieve nodes using template snippet as query
-    nodes = retriever.retrieve(QueryBundle(query_str="extract resume information personal info education work experience"))
-    logger.info(f"Retrieved {len(nodes)} nodes for resume")
+    # --- Step 2: Load and chunk JD ---
+    jd_id = "".join(random.choices(string.ascii_letters + string.digits, k=10))
+    jd_retriever, jd_documents = generate_query_engine(jd, jd_id, read_from_text=True, jd=True)
     
-    # Build context from nodes
-    context_str = "\n\n".join([node.node.get_content() for node in nodes])
+    if not jd_retriever or not jd_documents:
+        raise HTTPException(status_code=400, detail="Failed to process job description")
     
-    # Direct LLM call with full templates (128k context model)
-    llm = get_groq_service().get_llm()
-    prompt = f"{TEMPLATE}\n\nResume Text:\n{context_str}"
-    logger.info(f"Prompt length: {len(prompt)} chars")
-    
-    response = llm.complete(prompt)
-    logger.info(f"LLM response length: {len(response.text)} chars")
+    # Retrieve relevant chunks for context
+    jd_nodes = jd_retriever.retrieve(QueryBundle(
+        query_str="extract job requirements skills responsibilities qualifications"
+    ))
+    logger.info(f"Retrieved {len(jd_nodes)} JD chunks")
+    jd_context_str = "\n\n".join([node.node.get_content() for node in jd_nodes])
 
-    raw_resume = response.text or ""
-    if _is_empty_response(raw_resume):
-        logger.warning("Resume response empty; retrying with fallback prompt")
-        raw_resume = _fallback_toon_extract(resume_text, _RESUME_TOON_SCHEMA, "Resume", max_chars=12000)
+    # --- LLM CALL #2: JD extraction ---
+    logger.info("LLM Call #2: JD extraction")
+    job_description_dict = _extract_jd(jd, jd_context_str)
 
-    response_text = clean_text(raw_resume)
-    logger.info(f"Cleaned response length: {len(response_text)} chars")
-    
-    resume_dict = decode_toon(response_text)
-    
-    # Validate resume parsing succeeded
-    if "_parse_error" in resume_dict:
-        logger.error(f"Resume TOON parsing failed: {resume_dict.get('_parse_error')}")
-        logger.error(f"Raw response (first 1000 chars): {raw_resume[:1000]}")
-        logger.error(f"Cleaned text (first 1000 chars): {response_text[:1000]}")
-        raise HTTPException(
-            status_code=500, 
-            detail="Failed to parse resume from LLM response. The response may be truncated due to context limits."
-        )
-
-    job_description_dict = _process_job_description(jd)
-
+    # --- Step 3: Technical scoring (algorithmic, no LLM) ---
+    logger.info("Computing technical score (algorithmic)")
     technical = advanced_ats_similarity(resume_dict, job_description_dict)
     technical = _convert_to_normal_types(technical)
 
+    # --- Step 4: Grammar analysis (algorithmic, no LLM) ---
+    logger.info("Computing grammar score (algorithmic)")
     grammar_score, recommendations, section_scores, justifications = analyzer.analyze_resume(
         resume_text, resume_dict, industry=job_description_dict.get("industry", "default")
     )
 
+    # --- Step 5: Calculate overall score ---
     overall_score = (technical["similarity_score"] * 0.55 + grammar_score * 0.45)
     overall_score = min(round(overall_score, 2), 100)
 
@@ -232,14 +382,16 @@ def analyze_resume(abs_path: str, jd: str, resume_id: str) -> Dict:
         },
         "justifications": justifications,
         "resume_data": dict(resume_dict),
+        "jd_data": dict(job_description_dict),
     }
 
-    logger.info("Calling getRecommendations to generate refined output")
+    # --- LLM CALL #3: Generate recommendations ---
+    logger.info("LLM Call #3: Generate recommendations")
     refined_out = getRecommendations(analysis_results)
     
     if isinstance(refined_out, dict):
         if "error" in refined_out:
-            logger.error(f"Recommendation generation error: {refined_out.get('details')}")
+            logger.error(f"Recommendation error: {refined_out.get('details')}")
         else:
             rec_count = len(refined_out.get("refined_recommendations", []))
             just_count = len(refined_out.get("refined_justifications", []))
@@ -249,4 +401,9 @@ def analyze_resume(abs_path: str, jd: str, resume_id: str) -> Dict:
     else:
         logger.warning(f"getRecommendations returned non-dict: {type(refined_out)}")
 
+    # Include extracted resume data for caching (only if we did the extraction this time)
+    if not cached_resume_data:
+        analysis_results["_extracted_resume_data"] = dict(resume_dict)
+
+    logger.info(f"Analysis complete. Overall score: {overall_score}")
     return analysis_results

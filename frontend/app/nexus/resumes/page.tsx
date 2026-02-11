@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle2, Upload } from 'lucide-react';
+import { CheckCircle2, Upload, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
@@ -25,6 +25,7 @@ export default function NexusResumeSelectPage() {
   const [history, setHistory] = useState<ResumeHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -109,6 +110,26 @@ export default function NexusResumeSelectPage() {
   const handleContinue = () => {
     if (!selectedResume) return;
     router.push('/nexus/jd');
+  };
+
+  const handleDelete = async (resume: ResumeFileInfo, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't select the resume when clicking delete
+    if (!user) return;
+    if (!confirm(`Delete "${resume.filename}"? This will remove the resume and all its analyses.`)) return;
+    
+    setDeleting(resume.resume_id);
+    try {
+      await apiClient.deleteResume(user.id, resume.resume_id);
+      // Clear selection if the deleted resume was selected
+      if (selectedResume?.resume_id === resume.resume_id) {
+        setSelectedResume(null);
+      }
+      await loadData(user.id);
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setDeleting(null);
+    }
   };
 
   return (
@@ -209,6 +230,15 @@ export default function NexusResumeSelectPage() {
                               <Badge variant="secondary" className="bg-foreground/10 text-foreground">
                                 {resume.status}
                               </Badge>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDelete(resume, e)}
+                                disabled={deleting === resume.resume_id}
+                                className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                title="Delete resume"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">Uploaded {formatDate(resume.created_at)}</p>

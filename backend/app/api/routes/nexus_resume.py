@@ -21,6 +21,7 @@ from app.services.nexus_resume_service import (
     analyze_resume,
     list_history,
     build_dashboard,
+    delete_resume,
 )
 
 router = APIRouter(prefix="/nexus", tags=["Nexus"])
@@ -38,12 +39,16 @@ def _serialize_resume(resume: NexusResumeFile) -> ResumeFileInfo:
 
 
 def _serialize_analysis(analysis: NexusResumeAnalysis) -> ResumeAnalyzeResponse:
+    analysis_data = analysis.analysis or {}
     return ResumeAnalyzeResponse(
         analysis_id=analysis.id,
         resume_id=analysis.resume_id,
         overall_score=analysis.overall_score,
         job_description=analysis.job_description,
-        analysis=analysis.analysis,
+        analysis=analysis_data,
+        refined_recommendations=analysis_data.get("refined_recommendations"),
+        refined_justifications=analysis_data.get("refined_justifications"),
+        resume_data=analysis_data.get("resume_data"),
         created_at=analysis.created_at.isoformat() if analysis.created_at else "",
     )
 
@@ -93,3 +98,17 @@ async def resume_dashboard_endpoint(user_id: int, db: Session = Depends(get_db))
         monthly_stats=dashboard.get("monthly_stats", []),
         latest_analysis=_serialize_analysis(latest) if latest else None,
     )
+
+
+@router.delete("/resumes/{user_id}/{resume_id}", status_code=status.HTTP_200_OK)
+async def delete_resume_endpoint(user_id: int, resume_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a resume and all associated data.
+    
+    This removes:
+    - The resume file from disk
+    - All analysis records for this resume
+    - All vector embeddings for this resume
+    """
+    delete_resume(db, user_id, resume_id)
+    return {"message": "Resume deleted successfully", "resume_id": resume_id}
