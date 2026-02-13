@@ -21,7 +21,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
   const { confirm, toast } = useToast();
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   const loadHistory = useCallback(async () => {
@@ -30,7 +29,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
       try {
         const sessions = await apiClient.getChatHistory(user.id);
         setHistory(sessions);
-        setHasLoadedOnce(true);
         // Cache in sessionStorage for instant load on navigation
         try {
           sessionStorage.setItem(`chat_history_${user.id}`, JSON.stringify(sessions));
@@ -43,7 +41,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
       }
     } else {
       setHistory([]);
-      setHasLoadedOnce(false);
     }
   }, [user]);
 
@@ -58,7 +55,6 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
         const age = Date.now() - Number(cachedTs);
         if (age < 5 * 60 * 1000) { // 5 minute cache
           setHistory(JSON.parse(cached));
-          setHasLoadedOnce(true);
         }
       }
     } catch { /* corrupt cache — ignore */ }

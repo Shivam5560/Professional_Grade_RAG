@@ -96,6 +96,7 @@ export default function AuthPage() {
             dangerouslySetInnerHTML={{ __html: inlineSvg }}
           />
         ) : !hidden && src ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
             alt=""
@@ -531,4 +532,3 @@ export default function AuthPage() {
     </div>
   )
 }
-

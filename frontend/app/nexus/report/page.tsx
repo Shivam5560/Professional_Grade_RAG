@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,6 @@ import {
   Hash,
   Lightbulb,
   Mail,
-  Phone,
   Search,
   Sparkles,
   Star,
@@ -150,11 +149,11 @@ const MiniScore = ({
 );
 
 /* ──────────────────── section variants ───────────────────────── */
-const container: any = {
+const container: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
 };
-const item: any = {
+const item: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.55 } },
 };
@@ -165,11 +164,12 @@ const item: any = {
 export default function NexusReportPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const { analysis, selectedResume, jobDescription, reset } = useNexusFlowStore();
+  const { analysis, selectedResume, reset } = useNexusFlowStore();
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
   /* ── unwrap analysis payload ─────────────────────────────────── */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = useMemo<Record<string, any>>(() => {
     const raw = analysis?.analysis ?? analysis ?? {};
     if (typeof raw === 'string') {
@@ -204,6 +204,7 @@ export default function NexusReportPage() {
   const recs     = useMemo(() => {
     const raw = d.refined_recommendations ?? d.recommendations ?? [];
     if (!Array.isArray(raw)) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return raw.filter((x: any) => x && (typeof x === 'object' || typeof x === 'string'));
   }, [d]);
 
@@ -599,6 +600,7 @@ export default function NexusReportPage() {
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {Object.entries(sections).map(([key, val]: [string, any]) => {
                   const q = val.quality ?? '';
                   const qualityColor = q === 'good' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30' :
@@ -802,6 +804,7 @@ export default function NexusReportPage() {
                   <div>
                     <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Experience</p>
                     <div className="space-y-3">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {experience.map((exp: any, i: number) => (
                         <div key={`exp-${i}`} className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
                           <div className="flex items-center justify-between mb-1">
@@ -831,12 +834,13 @@ export default function NexusReportPage() {
                 {education.length > 0 && (
                   <div>
                     <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Education</p>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     {education.map((edu: any, i: number) => (
-                      <div key={`edu-${i}`} className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-                        <p className="text-sm font-semibold">{edu.degree}</p>
-                        <p className="text-xs text-muted-foreground">{edu.institution} · {edu.year}</p>
-                        {edu.gpa && <p className="text-xs text-foreground/60 mt-1">GPA: {edu.gpa}</p>}
-                      </div>
+                        <div key={`edu-${i}`} className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
+                          <p className="text-sm font-semibold">{edu.degree}</p>
+                          <p className="text-xs text-muted-foreground">{edu.institution} · {edu.year}</p>
+                          {edu.gpa && <p className="text-xs text-foreground/60 mt-1">GPA: {edu.gpa}</p>}
+                        </div>
                     ))}
                   </div>
                 )}
@@ -866,6 +870,7 @@ export default function NexusReportPage() {
               <p className="text-sm text-muted-foreground mb-6">Actionable improvements prioritized by impact</p>
 
               <div className="grid gap-4 md:grid-cols-2">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 {recs.map((rec: any, idx: number) => {
                   if (typeof rec === 'string') {
                     return (

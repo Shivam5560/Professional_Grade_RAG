@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,7 @@ export default function NexusResumeSelectPage() {
     setIsMounted(true);
   }, []);
 
-  const loadData = async (userId: number) => {
+  const loadData = useCallback(async (userId: number) => {
     setLoading(true);
     try {
       const [resumeData, dashboardData, historyData] = await Promise.all([
@@ -52,12 +52,12 @@ export default function NexusResumeSelectPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (!isMounted || !isAuthenticated || !user) return;
     loadData(user.id);
-  }, [isMounted, isAuthenticated, user]);
+  }, [isMounted, isAuthenticated, user, loadData]);
 
   const stats = dashboard?.resume_stats ?? { total: 0, analyzed: 0, pending: 0 };
   const formatDate = (value?: string) => {

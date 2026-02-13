@@ -64,7 +64,7 @@ export function ChatInterface({
     };
 
     checkHealth();
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     const loadPrompts = async () => {

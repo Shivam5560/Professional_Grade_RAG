@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -67,7 +70,7 @@ const formatSql = (sql: string) => {
 
 const highlightSql = (sql: string) => Prism.highlight(formatSql(sql), Prism.languages.sql, 'sql');
 
-export default function AuraSqlQueryPage() {
+function AuraSqlQueryPageContent() {
   const params = useSearchParams();
   const { isAuthenticated } = useAuthStore();
   const { toast } = useToast();
@@ -92,7 +95,6 @@ export default function AuraSqlQueryPage() {
   const [inputValue, setInputValue] = useState('');
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [recsOpen, setRecsOpen] = useState(false);
-  const [recsLocked, setRecsLocked] = useState(false);
   const [recsByContext, setRecsByContext] = useState<Record<string, string[]>>({});
   const [lastRecsContextId, setLastRecsContextId] = useState<string | null>(null);
   const [recsConfirmOpen, setRecsConfirmOpen] = useState(false);
@@ -100,7 +102,7 @@ export default function AuraSqlQueryPage() {
   const [recsConfirmPrevContextId, setRecsConfirmPrevContextId] = useState<string | null>(null);
   const [historyBanner, setHistoryBanner] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [autoScrollEnabled] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -112,14 +114,14 @@ export default function AuraSqlQueryPage() {
   const [loadingExecute, setLoadingExecute] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reportError = (message: string) => {
+  const reportError = useCallback((message: string) => {
     setError(message);
     toast({
       title: 'Action failed',
       description: message,
       variant: 'destructive',
     });
-  };
+  }, [toast]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -145,11 +147,6 @@ export default function AuraSqlQueryPage() {
     if (!filter) return tableList;
     return tableList.filter((table) => table.toLowerCase().includes(filter));
   }, [tableFilter, tableList]);
-
-  const displayTables = useMemo(
-    () => (tableList.length > 0 ? tableList : Array.from(selectedTables)),
-    [tableList, selectedTables]
-  );
 
   const hasUnsavedChanges = useMemo(() => {
     if (!selectedContextRecord) return selectedTables.size > 0;
@@ -187,7 +184,7 @@ export default function AuraSqlQueryPage() {
     }
     setSelectedTables(new Set(selectedContextRecord.table_names));
     setNewTables(new Set());
-  }, [selectedContextRecord?.id]);
+  }, [selectedContextRecord]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -311,7 +308,7 @@ export default function AuraSqlQueryPage() {
     }
   };
 
-  const handleFetchTables = async () => {
+  const handleFetchTables = useCallback(async () => {
     if (!selectedConnection) return;
     setLoadingTables(true);
     setError(null);
@@ -323,7 +320,7 @@ export default function AuraSqlQueryPage() {
     } finally {
       setLoadingTables(false);
     }
-  };
+  }, [selectedConnection, reportError]);
 
   useEffect(() => {
     if (!selectedConnection) {
@@ -331,7 +328,7 @@ export default function AuraSqlQueryPage() {
       return;
     }
     handleFetchTables();
-  }, [selectedConnection]);
+  }, [selectedConnection, handleFetchTables]);
 
   const handleToggleTable = (table: string) => {
     setSelectedTables((prev) => {
@@ -344,12 +341,6 @@ export default function AuraSqlQueryPage() {
       setNewTables(new Set([...next].filter((name) => !baselineTables.has(name))));
       return next;
     });
-  };
-
-  const handleSelectNewTables = () => {
-    if (newTables.size === 0) return;
-    setSelectedTables((prev) => new Set([...prev, ...newTables]));
-    setNewTables(new Set());
   };
 
   const handleUseSessionContext = async () => {
@@ -422,7 +413,6 @@ export default function AuraSqlQueryPage() {
       setRecsByContext((prev) => ({ ...prev, [contextId]: recs }));
       setLastRecsContextId(contextId);
       setRecsOpen(true);
-      setRecsLocked(true);
     } catch (err) {
       reportError(err instanceof Error ? err.message : 'Failed to generate recommendations');
     } finally {
@@ -436,7 +426,6 @@ export default function AuraSqlQueryPage() {
     if (currentRecs && currentRecs.length > 0) {
       setRecommendations(currentRecs);
       setRecsOpen(true);
-      setRecsLocked(true);
       setLastRecsContextId(activeContextId);
       return;
     }
@@ -1276,7 +1265,6 @@ export default function AuraSqlQueryPage() {
                     onClick={() => {
                       setInputValue(rec);
                       setRecsOpen(false);
-                      setRecsLocked(true);
                     }}
                   >
                     {rec}
@@ -1304,7 +1292,6 @@ export default function AuraSqlQueryPage() {
                   if (recsConfirmPrevContextId && recsByContext[recsConfirmPrevContextId]) {
                     setRecommendations(recsByContext[recsConfirmPrevContextId]);
                     setRecsOpen(true);
-                    setRecsLocked(true);
                   }
                   setRecsConfirmOpen(false);
                 }}
@@ -1326,5 +1313,13 @@ export default function AuraSqlQueryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AuraSqlQueryPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuraSqlQueryPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,9 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +15,7 @@ import { AuraSqlConnection } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 
-export default function NewAuraSqlContextPage() {
+function NewAuraSqlContextPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const { isAuthenticated } = useAuthStore();
@@ -209,5 +212,13 @@ export default function NewAuraSqlContextPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function NewAuraSqlContextPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewAuraSqlContextPageContent />
+    </Suspense>
   );
 }
