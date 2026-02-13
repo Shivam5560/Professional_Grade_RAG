@@ -508,39 +508,19 @@ class ApiClient {
   }
 
   async generateResumePdf(data: ResumeGenData): Promise<Blob> {
-    const url = `${BASE_PATH}/resumegen/generate`;
-    const normalizedData = this.normalizeResumeGenPayload(data);
-    const response = await fetch(url, {
+    const latex = await this.generateResumeLatex(data);
+
+    const response = await fetch('/api/latex-to-pdf', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...this.getAuthHeaders(),
       },
-      body: JSON.stringify({ data: normalizedData, format: 'pdf' }),
-    });
-
-    if (response.status === 401) {
-      const refreshed = await this.refreshTokens();
-      if (refreshed) {
-        const retry = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.getAuthHeaders(),
-          },
-          body: JSON.stringify({ data: normalizedData, format: 'pdf' }),
-        });
-        if (!retry.ok) {
-          const err = await retry.json().catch(() => ({ detail: 'Generation failed' }));
-          throw new Error(err.detail || `HTTP ${retry.status}`);
-        }
-        return retry.blob();
-      }
-    }
+      body: JSON.stringify({ latex }),
+    });    
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: 'Generation failed' }));
-      throw new Error(err.detail || `HTTP ${response.status}`);
+      const err = await response.json().catch(() => ({ error: 'Generation failed' }));
+      throw new Error(err.detail || err.error || `HTTP ${response.status}`);
     }
     return response.blob();
   }

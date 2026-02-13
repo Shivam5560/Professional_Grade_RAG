@@ -65,11 +65,11 @@ export default function ResumeGenPage() {
 
   useEffect(() => { setIsMounted(true); }, []);
 
-  /* ── Check LaTeX health once ────────────────────────── */
+  /* ── Check PDF API health once ──────────────────────── */
   useEffect(() => {
     if (!isAuthenticated) return;
-    apiClient.checkResumeGenHealth()
-      .then((r) => setLatexAvailable(r.latex_available))
+    fetch('/api/latex-to-pdf')
+      .then((r) => setLatexAvailable(r.ok))
       .catch(() => setLatexAvailable(false));
   }, [isAuthenticated]);
 
@@ -169,12 +169,12 @@ export default function ResumeGenPage() {
               <div className="flex items-center gap-2">
                 {latexAvailable === false && (
                   <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 gap-1.5">
-                    <AlertCircle className="h-3 w-3" /> pdflatex not installed
+                    <AlertCircle className="h-3 w-3" /> PDF API unavailable
                   </Badge>
                 )}
                 {latexAvailable === true && (
                   <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 gap-1.5">
-                    <CheckCircle2 className="h-3 w-3" /> LaTeX ready
+                    <CheckCircle2 className="h-3 w-3" /> PDF API ready
                   </Badge>
                 )}
               </div>
@@ -490,7 +490,7 @@ export default function ResumeGenPage() {
                     <div className="flex flex-wrap gap-3 pt-2">
                       <Button onClick={handleDownloadPdf} disabled={generating || !name || !email} className="gap-2">
                         {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        {latexAvailable === false ? 'PDF unavailable' : 'Download PDF'}
+                        Download PDF
                       </Button>
                       <Button variant="outline" onClick={handleDownloadLatex} disabled={generating || !name || !email} className="gap-2">
                         <FileText className="h-4 w-4" />
@@ -500,8 +500,7 @@ export default function ResumeGenPage() {
 
                     {latexAvailable === false && (
                       <p className="text-xs text-amber-600 dark:text-amber-400">
-                        pdflatex is not installed on the server. You can still download the .tex source and compile locally.
-                        Run <code className="font-mono bg-muted px-1 rounded">scripts/install-latex.sh</code> to install.
+                        PDF conversion API is unavailable right now. You can still download the .tex source and compile locally.
                       </p>
                     )}
                   </div>
