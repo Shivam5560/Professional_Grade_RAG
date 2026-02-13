@@ -1,10 +1,6 @@
-"""
-Reranker using either local SentenceTransformerRerank or remote Lightning.ai service.
-Supports both local and cloud-based reranking.
-"""
+"""Reranker using remote Lightning.ai service or Cohere."""
 
 from typing import Optional, List
-from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from app.config import settings
 from app.utils.logger import get_logger
@@ -94,17 +90,16 @@ class RemoteRerankerWrapper:
 
 def get_reranker(top_n: Optional[int] = None, model: Optional[str] = None):
     """
-    Create a reranker instance - either local or remote based on settings.
+    Create a reranker instance based on settings.
     
     Args:
         top_n: Number of top results (default from config)
-        model: Model name (default: BAAI/bge-reranker-v2-m3)
+        model: Unused (kept for backward compatibility)
         
     Returns:
-        Reranker instance (local or remote wrapper)
+        Reranker instance (cohere or remote wrapper)
     """
     top_n = top_n or settings.top_k_rerank
-    model = model or "BAAI/bge-reranker-v2-m3"
 
     if settings.reranker_provider == "cohere":
         from app.services.cohere_service import get_cohere_service
@@ -128,17 +123,8 @@ def get_reranker(top_n: Optional[int] = None, model: Optional[str] = None):
             top_n=top_n
         )
     else:
-        # Use local SentenceTransformerRerank
-        reranker = SentenceTransformerRerank(
-            model=model,
-            top_n=top_n,
-        )
-        logger.info(
-            "reranker_initialized",
-            model=model,
-            top_n=top_n,
-            type="local_SentenceTransformerRerank"
+        raise ValueError(
+            f"Unsupported reranker provider '{settings.reranker_provider}'. Use 'remote' or 'cohere'."
         )
     
     return reranker
-

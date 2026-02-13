@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices, model_validator
 
 from app.services.resume_generator import (
     generate_resume_pdf,
@@ -26,32 +26,40 @@ router = APIRouter(prefix="/resumegen", tags=["resumegen"])
 # ── Pydantic models ────────────────────────────────────────────
 
 class Experience(BaseModel):
-    title: str = ""
+    title: str = Field(default="", validation_alias=AliasChoices("title", "position"))
     company: str = ""
     location: str = ""
-    dates: str = ""
+    dates: str = Field(default="", validation_alias=AliasChoices("dates", "duration"))
     responsibilities: List[str] = []
 
 
 class Education(BaseModel):
     institution: str = ""
     degree: str = ""
-    graduation_date: str = ""
+    graduation_date: str = Field(default="", validation_alias=AliasChoices("graduation_date", "duration"))
     gpa: str = ""
 
 
 class Project(BaseModel):
-    title: str = ""
-    descriptions: List[str] = []
+    title: str = Field(default="", validation_alias=AliasChoices("title", "name"))
+    descriptions: List[str] = Field(default_factory=list, validation_alias=AliasChoices("descriptions", "description"))
+
+    @model_validator(mode="after")
+    def _normalize_descriptions(self):
+        if isinstance(self.descriptions, str):
+            self.descriptions = [self.descriptions]
+        return self
 
 
 class ResumeData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     name: str = ""
     email: str = ""
     location: Optional[str] = ""
-    linkedin_url: Optional[str] = ""
-    github_url: Optional[str] = ""
-    experiences: List[Experience] = []
+    linkedin_url: Optional[str] = Field(default="", validation_alias=AliasChoices("linkedin_url", "linkedin"))
+    github_url: Optional[str] = Field(default="", validation_alias=AliasChoices("github_url", "github"))
+    experiences: List[Experience] = Field(default_factory=list, validation_alias=AliasChoices("experiences", "experience"))
     education: List[Education] = []
     projects: List[Project] = []
     skills: Dict[str, Any] = {}

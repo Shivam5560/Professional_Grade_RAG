@@ -51,14 +51,6 @@ async def lifespan(app: FastAPI):
         # Get embedding model from vector store (already initialized)
         embed_model = vector_store.embed_model
         
-        # Check embedding health if using local Ollama
-        if settings.embedding_provider == "ollama" and not settings.use_remote_embedding_service:
-            from app.services.ollama_service import get_ollama_service
-            ollama_service = get_ollama_service()
-            ollama_healthy = await ollama_service.check_health()
-            if not ollama_healthy:
-                logger.log_operation("⚠️  Ollama embeddings not available", level="WARNING")
-        
         # Configure LlamaIndex global Settings to prevent OpenAI defaults
         Settings.llm = groq_service.get_llm()
         Settings.embed_model = embed_model
@@ -68,7 +60,7 @@ async def lifespan(app: FastAPI):
         logger.log_operation(
             "LlamaIndex settings configured",
             llm_model=settings.groq_model,
-            embed_model=settings.ollama_embedding_model,
+            embed_provider=settings.embedding_provider,
             chunk_size=settings.chunk_size,
             remote_embeddings=settings.use_remote_embedding_service
         )

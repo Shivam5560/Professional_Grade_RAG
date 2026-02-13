@@ -36,6 +36,33 @@ const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION || 'v1';
 const BASE_PATH = `${API_BASE_URL}/api/${API_VERSION}`;
 
 class ApiClient {
+  private normalizeResumeGenPayload(data: ResumeGenData): Record<string, unknown> {
+    return {
+      name: data.name,
+      email: data.email,
+      location: data.location || '',
+      linkedin_url: data.linkedin || '',
+      github_url: data.github || '',
+      experiences: (data.experience || []).map((e) => ({
+        title: e.position || '',
+        company: e.company || '',
+        dates: e.duration || '',
+        responsibilities: Array.isArray(e.responsibilities) ? e.responsibilities.filter(Boolean) : [],
+      })),
+      education: (data.education || []).map((e) => ({
+        institution: e.institution || '',
+        degree: e.degree || '',
+        graduation_date: e.duration || '',
+        gpa: e.gpa || '',
+      })),
+      projects: (data.projects || []).map((p) => ({
+        title: p.name || '',
+        descriptions: [p.description, p.technologies ? `Technologies: ${p.technologies}` : ''].filter(Boolean),
+      })),
+      skills: data.skills || {},
+    };
+  }
+
   private getAuthHeaders(): Record<string, string> {
     const { accessToken } = useAuthStore.getState();
     return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
@@ -537,13 +564,14 @@ class ApiClient {
 
   async generateResumePdf(data: ResumeGenData): Promise<Blob> {
     const url = `${BASE_PATH}/resumegen/generate`;
+    const normalizedData = this.normalizeResumeGenPayload(data);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...this.getAuthHeaders(),
       },
-      body: JSON.stringify({ data, format: 'pdf' }),
+      body: JSON.stringify({ data: normalizedData, format: 'pdf' }),
     });
 
     if (response.status === 401) {
@@ -555,7 +583,7 @@ class ApiClient {
             'Content-Type': 'application/json',
             ...this.getAuthHeaders(),
           },
-          body: JSON.stringify({ data, format: 'pdf' }),
+          body: JSON.stringify({ data: normalizedData, format: 'pdf' }),
         });
         if (!retry.ok) {
           const err = await retry.json().catch(() => ({ detail: 'Generation failed' }));
@@ -574,13 +602,14 @@ class ApiClient {
 
   async generateResumeLatex(data: ResumeGenData): Promise<string> {
     const url = `${BASE_PATH}/resumegen/generate`;
+    const normalizedData = this.normalizeResumeGenPayload(data);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...this.getAuthHeaders(),
       },
-      body: JSON.stringify({ data, format: 'latex' }),
+      body: JSON.stringify({ data: normalizedData, format: 'latex' }),
     });
 
     if (!response.ok) {

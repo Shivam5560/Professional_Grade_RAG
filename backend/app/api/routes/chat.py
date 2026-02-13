@@ -47,12 +47,7 @@ async def _determine_default_mode() -> str:
             embedding_unhealthy = True
             unhealthy = True
     else:
-        try:
-            from app.services.ollama_service import get_ollama_service
-            if not await get_ollama_service().check_health():
-                unhealthy = True
-        except Exception:
-            unhealthy = True
+        unhealthy = True
 
     # 2. Reranker health (remote shares embedding health)
     if settings.reranker_provider == "cohere":
@@ -72,6 +67,8 @@ async def _determine_default_mode() -> str:
             unhealthy = True
         if settings.use_remote_embedding_service and embedding_unhealthy:
             unhealthy = True
+    else:
+        unhealthy = True
 
     # 3. LLM health (cached)
     try:

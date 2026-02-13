@@ -8,17 +8,11 @@ pydantic-settings==2.1.0
 # LlamaIndex Core & Components
 llama-index-core
 llama-index-llms-groq
-llama-index-embeddings-ollama
 llama-index-vector-stores-postgres
 llama-index-readers-file
 llama-index-embeddings-cohere
 llama-index-postprocessor-cohere-rerank
 cohere
-
-# Reranking (needed for SentenceTransformerRerank)
-torch
-sentence-transformers
-transformers
 
 # Vector Store & Search
 psycopg2-binary
@@ -36,7 +30,6 @@ sqlparse
 spacy
 language_tool_python
 thefuzz
-python-Levenshtein
 scikit-learn
 toon_format @ git+https://github.com/toon-format/toon-python.git
 
@@ -52,8 +45,6 @@ docx2txt
 # Utilities
 python-multipart==0.0.6
 aiofiles==23.2.1
-typing-extensions==4.12.2
-nest-asyncio==1.6.0
 python-jose[cryptography]
 cryptography
 

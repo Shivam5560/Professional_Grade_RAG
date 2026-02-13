@@ -6,8 +6,8 @@ shared across all 3 tools: RAG Chat, AuraSQL, and Nexus Resume.
 
 Each tool uses a DIFFERENT pgvector table but the SAME:
   - LLM provider (Groq)
-  - Embedding provider (Remote / Cohere / Ollama)
-  - Reranker provider (Local / Cohere / Remote) — not used by Nexus Resume
+  - Embedding provider (Remote / Cohere)
+  - Reranker provider (Remote / Cohere) — not used by Nexus Resume
 """
 
 from __future__ import annotations
@@ -68,13 +68,8 @@ def get_embed_model() -> BaseEmbedding:
                 model=settings.cohere_embedding_model,
             )
         else:
-            from app.services.ollama_service import get_ollama_service
-
-            _embed_model = get_ollama_service().get_embed_model()
-            logger.info(
-                "rag_factory_embed_model_initialized",
-                provider="ollama",
-                model=settings.ollama_embedding_model,
+            raise ValueError(
+                f"Unsupported embedding provider '{provider}'. Use 'remote' or 'cohere'."
             )
 
         return _embed_model
@@ -143,13 +138,9 @@ def get_reranker():
             )
             logger.info("rag_factory_reranker_initialized", provider="remote")
         else:
-            from llama_index.core.postprocessor import SentenceTransformerRerank
-
-            _reranker = SentenceTransformerRerank(
-                model="BAAI/bge-reranker-v2-m3",
-                top_n=settings.top_k_rerank,
+            raise ValueError(
+                f"Unsupported reranker provider '{provider}'. Use 'remote' or 'cohere'."
             )
-            logger.info("rag_factory_reranker_initialized", provider="local")
 
         return _reranker
 

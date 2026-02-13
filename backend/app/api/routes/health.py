@@ -4,7 +4,6 @@ Health check endpoints.
 
 from fastapi import APIRouter, status
 from app.models.schemas import HealthResponse
-from app.services.ollama_service import get_ollama_service
 from app.services.groq_service import get_groq_service
 from app.services.vector_store import get_vector_store_service
 from app.services.bm25_service import get_bm25_service
@@ -24,7 +23,8 @@ async def health_check():
     Check the health of the application and its components.
     
     Note: Health checks are cached for 60 seconds to prevent excessive API calls
-    to external services (Groq, Ollama). This prevents unnecessary costs and rate limiting.
+    to external services (Groq, remote embeddings/reranker, Cohere).
+    This prevents unnecessary costs and rate limiting.
     
     Returns:
         HealthResponse with status of all components
@@ -44,9 +44,8 @@ async def health_check():
                 embedding_healthy = False
             embedding_label = "remote_embeddings"
         else:
-            ollama_service = get_ollama_service()
-            embedding_healthy = await ollama_service.check_health()
-            embedding_label = "ollama_embeddings"
+            embedding_healthy = False
+            embedding_label = "unsupported_embedding_provider"
         
         # Check Groq service (LLM) - cached for 60s to prevent excessive API calls
         groq_service = get_groq_service()
@@ -92,7 +91,7 @@ async def health_check():
         return HealthResponse(
             status="unhealthy",
             components={
-                "ollama_embeddings": "unknown",
+                "embedding_service": "unknown",
                 "groq_llm": "unknown",
                 "postgres_vector_store": "unknown",
                 "bm25_index": "unknown",
@@ -106,8 +105,8 @@ async def ping_services():
     """
     Comprehensive health check endpoint to keep all services alive.
     Checks and pings:
-    - Embedding services (remote or local Ollama)
-    - Reranking services (remote or local)
+    - Embedding services (remote or Cohere)
+    - Reranking services (remote or Cohere)
     - LLM service (Groq)
     - Database (PostgreSQL with pgvector)
     - BM25 index
@@ -129,7 +128,7 @@ async def ping_services():
     }
     
     try:
-        # 1. Check Embedding Service (Remote, Cohere, or Local)
+        # 1. Check Embedding Service (Remote or Cohere)
         if settings.embedding_provider == "cohere":
             try:
                 from app.services.cohere_service import get_cohere_service
@@ -184,35 +183,16 @@ async def ping_services():
                 }
                 results["summary"]["unhealthy"] += 1
         else:
-            try:
-                ollama_service = get_ollama_service()
-                if await ollama_service.check_health():
-                    results["services"]["embedding"] = {
-                        "type": "local_ollama",
-                        "status": "healthy",
-                        "model": settings.ollama_embedding_model
-                    }
-                    logger.info("ping_ollama_embedding_success")
-                    results["summary"]["healthy"] += 1
-                else:
-                    results["services"]["embedding"] = {
-                        "type": "local_ollama",
-                        "status": "unhealthy",
-                        "error": "Health check failed"
-                    }
-                    results["summary"]["unhealthy"] += 1
-            except Exception as e:
-                logger.warning("ping_ollama_embedding_failed", error=str(e))
-                results["services"]["embedding"] = {
-                    "type": "local_ollama",
-                    "status": "unhealthy",
-                    "error": str(e)
-                }
-                results["summary"]["unhealthy"] += 1
+            results["services"]["embedding"] = {
+                "type": settings.embedding_provider,
+                "status": "unhealthy",
+                "error": "Unsupported embedding provider. Use 'remote' or 'cohere'."
+            }
+            results["summary"]["unhealthy"] += 1
         
         results["summary"]["total"] += 1
         
-        # 2. Check Reranking Service (Remote, Cohere, or Local)
+        # 2. Check Reranking Service (Remote or Cohere)
         if settings.reranker_provider == "cohere":
             try:
                 from app.services.cohere_service import get_cohere_service
@@ -268,22 +248,12 @@ async def ping_services():
                 }
                 results["summary"]["unhealthy"] += 1
         else:
-            # Local CrossEncoder reranker (always available if installed)
-            try:
-                results["services"]["reranker"] = {
-                    "type": "local_crossencoder",
-                    "status": "healthy",
-                    "model": "BAAI/bge-reranker-v2-m3"
-                }
-                logger.info("local_reranker_available")
-                results["summary"]["healthy"] += 1
-            except Exception as e:
-                results["services"]["reranker"] = {
-                    "type": "local_crossencoder",
-                    "status": "unhealthy",
-                    "error": str(e)
-                }
-                results["summary"]["unhealthy"] += 1
+            results["services"]["reranker"] = {
+                "type": settings.reranker_provider,
+                "status": "unhealthy",
+                "error": "Unsupported reranker provider. Use 'remote' or 'cohere'."
+            }
+            results["summary"]["unhealthy"] += 1
         
         results["summary"]["total"] += 1
         

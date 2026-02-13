@@ -15,14 +15,14 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-70b-versatile", alias="GROQ_MODEL")
     
-    # Ollama Configuration (for embeddings only)
+    # Legacy Ollama configuration (kept for backward compatibility only)
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_embedding_model: str = Field(default="embeddinggemma", alias="OLLAMA_EMBEDDING_MODEL")
     ollama_reranker_model: str = Field(default="bge-reranker-v2-m3", alias="OLLAMA_RERANKER_MODEL")
 
     # Embedding & Reranker Provider Selection
-    embedding_provider: str = Field(default="ollama", alias="EMBEDDING_PROVIDER")
-    reranker_provider: str = Field(default="local", alias="RERANKER_PROVIDER")
+    embedding_provider: str = Field(default="remote", alias="EMBEDDING_PROVIDER")
+    reranker_provider: str = Field(default="remote", alias="RERANKER_PROVIDER")
 
     # Cohere Configuration
     cohere_api_key: str = Field(default="", alias="COHERE_API_KEY")

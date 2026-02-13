@@ -220,8 +220,7 @@ Provide a comprehensive answer based on the context above."""
                 }
                 sources = []
             else:
-                # Step 2: Reranking with LlamaIndex's SentenceTransformerRerank
-                # This uses BGE reranker (cross-encoder) for better relevance scoring
+                # Step 2: Reranking with the configured remote/cohere provider
                 logger.log_operation(
                     "🎯 Reranking nodes",
                     nodes=len(retrieved_nodes),
