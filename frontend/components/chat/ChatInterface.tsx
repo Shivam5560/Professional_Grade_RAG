@@ -6,13 +6,22 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ModeSelector } from './ModeSelector';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ListPlus } from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
 import { useToast } from '@/hooks/useToast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode } from '@/lib/types';
 import { apiClient } from '@/lib/api';
 
@@ -157,6 +166,16 @@ export function ChatInterface({
     }
   };
 
+  const handlePromptSelect = (prompt: string) => {
+    setInputValue((previous) => {
+      const trimmedPrevious = previous.trim();
+      if (!trimmedPrevious) {
+        return prompt;
+      }
+      return `${trimmedPrevious}\n${prompt}`;
+    });
+  };
+
   return (
     <Card className="flex h-full flex-col overflow-hidden border-none bg-transparent shadow-none">
       <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-4">
@@ -176,7 +195,7 @@ export function ChatInterface({
           isLoading={isLoading}
           latestSources={latestSources}
           promptSuggestions={promptSuggestions}
-          onPromptSelect={(prompt) => setInputValue(prompt)}
+          onPromptSelect={handlePromptSelect}
         />
       </div>
 
@@ -199,6 +218,38 @@ export function ChatInterface({
                 }}
                 disabled={isLoading}
               />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isLoading || promptSuggestions.length === 0}
+                    className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                    title="Insert a saved prompt"
+                    aria-label="Insert a saved prompt"
+                  >
+                    <ListPlus className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80 max-h-[300px] overflow-y-auto">
+                  <DropdownMenuLabel>Prompt Library</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {promptSuggestions.length > 0 ? (
+                    promptSuggestions.map((item) => (
+                      <DropdownMenuItem
+                        key={item.title}
+                        onSelect={() => handlePromptSelect(item.prompt)}
+                        className="cursor-pointer"
+                      >
+                        {item.title}
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>No prompts available</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <div className="flex-1">
                 <MessageInput
                   onSend={handleSend}

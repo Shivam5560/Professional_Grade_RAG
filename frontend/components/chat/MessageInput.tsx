@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, KeyboardEvent, useRef } from 'react';
+import { useState, KeyboardEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Send } from 'lucide-react';
@@ -36,6 +36,12 @@ export function MessageInput({
   const isControlled = hasValueProp && typeof onChange === 'function';
   const currentValue = isControlled ? value : input;
 
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 320)}px`;
+  }, [currentValue]);
+
   const handleSend = () => {
     if (currentValue.trim() && !disabled) {
       onSend(currentValue.trim());
@@ -43,10 +49,6 @@ export function MessageInput({
         onChange?.('');
       } else {
         setInput('');
-      }
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
       }
     }
   };

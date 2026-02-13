@@ -221,7 +221,7 @@ export default function ResumeGenPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              <ScrollArea className="max-h-[60vh]">
+              <ScrollArea className="h-[60vh] md:h-[64vh] pr-2">
                 {/* ── Step 0: Personal ──────────────────── */}
                 {step === 0 && (
                   <div className="grid gap-5 md:grid-cols-2">

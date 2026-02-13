@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/api";
-import type { PingResponse } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,8 +43,7 @@ export function Header({
     { label: 'KB', href: '/knowledge-base', isActive: pathname?.startsWith('/knowledge-base') },
     { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
   ];
-  const [lastPingStatus, setLastPingStatus] = useState<PingResponse | null>(null);
-  const [llmHealthy, setLlmHealthy] = useState(true); // Default LLM to healthy, updated by actual requests
+  const [llmHealthy, setLlmHealthy] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window === 'undefined') {
       return 'light';
@@ -61,47 +58,10 @@ export function Header({
     window.localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Poll services (excluding LLM health check) every 60 seconds
   useEffect(() => {
-    const pingServices = async () => {
-      try {
-        const pingResult = await apiClient.pingServices();
-        // Update services but override LLM status with our tracked status
-        setLastPingStatus({
-          ...pingResult,
-          services: {
-            ...pingResult.services,
-            llm: {
-              type: pingResult.services.llm?.type || 'groq',
-              status: llmHealthy ? 'healthy' : 'unhealthy',
-              model: pingResult.services.llm?.model
-            }
-          }
-        });
-      } catch (err) {
-        console.warn('[Header] Failed to ping services:', err);
-        setLastPingStatus({
-          status: 'unhealthy',
-          timestamp: new Date().toISOString(),
-          services: {
-            embedding: { type: 'unknown', status: 'unhealthy' },
-            reranker: { type: 'unknown', status: 'unhealthy' },
-            llm: { type: 'unknown', status: llmHealthy ? 'healthy' : 'unhealthy' },
-            database: { type: 'unknown', status: 'unhealthy' },
-            bm25: { type: 'unknown', status: 'unhealthy' }
-          },
-          summary: { total: 5, healthy: 0, unhealthy: 5 }
-        });
-      }
-    };
-
-    // Initial ping
-    pingServices();
-
-    // Poll every 60 seconds
-    const pingInterval = setInterval(pingServices, 60 * 1000);
-
-    // Listen for custom events from chat component about LLM health
+    // Listen for custom events from chat component about LLM health.
+    // Navigation status intentionally reflects live LLM/chat outcome only
+    // (not backend ping health such as BM25 index warmup state).
     const handleLlmHealth = (event: Event) => {
       if (event instanceof CustomEvent && typeof event.detail?.healthy === 'boolean') {
         setLlmHealthy(event.detail.healthy);
@@ -110,10 +70,9 @@ export function Header({
     window.addEventListener('llm-health-update', handleLlmHealth);
 
     return () => {
-      clearInterval(pingInterval);
       window.removeEventListener('llm-health-update', handleLlmHealth);
     };
-  }, [llmHealthy]);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -167,46 +126,16 @@ export function Header({
       </div>
       
       <div className="flex items-center gap-3">
-        {/* Service Status Badges */}
-        {lastPingStatus && (
-          <div className="flex items-center gap-1.5 mr-2">
-            {lastPingStatus.services.embedding && (
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                lastPingStatus.services.embedding.status === 'healthy' 
-                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
-                  : 'bg-red-400 shadow-sm shadow-red-400/50'
-              }`} title="Embedding Service" />
-            )}
-            {lastPingStatus.services.reranker && (
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                lastPingStatus.services.reranker.status === 'healthy' 
-                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
-                  : 'bg-red-400 shadow-sm shadow-red-400/50'
-              }`} title="Reranker Service" />
-            )}
-            {lastPingStatus.services.llm && (
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                lastPingStatus.services.llm.status === 'healthy' 
-                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
-                  : 'bg-red-400 shadow-sm shadow-red-400/50'
-              }`} title="LLM Service" />
-            )}
-            {lastPingStatus.services.database && (
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                lastPingStatus.services.database.status === 'healthy' 
-                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
-                  : 'bg-red-400 shadow-sm shadow-red-400/50'
-              }`} title="Database" />
-            )}
-            {lastPingStatus.services.bm25 && (
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                lastPingStatus.services.bm25.status === 'healthy' 
-                  ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse' 
-                  : 'bg-red-400 shadow-sm shadow-red-400/50'
-              }`} title="BM25 Service" />
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 mr-2">
+          <div
+            className={`h-2 w-2 rounded-full transition-all ${
+              llmHealthy
+                ? 'bg-green-400 shadow-sm shadow-green-400/50 animate-pulse'
+                : 'bg-red-400 shadow-sm shadow-red-400/50'
+            }`}
+            title={llmHealthy ? 'LLM healthy' : 'LLM unhealthy'}
+          />
+        </div>
         
         <Button 
           variant="ghost" 
