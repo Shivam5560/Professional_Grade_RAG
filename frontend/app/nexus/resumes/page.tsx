@@ -30,6 +30,12 @@ export default function NexusResumeSelectPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const toastRef = useRef(toast);
+  const userId = user?.id;
+
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -48,16 +54,20 @@ export default function NexusResumeSelectPage() {
       setHistory(historyData);
     } catch (error) {
       console.error('Failed to load resume data:', error);
-      toast({ title: 'Failed to load resumes', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
+      toastRef.current({
+        title: 'Failed to load resumes',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
-    if (!isMounted || !isAuthenticated || !user) return;
-    loadData(user.id);
-  }, [isMounted, isAuthenticated, user, loadData]);
+    if (!isMounted || !isAuthenticated || !userId) return;
+    loadData(userId);
+  }, [isMounted, isAuthenticated, userId, loadData]);
 
   const stats = dashboard?.resume_stats ?? { total: 0, analyzed: 0, pending: 0 };
   const formatDate = (value?: string) => {

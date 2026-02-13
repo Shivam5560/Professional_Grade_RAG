@@ -24,6 +24,7 @@ export default function NexusDashboardPage() {
   const [history, setHistory] = useState<ResumeAnalyzeResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
+  const userId = user?.id;
 
   useEffect(() => {
     setIsMounted(true);
@@ -48,9 +49,9 @@ export default function NexusDashboardPage() {
   };
 
   useEffect(() => {
-    if (!isMounted || !isAuthenticated || !user) return;
-    loadData(user.id);
-  }, [isMounted, isAuthenticated, user]);
+    if (!isMounted || !isAuthenticated || !userId) return;
+    loadData(userId);
+  }, [isMounted, isAuthenticated, userId]);
 
   const stats = dashboard?.resume_stats ?? { total: 0, analyzed: 0, pending: 0 };
   const formatDate = (value?: string) => {
