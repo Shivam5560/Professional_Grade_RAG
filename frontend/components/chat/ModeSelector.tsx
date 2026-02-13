@@ -18,16 +18,16 @@ interface ModeSelectorProps {
 
 export function ModeSelector({ mode, onModeChange, disabled = false }: ModeSelectorProps) {
   return (
-    <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/70 border border-border/70 backdrop-blur-sm">
+    <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-card/70 p-1 backdrop-blur-sm shadow-[0_10px_30px_-24px_rgba(0,0,0,0.5)]">
       {/* Fast Mode */}
       <button
         type="button"
         onClick={() => onModeChange('fast')}
         disabled={disabled}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer',
+          'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
           mode === 'fast'
-            ? 'bg-foreground text-background border border-foreground/20 shadow-lg'
+            ? 'bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] text-white shadow-lg'
             : 'text-muted-foreground hover:text-foreground hover:bg-background/80',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -43,9 +43,9 @@ export function ModeSelector({ mode, onModeChange, disabled = false }: ModeSelec
         onClick={() => onModeChange('think')}
         disabled={disabled}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer',
+          'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
           mode === 'think'
-            ? 'bg-foreground text-background border border-foreground/20 shadow-lg'
+            ? 'bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))] text-white shadow-lg'
             : 'text-muted-foreground hover:text-foreground hover:bg-background/80',
           disabled && 'opacity-50 cursor-not-allowed'
         )}

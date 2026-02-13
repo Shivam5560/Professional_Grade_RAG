@@ -182,11 +182,15 @@
   }
 
   .bubble-bot {
-    background: hsl(var(--bubble-bot));
+    background:
+      linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.8));
+    backdrop-filter: blur(16px);
   }
 
   .bubble-user {
-    background: hsl(var(--bubble-user));
+    background:
+      linear-gradient(135deg, hsl(var(--chart-2) / 0.18), hsl(var(--chart-1) / 0.18)),
+      hsl(var(--bubble-user));
   }
 
   .logo-mark {

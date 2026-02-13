@@ -81,14 +81,14 @@ export function MessageInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 min-h-[56px] max-h-[320px] resize-none bg-muted/70 border-border/70 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-foreground/30 focus:border-foreground/30 transition-all rounded-2xl px-5 py-4"
+          className="flex-1 min-h-[56px] max-h-[320px] resize-none rounded-2xl border-border/70 bg-muted/70 px-5 py-4 text-foreground placeholder:text-muted-foreground transition-all focus:border-foreground/30 focus:ring-2 focus:ring-foreground/20"
           rows={1}
         />
         <Button
           onClick={handleSend}
           disabled={!currentValue.trim() || disabled}
           size="icon"
-          className="h-12 w-12 bg-foreground text-background hover:bg-foreground/90 shadow-lg transition-all rounded-xl disabled:opacity-50"
+          className="h-12 w-12 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-1))] to-[hsl(var(--chart-2))] text-white shadow-lg shadow-black/20 transition-all hover:brightness-105 disabled:opacity-50"
         >
           <Send className="h-5 w-5" />
         </Button>

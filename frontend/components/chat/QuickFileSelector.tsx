@@ -130,10 +130,10 @@ export function QuickFileSelector({
                   key={file.id}
                   variant={selected ? 'default' : 'outline'}
                   className={`
-                    cursor-pointer transition-all hover:scale-105 py-1 px-3
+                    cursor-pointer rounded-full py-1 px-3 transition-all hover:scale-105
                     ${selected 
-                      ? 'bg-foreground text-background border-foreground/20 hover:bg-foreground/90' 
-                      : 'bg-card/70 text-muted-foreground border-border/70 hover:bg-muted/60'
+                      ? 'border-transparent bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] text-white hover:brightness-105' 
+                      : 'bg-card/80 text-muted-foreground border-border/70 hover:bg-muted/60'
                     }
                   `}
                   onClick={() => onFileToggle(file)}
@@ -159,14 +159,14 @@ export function QuickFileSelector({
         {/* Action buttons */}
         <div className="flex items-center gap-1 ml-auto">
           {selectedFiles.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onClearAll}
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            >
-              Clear all
-            </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClearAll}
+            className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          >
+            Clear all
+          </Button>
           )}
           
           <Button
@@ -174,7 +174,7 @@ export function QuickFileSelector({
             variant="ghost"
             onClick={handleUploadClick}
             disabled={uploading}
-            className="h-7 px-2 text-xs text-foreground hover:text-foreground/80 hover:bg-muted/60"
+            className="h-7 rounded-full border border-border/60 bg-card/70 px-3 text-xs text-foreground hover:bg-muted/60 hover:text-foreground"
           >
             {uploading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -189,13 +189,13 @@ export function QuickFileSelector({
           {recentFiles.length > 0 && (
             <Button
               size="sm"
-              variant="ghost"
-              onClick={handleViewAll}
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            >
-              <Database className="h-3 w-3 mr-1" />
-              View All
-            </Button>
+            variant="ghost"
+            onClick={handleViewAll}
+            className="h-7 rounded-full border border-border/60 bg-card/70 px-3 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          >
+            <Database className="h-3 w-3 mr-1" />
+            View All
+          </Button>
           )}
         </div>
       </div>

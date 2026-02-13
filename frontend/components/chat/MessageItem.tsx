@@ -100,7 +100,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
 
       {/* Content */}
       <div className={cn(
-        "flex flex-col max-w-[80%]",
+        "flex flex-col max-w-[84%]",
         isUser ? "items-end" : "items-start"
       )}>
         <div className="flex items-center gap-2 mb-2 px-1">
@@ -136,15 +136,18 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
 
         {/* Message content */}
         <div className={cn(
-          'rounded-2xl px-6 py-4 shadow-xl text-sm transition-all duration-300 relative overflow-hidden',
+          'relative overflow-hidden rounded-2xl px-6 py-4 text-sm shadow-xl transition-all duration-300',
           isUser 
-            ? 'bubble-user text-foreground rounded-tr-sm shadow-[0_18px_40px_-30px_rgba(0,0,0,0.3)] ring-1 ring-border/60' 
-            : 'bubble-bot backdrop-blur-xl border border-border/70 rounded-tl-sm text-foreground shadow-[0_20px_60px_-45px_rgba(0,0,0,0.35)] hover:shadow-[0_30px_80px_-60px_rgba(0,0,0,0.45)]',
+            ? 'bubble-user rounded-tr-sm border border-border/70 text-foreground shadow-[0_24px_60px_-44px_rgba(0,0,0,0.4)]' 
+            : 'bubble-bot rounded-tl-sm border border-border/70 text-foreground shadow-[0_22px_60px_-45px_rgba(0,0,0,0.4)] hover:shadow-[0_32px_90px_-62px_rgba(0,0,0,0.5)]',
           !isUser && 'group/msg'
         )}>
           {/* Decorative gradient overlay for assistant messages */}
           {!isUser && (
             <div className="absolute inset-0 bg-gradient-to-br from-foreground/5 via-transparent to-transparent pointer-events-none" />
+          )}
+          {isUser && (
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[hsl(var(--chart-1)/0.12)] via-transparent to-[hsl(var(--chart-2)/0.08)]" />
           )}
 
           {/* Copy button for assistant messages */}
@@ -266,8 +269,8 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                 <div className={cn(
                   "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg backdrop-blur-sm flex items-center gap-1.5",
                   message.mode === 'think'
-                    ? "text-foreground bg-muted/70 border-border/60"
-                    : "text-foreground bg-muted/70 border-border/60"
+                    ? "text-white bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))] border-transparent"
+                    : "text-white bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] border-transparent"
                 )}>
                   {message.mode === 'think' ? <Brain className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
                   {message.mode === 'think' ? 'Think' : 'Fast'}
