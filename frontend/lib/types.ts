@@ -297,7 +297,8 @@ export interface ResumeGenEducation {
 
 export interface ResumeGenProject {
   name: string;
-  description: string;
+  descriptions: string[];
+  description?: string;
   technologies: string;
 }
 

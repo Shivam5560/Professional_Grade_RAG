@@ -38,7 +38,7 @@ const STEPS = [
 /* ── Blank entries ─────────────────────────────────────── */
 const blankExperience: ResumeGenExperience = { company: '', position: '', duration: '', responsibilities: [''] };
 const blankEducation: ResumeGenEducation = { institution: '', degree: '', duration: '', gpa: '' };
-const blankProject: ResumeGenProject = { name: '', description: '', technologies: '' };
+const blankProject: ResumeGenProject = { name: '', descriptions: [''], technologies: '' };
 
 export default function ResumeGenPage() {
   const { isAuthenticated } = useAuthStore();
@@ -84,7 +84,7 @@ export default function ResumeGenPage() {
       name, email, location, linkedin, github,
       experience: experiences.map((e) => ({ ...e, responsibilities: e.responsibilities.filter(Boolean) })),
       education: educations,
-      projects,
+      projects: projects.map((p) => ({ ...p, descriptions: p.descriptions.filter(Boolean) })),
       skills,
     };
   }, [name, email, location, linkedin, github, experiences, educations, projects, skillCategories]);
@@ -357,8 +357,39 @@ export default function ResumeGenPage() {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <Label>Description</Label>
-                          <Textarea value={proj.description} onChange={(e) => updateProj(i, { description: e.target.value })} className="min-h-[80px]" />
+                          <Label>Project Highlights</Label>
+                          {proj.descriptions.map((d, di) => (
+                            <div key={di} className="flex gap-2">
+                              <Textarea
+                                value={d}
+                                onChange={(e) => {
+                                  const updated = [...proj.descriptions];
+                                  updated[di] = e.target.value;
+                                  updateProj(i, { descriptions: updated });
+                                }}
+                                className="min-h-[80px]"
+                                placeholder={`Highlight ${di + 1}`}
+                              />
+                              {proj.descriptions.length > 1 && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    updateProj(i, { descriptions: proj.descriptions.filter((_, idx) => idx !== di) });
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateProj(i, { descriptions: [...proj.descriptions, ''] })}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" /> Add Highlight
+                          </Button>
                         </div>
                       </div>
                     ))}

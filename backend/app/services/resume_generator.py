@@ -222,15 +222,22 @@ class LatexResumeGenerator:
             with open(tex, "w", encoding="utf-8") as f:
                 f.write(latex_content)
             try:
+                last_err = ""
                 for _ in range(2):
-                    subprocess.run(
-                        ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmp, tex],
+                    result = subprocess.run(
+                        ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "-output-directory", tmp, tex],
                         capture_output=True, text=True, timeout=30,
                     )
+                    if result.returncode != 0:
+                        last_err = (result.stderr or result.stdout or "").strip()
+                        break
                 if os.path.exists(pdf):
                     shutil.copy2(pdf, output_path)
                     return {"success": True, "message": "PDF generated", "pdf_path": output_path}
-                return {"success": False, "message": "pdflatex compilation failed", "pdf_path": None}
+                message = "pdflatex compilation failed"
+                if last_err:
+                    message = f"{message}: {last_err[-500:]}"
+                return {"success": False, "message": message, "pdf_path": None}
             except FileNotFoundError:
                 return {"success": False, "message": "pdflatex not installed", "pdf_path": None}
             except Exception as e:

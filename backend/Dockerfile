@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     git \
     texlive-latex-base \
     texlive-latex-recommended \
+    texlive-latex-extra \
     texlive-fonts-recommended \
     && rm -rf /var/lib/apt/lists/*
 

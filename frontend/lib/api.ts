@@ -57,7 +57,11 @@ class ApiClient {
       })),
       projects: (data.projects || []).map((p) => ({
         title: p.name || '',
-        descriptions: [p.description, p.technologies ? `Technologies: ${p.technologies}` : ''].filter(Boolean),
+        descriptions: [
+          ...(Array.isArray(p.descriptions) ? p.descriptions.filter(Boolean) : []),
+          ...(typeof p.description === 'string' && p.description.trim() ? [p.description.trim()] : []),
+          p.technologies ? `Technologies: ${p.technologies}` : '',
+        ].filter(Boolean),
       })),
       skills: data.skills || {},
     };
