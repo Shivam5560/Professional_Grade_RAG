@@ -186,69 +186,10 @@ class ApiClient {
     request: ChatRequest,
     onEvent: (event: string, data: unknown) => void
   ): Promise<void> {
-    const doStream = async () => {
-      const response = await fetch(`${BASE_PATH}/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'text/event-stream',
-          ...this.getAuthHeaders(),
-        },
-        body: JSON.stringify({ ...request, stream: true }),
-      });
-      return response;
-    };
-
-    let response = await doStream();
-
-    if (response.status === 401) {
-      const refreshed = await this.refreshTokens();
-      if (refreshed) {
-        response = await doStream();
-      }
-    }
-
-    if (!response.ok || !response.body) {
-      const error = await response.json().catch(() => ({ message: 'Streaming failed' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-
-      for (const part of parts) {
-        const lines = part.split('\n').filter(Boolean);
-        let event = 'message';
-        const dataLines: string[] = [];
-
-        for (const line of lines) {
-          if (line.startsWith('event:')) {
-            event = line.replace('event:', '').trim();
-          } else if (line.startsWith('data:')) {
-            dataLines.push(line.replace('data:', '').trim());
-          }
-        }
-
-        const rawData = dataLines.join('\n');
-        let parsed: unknown = rawData;
-        try {
-          parsed = JSON.parse(rawData);
-        } catch {
-          // Keep raw string if JSON parsing fails.
-        }
-
-        onEvent(event, parsed);
-      }
-    }
+    // Deprecated streaming transport: route through single /chat/query call
+    // so one user message maps to one backend generation request.
+    const response = await this.query({ ...request, stream: false });
+    onEvent('final', response);
   }
 
   async getHistory(sessionId: string): Promise<ChatHistory> {
