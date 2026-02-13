@@ -15,13 +15,7 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') {
-      return 'light'
-    }
-    const stored = window.localStorage.getItem('theme')
-    return stored === 'light' || stored === 'dark' ? stored : 'light'
-  })
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const router = useRouter()
 
   const inlineSvgs = {
@@ -108,6 +102,14 @@ export default function AuthPage() {
       </div>
     )
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('theme')
+    if (stored === 'light' || stored === 'dark') {
+      setTheme(stored)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -202,7 +204,7 @@ export default function AuthPage() {
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
-        <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl ring-2 ring-foreground/10 pulse-glow">
+        <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl ring-1 ring-black/10 dark:ring-white/5 pulse-glow">
           <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
         </div>
         <div className="flex flex-col">
@@ -232,9 +234,9 @@ export default function AuthPage() {
           transition={{ duration: 0.4, ease: 'easeOut' }}
         >
           <div className="space-y-5">
-            <div className="inline-flex items-center space-x-3 px-4 py-2 bg-accent-soft rounded-full border border-border/60 backdrop-blur-sm shadow-md">
+            <div className="inline-flex items-center space-x-3 px-4 py-2 rounded-full border border-[hsl(var(--chart-2)/0.35)] bg-[hsl(var(--chart-2)/0.14)] backdrop-blur-sm shadow-md">
               <Brain className="h-4 w-4 text-foreground" />
-              <span className="text-xs font-semibold text-foreground tracking-wide">Next-Gen RAG Architecture</span>
+              <span className="text-xs font-semibold text-foreground tracking-wide">Unified AI Workspace</span>
             </div>
             
             <h1 className="text-4xl lg:text-7xl font-black tracking-tight leading-[1.08]">
@@ -250,18 +252,18 @@ export default function AuthPage() {
             </h1>
             
             <p className="text-muted-foreground text-base lg:text-lg max-w-xl leading-relaxed">
-              Professional-grade RAG workspace with PageIndex reasoning, hybrid retrieval, confidence scoring, and traceable source citations.
+              End-to-end AI workspace for RAG chat, AuraSQL analytics, Nexus resume scoring, and ResumeGen PDF creation with traceable outputs.
             </p>
 
             <div className="flex flex-wrap gap-2 pt-1">
               {[
-                { icon: Sparkles, label: 'PageIndex Think' },
-                { icon: Layers, label: 'Hybrid Retrieval' },
-                { icon: Radar, label: 'Reranking' },
-                { icon: LineChart, label: 'Confidence' },
-                { icon: FileSearch, label: 'Citations' },
-              ].map(({ icon: Icon, label }) => (
-                <div key={label} className="px-3 py-1.5 bg-muted/50 border border-border/50 rounded-full text-xs font-medium text-foreground/80 backdrop-blur-sm inline-flex items-center gap-1.5">
+                { icon: Sparkles, label: 'RAG Chat', tone: 'border-[hsl(var(--chart-1)/0.34)] bg-[hsl(var(--chart-1)/0.12)]' },
+                { icon: Database, label: 'AuraSQL', tone: 'border-[hsl(var(--chart-2)/0.34)] bg-[hsl(var(--chart-2)/0.12)]' },
+                { icon: Radar, label: 'Nexus Scoring', tone: 'border-[hsl(var(--chart-4)/0.34)] bg-[hsl(var(--chart-4)/0.12)]' },
+                { icon: FileSearch, label: 'ResumeGen PDF', tone: 'border-[hsl(var(--chart-5)/0.34)] bg-[hsl(var(--chart-5)/0.12)]' },
+                { icon: LineChart, label: 'Traceability', tone: 'border-[hsl(var(--foreground)/0.18)] bg-[hsl(var(--foreground)/0.06)]' },
+              ].map(({ icon: Icon, label, tone }) => (
+                <div key={label} className={`px-3 py-1.5 border rounded-full text-xs font-medium text-foreground/85 backdrop-blur-sm inline-flex items-center gap-1.5 ${tone}`}>
                   <Icon className="h-3 w-3" />
                   {label}
                 </div>
@@ -272,14 +274,38 @@ export default function AuthPage() {
           {/* Compact feature cards */}
           <div className="grid sm:grid-cols-2 gap-3 pt-2">
             {[
-              { icon: Zap, title: 'Hybrid Search', desc: 'BM25 + semantic vectors with smart dedupe for precise retrieval.' },
-              { icon: Database, title: 'Smart Reranking', desc: 'Cross-encoder refinement pushes the most relevant context first.' },
-              { icon: Shield, title: 'Confidence Scoring', desc: 'Multi-signal scoring blends retrieval strength and LLM assessment.' },
-              { icon: MessageSquare, title: 'Context + Reasoning', desc: 'PageIndex traces reasoning, sources, and context per response.' },
-            ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="bg-card/50 border border-border/50 p-4 rounded-2xl hover:border-foreground/15 transition-all backdrop-blur-sm group cursor-default">
+              {
+                icon: MessageSquare,
+                title: 'RAG Chat',
+                desc: 'Hybrid retrieval with reasoning modes, source traces, and confidence-aware responses.',
+                cardTone: 'border-[hsl(var(--chart-1)/0.34)] bg-[hsl(var(--chart-1)/0.10)]',
+                iconTone: 'bg-[hsl(var(--chart-1)/0.18)]',
+              },
+              {
+                icon: Database,
+                title: 'AuraSQL',
+                desc: 'Natural language to SQL with schema context, confidence metadata, and query history.',
+                cardTone: 'border-[hsl(var(--chart-2)/0.34)] bg-[hsl(var(--chart-2)/0.10)]',
+                iconTone: 'bg-[hsl(var(--chart-2)/0.18)]',
+              },
+              {
+                icon: Shield,
+                title: 'Nexus Resume',
+                desc: 'Resume upload, scoring, and JD matching workflow with persisted analysis history.',
+                cardTone: 'border-[hsl(var(--chart-4)/0.34)] bg-[hsl(var(--chart-4)/0.10)]',
+                iconTone: 'bg-[hsl(var(--chart-4)/0.18)]',
+              },
+              {
+                icon: Zap,
+                title: 'ResumeGen',
+                desc: 'Structured resume builder with LaTeX/PDF generation ready for deployment workflows.',
+                cardTone: 'border-[hsl(var(--chart-5)/0.34)] bg-[hsl(var(--chart-5)/0.10)]',
+                iconTone: 'bg-[hsl(var(--chart-5)/0.18)]',
+              },
+            ].map(({ icon: Icon, title, desc, cardTone, iconTone }) => (
+              <div key={title} className={`border p-4 rounded-2xl hover:border-foreground/20 transition-all backdrop-blur-sm group cursor-default ${cardTone}`}>
                 <div className="flex items-start gap-3">
-                  <div className="p-2 bg-muted/50 rounded-lg group-hover:scale-105 transition-transform">
+                  <div className={`p-2 rounded-lg group-hover:scale-105 transition-transform ${iconTone}`}>
                     <Icon className="h-5 w-5 text-foreground/80" />
                   </div>
                   <div>
@@ -294,7 +320,7 @@ export default function AuthPage() {
           <div className="pt-4 border-t border-border/40 mt-4">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center space-x-3">
-                <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg ring-2 ring-foreground/10">
+                <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg ring-1 ring-black/10 dark:ring-white/5">
                   NX
                 </div>
                 <div>

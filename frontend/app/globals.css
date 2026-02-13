@@ -192,6 +192,7 @@
   .logo-mark {
     position: relative;
     overflow: hidden;
+    isolation: isolate;
     background: conic-gradient(from 210deg, hsl(var(--chart-1)), hsl(var(--chart-2)), hsl(var(--primary)) 60%, hsl(var(--chart-1)) 100%);
     border: 1px solid hsl(var(--foreground) / 0.08);
     box-shadow: inset 0 0 14px hsl(var(--foreground) / 0.1);
@@ -219,6 +220,16 @@
   .logo-mark > * {
     position: relative;
     z-index: 1;
+  }
+
+  .dark .logo-mark {
+    border-color: transparent;
+    box-shadow: inset 0 0 12px hsl(0 0% 0% / 0.28);
+  }
+
+  .dark .logo-mark::before {
+    background: linear-gradient(145deg, hsl(var(--foreground) / 0.08), transparent 60%);
+    opacity: 0.35;
   }
 
   .float-slow {
