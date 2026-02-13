@@ -8,7 +8,7 @@ import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Layers, Radar, LineChart, FileSearch, Sun, Moon } from "lucide-react"
+import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Radar, LineChart, FileSearch, Sun, Moon } from "lucide-react"
 
 export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
