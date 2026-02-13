@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install uv (fast Python package installer)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -11,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies (system env) using uv
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy application code
 COPY app ./app
