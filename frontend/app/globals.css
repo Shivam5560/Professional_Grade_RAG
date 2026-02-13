@@ -49,6 +49,143 @@
     --bubble-user: 240 5% 96%;
     color-scheme: light;
   }
+
+  html.theme-nexus,
+  html[data-theme-palette='nexus'] {
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --bubble-bot: 0 0% 100%;
+    --bubble-user: 240 5% 96%;
+  }
+
+  html.theme-ocean,
+  html[data-theme-palette='ocean'] {
+    --chart-1: 198 84% 56%;
+    --chart-2: 175 63% 42%;
+    --chart-3: 220 52% 34%;
+    --chart-4: 189 74% 63%;
+    --chart-5: 206 70% 52%;
+    --bubble-bot: 194 50% 98%;
+    --bubble-user: 198 45% 93%;
+  }
+
+  html.theme-ember,
+  html[data-theme-palette='ember'] {
+    --chart-1: 16 88% 57%;
+    --chart-2: 28 84% 50%;
+    --chart-3: 196 47% 24%;
+    --chart-4: 42 88% 60%;
+    --chart-5: 157 54% 42%;
+    --bubble-bot: 24 70% 98%;
+    --bubble-user: 20 60% 93%;
+  }
+
+  html.theme-graphite,
+  html[data-theme-palette='graphite'] {
+    --chart-1: 200 18% 52%;
+    --chart-2: 191 47% 42%;
+    --chart-3: 220 15% 32%;
+    --chart-4: 47 64% 64%;
+    --chart-5: 161 35% 45%;
+    --bubble-bot: 210 16% 97%;
+    --bubble-user: 214 12% 92%;
+  }
+
+  html.theme-forest,
+  html[data-theme-palette='forest'] {
+    --chart-1: 148 54% 42%;
+    --chart-2: 164 62% 36%;
+    --chart-3: 198 38% 24%;
+    --chart-4: 78 46% 58%;
+    --chart-5: 36 62% 56%;
+    --bubble-bot: 154 42% 98%;
+    --bubble-user: 150 30% 93%;
+  }
+
+  html.theme-royal,
+  html[data-theme-palette='royal'] {
+    --chart-1: 214 78% 56%;
+    --chart-2: 197 64% 44%;
+    --chart-3: 220 48% 30%;
+    --chart-4: 45 84% 61%;
+    --chart-5: 171 58% 43%;
+    --bubble-bot: 210 58% 98%;
+    --bubble-user: 212 40% 93%;
+  }
+
+  html.theme-sunset,
+  html[data-theme-palette='sunset'] {
+    --chart-1: 10 86% 60%;
+    --chart-2: 22 82% 52%;
+    --chart-3: 200 42% 25%;
+    --chart-4: 36 90% 64%;
+    --chart-5: 164 50% 41%;
+    --bubble-bot: 28 72% 98%;
+    --bubble-user: 24 60% 93%;
+  }
+
+  html.theme-mono,
+  html[data-theme-palette='mono'] {
+    --chart-1: 220 8% 54%;
+    --chart-2: 210 10% 45%;
+    --chart-3: 220 12% 30%;
+    --chart-4: 40 18% 62%;
+    --chart-5: 160 12% 44%;
+    --bubble-bot: 210 18% 98%;
+    --bubble-user: 220 12% 93%;
+  }
+
+  html.dark.theme-nexus,
+  html.dark[data-theme-palette='nexus'] {
+    --bubble-bot: 240 5% 10%;
+    --bubble-user: 240 3.7% 15.9%;
+  }
+
+  html.dark.theme-ocean,
+  html.dark[data-theme-palette='ocean'] {
+    --bubble-bot: 202 35% 11%;
+    --bubble-user: 198 28% 15%;
+  }
+
+  html.dark.theme-ember,
+  html.dark[data-theme-palette='ember'] {
+    --bubble-bot: 22 33% 11%;
+    --bubble-user: 18 30% 15%;
+  }
+
+  html.dark.theme-graphite,
+  html.dark[data-theme-palette='graphite'] {
+    --bubble-bot: 220 9% 10%;
+    --bubble-user: 216 11% 15%;
+  }
+
+  html.dark.theme-forest,
+  html.dark[data-theme-palette='forest'] {
+    --bubble-bot: 152 24% 11%;
+    --bubble-user: 156 22% 15%;
+  }
+
+  html.dark.theme-royal,
+  html.dark[data-theme-palette='royal'] {
+    --bubble-bot: 216 26% 11%;
+    --bubble-user: 212 22% 15%;
+  }
+
+  html.dark.theme-sunset,
+  html.dark[data-theme-palette='sunset'] {
+    --bubble-bot: 22 28% 11%;
+    --bubble-user: 18 24% 15%;
+  }
+
+  html.dark.theme-mono,
+  html.dark[data-theme-palette='mono'] {
+    --bubble-bot: 220 8% 10%;
+    --bubble-user: 220 9% 15%;
+  }
+
   .dark {
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
@@ -69,11 +206,6 @@
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -197,18 +329,24 @@
     position: relative;
     overflow: hidden;
     isolation: isolate;
-    background: conic-gradient(from 210deg, hsl(var(--chart-1)), hsl(var(--chart-2)), hsl(var(--primary)) 60%, hsl(var(--chart-1)) 100%);
-    border: 1px solid hsl(var(--foreground) / 0.08);
-    box-shadow: inset 0 0 14px hsl(var(--foreground) / 0.1);
+    background:
+      radial-gradient(circle at 22% 18%, hsl(var(--chart-1) / 0.95), transparent 48%),
+      radial-gradient(circle at 82% 76%, hsl(var(--chart-2) / 0.9), transparent 50%),
+      linear-gradient(145deg, hsl(var(--primary) / 0.95), hsl(var(--primary) / 0.82));
+    background-clip: padding-box;
+    border: 0;
+    box-shadow:
+      inset 0 0 0 1px hsl(var(--foreground) / 0.08),
+      inset 0 0 12px hsl(var(--foreground) / 0.08);
   }
 
   .logo-mark::before {
     content: '';
     position: absolute;
-    inset: 2px;
+    inset: 1px;
     border-radius: inherit;
-    background: linear-gradient(145deg, hsl(var(--foreground) / 0.18), transparent 55%);
-    opacity: 0.7;
+    background: linear-gradient(145deg, hsl(var(--foreground) / 0.12), transparent 58%);
+    opacity: 0.55;
   }
 
   .logo-mark::after {
@@ -227,8 +365,9 @@
   }
 
   .dark .logo-mark {
-    border-color: transparent;
-    box-shadow: inset 0 0 12px hsl(0 0% 0% / 0.28);
+    box-shadow:
+      inset 0 0 0 1px hsl(var(--foreground) / 0.04),
+      inset 0 0 12px hsl(0 0% 0% / 0.28);
   }
 
   .dark .logo-mark::before {

@@ -1,15 +1,19 @@
 'use client';
 
-import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useAppTheme } from "@/hooks/useAppTheme";
+import { type ThemePalette } from "@/lib/theme";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -32,7 +36,7 @@ export function Header({
   const isResume = pathname?.startsWith('/nexus');
   const isResumeGen = pathname?.startsWith('/nexus/generate');
   const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : 'NexusMind';
-  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : 'Studio RAG';
+  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : 'Studio';
   const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : 'NX';
   const mainNavLinks = [
     { label: 'Dashboard', href: '/', isActive: pathname === '/' },
@@ -44,19 +48,17 @@ export function Header({
     { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
   ];
   const [llmHealthy, setLlmHealthy] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') {
-      return 'light';
-    }
-    const stored = window.localStorage.getItem('theme');
-    return stored === 'light' || stored === 'dark' ? stored : 'light';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    window.localStorage.setItem('theme', theme);
-  }, [theme]);
+  const { mode, palette, setPalette, toggleMode } = useAppTheme();
+  const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { value: 'nexus', label: 'Nexus Slate', icon: Compass },
+    { value: 'ocean', label: 'Arctic Cyan', icon: Waves },
+    { value: 'ember', label: 'Solar Ember', icon: Flame },
+    { value: 'graphite', label: 'Graphite Mint', icon: Hexagon },
+    { value: 'forest', label: 'Verdant Core', icon: Leaf },
+    { value: 'royal', label: 'Royal Flux', icon: Crown },
+    { value: 'sunset', label: 'Amber Dusk', icon: Sunset },
+    { value: 'mono', label: 'Mono Steel', icon: Contrast },
+  ];
 
   useEffect(() => {
     // Listen for custom events from chat component about LLM health.
@@ -145,15 +147,36 @@ export function Header({
           <Bell className="h-5 w-5" />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+              aria-label="Theme options"
+              title="Theme options"
+            >
+              <Palette className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-background/95 border-border/70 backdrop-blur-xl w-56">
+            <DropdownMenuLabel>Theme</DropdownMenuLabel>
+            <DropdownMenuItem onClick={toggleMode} className="cursor-pointer">
+              {mode === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              {mode === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border/60" />
+            <DropdownMenuLabel>Palette</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={palette} onValueChange={(value) => setPalette(value as ThemePalette)}>
+              {paletteOptions.map((item) => (
+                <DropdownMenuRadioItem key={item.value} value={item.value}>
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         
         {user ? (
           <DropdownMenu>

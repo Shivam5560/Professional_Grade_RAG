@@ -3,20 +3,42 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Radar, LineChart, FileSearch, Sun, Moon } from "lucide-react"
+import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast } from "lucide-react"
+import { useAppTheme } from "@/hooks/useAppTheme"
+import { type ThemePalette } from "@/lib/theme"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const router = useRouter()
+  const { mode, palette, toggleMode, setPalette } = useAppTheme()
+  const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { value: 'nexus', label: 'Nexus Slate', icon: Compass },
+    { value: 'ocean', label: 'Arctic Cyan', icon: Waves },
+    { value: 'ember', label: 'Solar Ember', icon: Flame },
+    { value: 'graphite', label: 'Graphite Mint', icon: Hexagon },
+    { value: 'forest', label: 'Verdant Core', icon: Leaf },
+    { value: 'royal', label: 'Royal Flux', icon: Crown },
+    { value: 'sunset', label: 'Amber Dusk', icon: Sunset },
+    { value: 'mono', label: 'Mono Steel', icon: Contrast },
+  ]
 
   const inlineSvgs = {
     groq: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 100 100" width="14" height="14"><g clip-path="url(#a)"><path fill="currentColor" d="M46.596 60.752H17L65.572 0 53.313 39.248h29.59L34.338 100z"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h100v100H0z"/></clipPath></defs></svg>`,
@@ -95,20 +117,6 @@ export default function AuthPage() {
     )
   }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const stored = window.localStorage.getItem('theme')
-    if (stored === 'light' || stored === 'dark') {
-      setTheme(stored)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    window.localStorage.setItem('theme', theme)
-  }, [theme])
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -157,9 +165,16 @@ export default function AuthPage() {
     setError(null)
     setSuccess(null)
     const formData = new FormData(e.target as HTMLFormElement)
+    const fullName = (formData.get("full-name") as string)?.trim()
     const email = formData.get("email") as string
     const password = formData.get("password") as string
     const confirmPassword = formData.get("confirm-password") as string
+
+    if (!fullName) {
+      setError("Full name is required")
+      setIsLoading(false)
+      return
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match")
@@ -168,7 +183,7 @@ export default function AuthPage() {
     }
 
     try {
-      await apiClient.register(email, password)
+      await apiClient.register(email, password, fullName)
       setSuccess("Account created successfully! Logging you in...")
       // Auto login after register
       await apiClient.login(email, password)
@@ -187,23 +202,43 @@ export default function AuthPage() {
     <div className="min-h-screen w-full bg-background text-foreground relative overflow-x-hidden flex flex-col">
       {/* Brand - Top Right Corner */}
       <div className="absolute top-4 right-4 lg:top-6 lg:right-8 z-50 flex items-center space-x-2 lg:space-x-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
-        <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl ring-1 ring-black/10 dark:ring-white/5 pulse-glow">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+              aria-label="Theme options"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-background/95 border-border/70 backdrop-blur-xl w-56">
+            <DropdownMenuLabel>Theme</DropdownMenuLabel>
+            <DropdownMenuItem onClick={toggleMode} className="cursor-pointer">
+              {mode === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              {mode === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border/60" />
+            <DropdownMenuLabel>Palette</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={palette} onValueChange={(value) => setPalette(value as ThemePalette)}>
+              {paletteOptions.map((item) => (
+                <DropdownMenuRadioItem key={item.value} value={item.value}>
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl pulse-glow">
           <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
         </div>
         <div className="flex flex-col">
           <h1 className="text-xl lg:text-2xl font-black tracking-tight text-foreground">
             NexusMind
           </h1>
-          <span className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Studio RAG</span>
+          <span className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Studio</span>
         </div>
       </div>
 
@@ -312,7 +347,7 @@ export default function AuthPage() {
           <div className="pt-4 border-t border-border/40 mt-4">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center space-x-3">
-                <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg ring-1 ring-black/10 dark:ring-white/5">
+                <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg">
                   NX
                 </div>
                 <div>
@@ -447,6 +482,19 @@ export default function AuthPage() {
 
               <TabsContent value="register" className="mt-0">
                 <form onSubmit={handleRegister} className="space-y-5">
+                  <div className="space-y-3">
+                    <Label htmlFor="full-name" className="text-foreground font-semibold text-sm">Full Name</Label>
+                    <div className="relative group">
+                      <Input
+                        id="full-name"
+                        name="full-name"
+                        type="text"
+                        placeholder="Your full name"
+                        required
+                        className="h-14 bg-card/80 border-border/70 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all rounded-xl text-base shadow-lg group-hover:border-border/90 [&:-webkit-autofill]:bg-card/80 [&:-webkit-autofill]:text-foreground [&:-webkit-autofill]:[-webkit-text-fill-color:inherit]"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-3">
                     <Label htmlFor="register-email" className="text-foreground font-semibold text-sm">Email Address</Label>
                     <div className="relative group">

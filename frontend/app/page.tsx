@@ -176,7 +176,7 @@ export default function DashboardPage() {
                 cta: 'Open Chat',
                 icon: MessageSquare,
                 path: '/chat',
-                accent: 'indigo',
+                tone: 'bg-[hsl(var(--chart-1)/0.12)] border-[hsl(var(--chart-1)/0.28)] text-[hsl(var(--chart-1))]',
               },
               {
                 title: 'AuraSQL',
@@ -184,7 +184,7 @@ export default function DashboardPage() {
                 cta: 'Open AuraSQL',
                 icon: Database,
                 path: '/aurasql',
-                accent: 'emerald',
+                tone: 'bg-[hsl(var(--chart-2)/0.12)] border-[hsl(var(--chart-2)/0.28)] text-[hsl(var(--chart-2))]',
               },
               {
                 title: 'Resume Studio',
@@ -192,7 +192,7 @@ export default function DashboardPage() {
                 cta: 'Nexus Studio',
                 icon: Sparkles,
                 path: '/nexus',
-                accent: 'amber',
+                tone: 'bg-[hsl(var(--chart-4)/0.12)] border-[hsl(var(--chart-4)/0.28)] text-[hsl(var(--chart-4))]',
               },
               {
                 title: 'ResumeGen',
@@ -200,12 +200,12 @@ export default function DashboardPage() {
                 cta: 'Generate Resume',
                 icon: FileText,
                 path: '/nexus/generate',
-                accent: 'rose',
+                tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
               },
             ].map((card, index) => (
               <div key={card.title} className={`lux-card sheen-border rounded-3xl p-5 space-y-3 hover-glow reveal-up delay-${index + 1}`}>
-                <div className={`h-11 w-11 rounded-xl flex items-center justify-center ring-1 ring-${card.accent}-500/20 bg-${card.accent}-500/10`}>
-                  <card.icon className={`h-5 w-5 text-${card.accent}-500`} />
+                <div className={`h-11 w-11 rounded-xl flex items-center justify-center border ${card.tone}`}>
+                  <card.icon className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-lg font-bold">{card.title}</p>

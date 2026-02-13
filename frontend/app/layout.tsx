@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'NexusMind RAG',
+  title: 'NexusMind Studio',
   description: 'Advanced RAG system with hybrid search and confidence scoring',
 }
 
@@ -27,7 +27,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${spaceGrotesk.variable} ${plexMono.variable} theme-nexus dark`}
+      data-theme-palette="nexus"
+      data-theme-mode="dark"
+    >
       <body>
         {children}
         <ClientProviders />
