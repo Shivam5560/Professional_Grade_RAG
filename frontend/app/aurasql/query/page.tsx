@@ -160,8 +160,6 @@ function AuraSqlQueryPageContent() {
     if (current.length !== baseline.length) return true;
     return current.some((value, index) => value !== baseline[index]);
   }, [selectedContextRecord, selectedTables]);
-  const urlSessionParam = params.get('session');
-
   useEffect(() => {
     if (sessionContextId) {
       setActiveContextId(sessionContextId);
@@ -248,12 +246,6 @@ function AuraSqlQueryPageContent() {
     setRecommendations([]);
     setRecsOpen(false);
   };
-
-  useEffect(() => {
-    if (!urlSessionParam && sessionId) {
-      handleStartNewChat();
-    }
-  }, [urlSessionParam, sessionId]);
 
   const loadSessionHistory = async (session: AuraSqlSession, ctxData = contexts) => {
     setSessionId(session.id);
