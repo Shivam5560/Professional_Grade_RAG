@@ -123,7 +123,7 @@ vector_store/
 embeddings/
 
 # Model files (if storing locally)
-models/
+/models/
 *.bin
 *.safetensors
 *.pt
@@ -163,3 +163,7 @@ site/
 # Keep frontend source libs tracked (root lib/ rule above would otherwise ignore these)
 !frontend/lib/
 !frontend/lib/**
+
+# Keep backend Python module package tracked (root /models/ rule above should not hide this)
+!backend/app/models/
+!backend/app/models/**
