@@ -105,6 +105,7 @@ function AuraSqlQueryPageContent() {
   const [autoScrollEnabled] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const toastRef = useRef(toast);
 
   const [loading, setLoading] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
@@ -114,14 +115,18 @@ function AuraSqlQueryPageContent() {
   const [loadingExecute, setLoadingExecute] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
+
   const reportError = useCallback((message: string) => {
     setError(message);
-    toast({
+    toastRef.current({
       title: 'Action failed',
       description: message,
       variant: 'destructive',
     });
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -155,6 +160,7 @@ function AuraSqlQueryPageContent() {
     if (current.length !== baseline.length) return true;
     return current.some((value, index) => value !== baseline[index]);
   }, [selectedContextRecord, selectedTables]);
+  const urlSessionParam = params.get('session');
 
   useEffect(() => {
     if (sessionContextId) {
@@ -244,11 +250,10 @@ function AuraSqlQueryPageContent() {
   };
 
   useEffect(() => {
-    const sessionParam = params.get('session');
-    if (!sessionParam && sessionId) {
+    if (!urlSessionParam && sessionId) {
       handleStartNewChat();
     }
-  }, [params, sessionId]);
+  }, [urlSessionParam, sessionId]);
 
   const loadSessionHistory = async (session: AuraSqlSession, ctxData = contexts) => {
     setSessionId(session.id);

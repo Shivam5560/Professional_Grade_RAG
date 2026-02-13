@@ -69,17 +69,7 @@ export default function AuthPage() {
     sources: string[]
     inlineSvg?: string
   }) => {
-    const [srcIndex, setSrcIndex] = useState(0)
-    const [hidden, setHidden] = useState(false)
-    const src = sources[srcIndex]
-
-    const handleError = () => {
-      if (srcIndex + 1 < sources.length) {
-        setSrcIndex((current) => current + 1)
-        return
-      }
-      setHidden(true)
-    }
+    const src = sources[0]
 
     return (
       <div className="flex w-[190px] items-center justify-center gap-2 rounded-full border border-border/60 bg-muted/60 px-4 py-1.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
@@ -89,13 +79,15 @@ export default function AuthPage() {
             aria-hidden="true"
             dangerouslySetInnerHTML={{ __html: inlineSvg }}
           />
-        ) : !hidden && src ? (
+        ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
             alt=""
             className="h-3.5 w-3.5 opacity-80"
-            onError={handleError}
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
           />
         ) : null}
         {name}
