@@ -38,131 +38,42 @@ export function useChat(initialSessionId?: string) {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      const assistantId = uuidv4();
-      setMessages(prev => [
-        ...prev,
-        {
-          id: assistantId,
-          role: 'assistant',
-          content: '',
-          timestamp: new Date().toISOString(),
-          isTyping: true,
-          mode: mode,
-        },
-      ]);
+      const response: ChatResponse = await apiClient.query({
+        query,
+        session_id: sessionId,
+        user_id: user?.id,
+        context_document_ids: contextDocumentIds,
+        context_files: contextFiles,
+        mode: mode,
+        stream: false,
+      });
 
-      let finalResponse: ChatResponse | undefined;
-      let streamError: Error | null = null;
+      const assistantMessage: Message = {
+        id: uuidv4(),
+        role: 'assistant',
+        content: response.answer,
+        timestamp: new Date().toISOString(),
+        confidence_score: response.confidence_score,
+        reasoning: response.reasoning,
+        sources: response.sources,
+        mode: response.mode,
+        diagramXml: response.diagram_xml,
+      };
 
-      await apiClient.queryStream(
-        {
-          query,
-          session_id: sessionId,
-          user_id: user?.id,
-          context_document_ids: contextDocumentIds,
-          context_files: contextFiles,
-          mode: mode,
-          stream: true,
-        },
-        (event, data) => {
-          if (event === 'token') {
-            const token = (data as { token?: string })?.token ?? '';
-            if (!token) return;
-            setMessages(prev => prev.map(msg => (
-              msg.id === assistantId
-                ? { ...msg, content: msg.content + token }
-                : msg
-            )));
-          }
-
-          if (event === 'final') {
-            const payload = data as ChatResponse & { diagram_xml?: string };
-            finalResponse = payload;
-            setMessages(prev => prev.map(msg => (
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    content: payload.answer,
-                    confidence_score: payload.confidence_score,
-                    sources: payload.sources,
-                    reasoning: payload.reasoning,
-                    mode: payload.mode,
-                    diagramXml: payload.diagram_xml,
-                    isTyping: false,
-                  }
-                : msg
-            )));
-          }
-
-          if (event === 'error') {
-            const message = (data as { message?: string })?.message || 'Streaming failed';
-            streamError = new Error(message);
-          }
-        }
-      );
-
-      if (streamError) {
-        throw streamError;
+      setMessages(prev => [...prev, assistantMessage]);
+      if (user?.id) {
+        window.dispatchEvent(
+          new CustomEvent('chat-history-updated', {
+            detail: { userId: user.id, sessionId: response.session_id },
+          })
+        );
       }
-
-      if (finalResponse) {
-        if (user?.id) {
-          window.dispatchEvent(
-            new CustomEvent('chat-history-updated', {
-              detail: { userId: user.id, sessionId: finalResponse.session_id },
-            })
-          );
-        }
-        return finalResponse;
-      }
-
-      return undefined;
-
+      return response;
     } catch (err) {
-      try {
-        // Remove the streaming placeholder if it exists
-        setMessages(prev => prev.filter(msg => !msg.isTyping));
-
-        const response: ChatResponse = await apiClient.query({
-          query,
-          session_id: sessionId,
-          user_id: user?.id,
-          context_document_ids: contextDocumentIds,
-          context_files: contextFiles,
-          mode: mode,
-          stream: false,
-        });
-
-        const assistantMessage: Message = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: response.answer,
-          timestamp: new Date().toISOString(),
-          confidence_score: response.confidence_score,
-          reasoning: response.reasoning,
-          sources: response.sources,
-          mode: response.mode,
-          diagramXml: response.diagram_xml,
-        };
-
-        setMessages(prev => [...prev, assistantMessage]);
-        if (user?.id) {
-          window.dispatchEvent(
-            new CustomEvent('chat-history-updated', {
-              detail: { userId: user.id, sessionId: response.session_id },
-            })
-          );
-        }
-        return response;
-      } catch (fallbackErr) {
-        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Failed to send message';
-        setError(errorMessage);
-
-        // Remove the user message if query failed
-        setMessages(prev => prev.filter(msg => msg.role !== 'user' || msg.id !== userMessage.id));
-
-        throw fallbackErr;
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      setError(errorMessage);
+      setMessages(prev => prev.filter(msg => msg.role !== 'user' || msg.id !== userMessage.id));
+      throw err;
     } finally {
       setIsLoading(false);
     }
