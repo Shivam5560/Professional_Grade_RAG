@@ -160,3 +160,6 @@ site/
 *.parquet
 
 .github/
+# Keep frontend source libs tracked (root lib/ rule above would otherwise ignore these)
+!frontend/lib/
+!frontend/lib/**
