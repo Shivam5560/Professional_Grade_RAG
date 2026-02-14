@@ -386,17 +386,31 @@ class ApiClient {
     return response.recommendations;
   }
 
-  async generateAuraSqlQuery(contextId: string, query: string): Promise<AuraSqlQueryResponse> {
+  async generateAuraSqlQuery(
+    contextId: string,
+    query: string,
+    outputDialect?: string
+  ): Promise<AuraSqlQueryResponse> {
     return this.request<AuraSqlQueryResponse>('/aurasql/query', {
       method: 'POST',
-      body: JSON.stringify({ context_id: contextId, query }),
+      body: JSON.stringify({ context_id: contextId, query, output_dialect: outputDialect }),
     });
   }
 
-  async generateAuraSqlQueryWithSession(contextId: string, query: string, sessionId?: string): Promise<AuraSqlQueryResponse> {
+  async generateAuraSqlQueryWithSession(
+    contextId: string,
+    query: string,
+    sessionId?: string,
+    outputDialect?: string
+  ): Promise<AuraSqlQueryResponse> {
     return this.request<AuraSqlQueryResponse>('/aurasql/query', {
       method: 'POST',
-      body: JSON.stringify({ context_id: contextId, query, session_id: sessionId }),
+      body: JSON.stringify({
+        context_id: contextId,
+        query,
+        session_id: sessionId,
+        output_dialect: outputDialect,
+      }),
     });
   }
 

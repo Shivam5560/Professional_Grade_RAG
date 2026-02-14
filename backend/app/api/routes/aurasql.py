@@ -9,6 +9,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from llama_index.core.schema import TextNode
+from sqlglot import exp, parse_one, transpile
+from sqlglot.errors import ParseError
 from app.api.deps import get_current_user
 from app.config import settings
 from app.db.database import get_db
@@ -182,6 +184,145 @@ def _extract_tables_from_sql(sql: str) -> list[str]:
         if raw:
             tables.append(raw)
     return tables
+
+
+_DB_TO_SQLGLOT_DIALECT = {
+    "postgresql": "postgres",
+    "mysql": "mysql",
+    "oracle": "oracle",
+}
+
+_SQLGLOT_DIALECT_ALIASES = {
+    "postgresql": "postgres",
+}
+
+
+def _normalize_identifier(identifier: str) -> str:
+    return identifier.strip("`\"").lower()
+
+
+def _build_retrieved_schema_sets(schema_snapshot: dict) -> tuple[set[str], set[str], set[str]]:
+    tables: set[str] = set()
+    qualified_columns: set[str] = set()
+    column_names: set[str] = set()
+
+    for table_name, columns in (schema_snapshot or {}).items():
+        table = _normalize_identifier(str(table_name))
+        tables.add(table)
+        for column in columns or []:
+            raw_column = (
+                column.get("column_name")
+                or column.get("COLUMN_NAME")
+                or column.get("name")
+            )
+            if not raw_column:
+                continue
+            col = _normalize_identifier(str(raw_column))
+            qualified_columns.add(f"{table}.{col}")
+            column_names.add(col)
+    return tables, qualified_columns, column_names
+
+
+def _collect_table_aliases(ast: exp.Expression) -> dict[str, str]:
+    alias_to_table: dict[str, str] = {}
+    for table_expr in ast.find_all(exp.Table):
+        table_name = _normalize_identifier(table_expr.name)
+        if not table_name:
+            continue
+        alias_name = _normalize_identifier(table_expr.alias) if table_expr.alias else ""
+        if alias_name:
+            alias_to_table[alias_name] = table_name
+    return alias_to_table
+
+
+def _collect_cte_names(ast: exp.Expression) -> set[str]:
+    cte_names: set[str] = set()
+    for cte_expr in ast.find_all(exp.CTE):
+        alias_name = _normalize_identifier(cte_expr.alias_or_name or "")
+        if alias_name:
+            cte_names.add(alias_name)
+    return cte_names
+
+
+def _collect_projection_aliases(ast: exp.Expression) -> set[str]:
+    projection_aliases: set[str] = set()
+    for alias_expr in ast.find_all(exp.Alias):
+        alias_name = _normalize_identifier(alias_expr.alias or "")
+        if alias_name:
+            projection_aliases.add(alias_name)
+    return projection_aliases
+
+
+def _validate_sql_with_schema(
+    sql: str,
+    db_type: str,
+    schema_snapshot: dict,
+) -> tuple[list[str], list[str], list[str]]:
+    dialect = _DB_TO_SQLGLOT_DIALECT.get((db_type or "").lower(), "postgres")
+    try:
+        ast = parse_one(sql, dialect=dialect)
+    except ParseError as exc:
+        details = []
+        for err in exc.errors:
+            message = err.get("description") or str(err)
+            details.append(message)
+        return details or [str(exc)], [], []
+
+    retrieved_tables, retrieved_qualified_columns, retrieved_column_names = _build_retrieved_schema_sets(schema_snapshot)
+    alias_to_table = _collect_table_aliases(ast)
+    cte_names = _collect_cte_names(ast)
+    projection_aliases = _collect_projection_aliases(ast)
+
+    used_tables: set[str] = set()
+    for table_expr in ast.find_all(exp.Table):
+        table_name = _normalize_identifier(table_expr.name)
+        if table_name:
+            used_tables.add(table_name)
+
+    hallucinated_tables = sorted(used_tables - retrieved_tables - cte_names)
+
+    hallucinated_columns: set[str] = set()
+    for col_expr in ast.find_all(exp.Column):
+        col_name = _normalize_identifier(col_expr.name or "")
+        if not col_name:
+            continue
+        table_name = _normalize_identifier(col_expr.table) if col_expr.table else ""
+        if table_name:
+            resolved_table_name = alias_to_table.get(table_name, table_name)
+            if resolved_table_name in cte_names:
+                continue
+            qualified = f"{resolved_table_name}.{col_name}"
+            if qualified not in retrieved_qualified_columns:
+                hallucinated_columns.add(qualified)
+        elif col_name not in retrieved_column_names and col_name not in projection_aliases:
+            hallucinated_columns.add(col_name)
+
+    return [], hallucinated_tables, sorted(hallucinated_columns)
+
+
+def _render_sql_validation_message(
+    syntax_errors: list[str],
+    hallucinated_tables: list[str],
+    hallucinated_columns: list[str],
+) -> str:
+    messages: list[str] = []
+    if syntax_errors:
+        messages.append(f"SQL syntax validation failed: {syntax_errors[0]}")
+    if hallucinated_tables:
+        messages.append(f"Referenced tables not found in retrieved schema: {', '.join(hallucinated_tables)}.")
+    if hallucinated_columns:
+        messages.append(f"Referenced columns not found in retrieved schema: {', '.join(hallucinated_columns)}.")
+    return " ".join(messages).strip()
+
+
+def _transpile_sql_for_output(sql: str, source_db_type: str, output_dialect: str | None) -> str:
+    if not output_dialect:
+        return sql
+    source_dialect = _DB_TO_SQLGLOT_DIALECT.get((source_db_type or "").lower(), "postgres")
+    target_dialect = _SQLGLOT_DIALECT_ALIASES.get(output_dialect.lower(), output_dialect.lower())
+    transpiled = transpile(sql, read=source_dialect, write=target_dialect)
+    return transpiled[0] if transpiled else sql
+
 
 def _calculate_sql_confidence(
     sql: str,
@@ -773,16 +914,21 @@ async def generate_query(
             session_id=session_id,
             confidence_score=0.0,
             confidence_level="low",
+            validation_errors=["Unable to parse SQL from model response."],
         )
 
-    context_table_set = {name.lower() for name in context.table_names}
-    source_set = {name.lower() for name in source_tables}
-    inferred_tables = _extract_tables_from_sql(sql)
-    inferred_set = {name.lower() for name in inferred_tables}
-    if (source_set and not source_set.issubset(context_table_set)) or (
-        inferred_set and not inferred_set.issubset(context_table_set)
-    ):
-        explanation = "Could not generate SQL because the request references tables outside the selected context."
+    syntax_errors, hallucinated_tables, hallucinated_columns = _validate_sql_with_schema(
+        sql=sql,
+        db_type=connection.db_type,
+        schema_snapshot=context.schema_snapshot or {},
+    )
+    validation_errors = syntax_errors + hallucinated_tables + hallucinated_columns
+    if syntax_errors or hallucinated_tables or hallucinated_columns:
+        explanation = _render_sql_validation_message(
+            syntax_errors=syntax_errors,
+            hallucinated_tables=hallucinated_tables,
+            hallucinated_columns=hallucinated_columns,
+        ) or "SQL validation failed."
         return AuraSqlQueryResponse(
             sql="",
             explanation=explanation,
@@ -790,7 +936,13 @@ async def generate_query(
             session_id=session_id,
             confidence_score=0.0,
             confidence_level="low",
+            validation_errors=validation_errors,
         )
+
+    try:
+        sql = _transpile_sql_for_output(sql, connection.db_type, payload.output_dialect)
+    except Exception as exc:
+        logging.warning("AuraSQL output dialect transpile failed: %s", exc)
 
     confidence_score, confidence_level = _calculate_sql_confidence(
         sql,
@@ -822,6 +974,7 @@ async def generate_query(
         session_id=session_id,
         confidence_score=confidence_score,
         confidence_level=confidence_level,
+        validation_errors=[],
     )
 
 

@@ -25,6 +25,7 @@ oracledb
 pandas
 numpy
 sqlparse
+sqlglot
 
 # Nexus Resume Analyzer
 spacy

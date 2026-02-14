@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/useToast';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-sql';
 import { format as formatSqlWithLib } from 'sql-formatter';
+import type { SqlLanguage } from 'sql-formatter';
 import {
   AlertCircle,
   CheckCircle2,
@@ -56,19 +57,45 @@ type AuraSqlChatMessage = {
   originalSql?: string;
   resultFilter?: string;
   isEditingSql?: boolean;
+  validationErrors?: string[];
+  executionError?: string | null;
 };
 
 const makeMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-const formatSql = (sql: string) => {
+const FORMAT_LANGUAGE_BY_DIALECT: Record<string, SqlLanguage> = {
+  postgresql: 'postgresql',
+  postgres: 'postgresql',
+  mysql: 'mysql',
+  oracle: 'plsql',
+  bigquery: 'bigquery',
+  snowflake: 'snowflake',
+  sqlite: 'sqlite',
+  tsql: 'tsql',
+};
+
+const OUTPUT_DIALECT_OPTIONS = [
+  { value: 'connection', label: 'Connection DB (default)' },
+  { value: 'postgres', label: 'PostgreSQL' },
+  { value: 'mysql', label: 'MySQL' },
+  { value: 'oracle', label: 'Oracle' },
+  { value: 'bigquery', label: 'BigQuery' },
+  { value: 'snowflake', label: 'Snowflake' },
+  { value: 'sqlite', label: 'SQLite' },
+  { value: 'tsql', label: 'T-SQL' },
+];
+
+const formatSql = (sql: string, dialect: string) => {
   try {
-    return formatSqlWithLib(sql, { language: 'postgresql' });
+    const language: SqlLanguage = FORMAT_LANGUAGE_BY_DIALECT[dialect] || 'postgresql';
+    return formatSqlWithLib(sql, { language });
   } catch {
     return sql;
   }
 };
 
-const highlightSql = (sql: string) => Prism.highlight(formatSql(sql), Prism.languages.sql, 'sql');
+const highlightSql = (sql: string, dialect: string) =>
+  Prism.highlight(formatSql(sql, dialect), Prism.languages.sql, 'sql');
 
 function AuraSqlQueryPageContent() {
   const params = useSearchParams();
@@ -89,6 +116,7 @@ function AuraSqlQueryPageContent() {
   const [showConnectionMenu, setShowConnectionMenu] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showTablesMenu, setShowTablesMenu] = useState(false);
+  const [outputDialect, setOutputDialect] = useState('connection');
   const [sessionContextId, setSessionContextId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AuraSqlChatMessage[]>([]);
@@ -141,6 +169,10 @@ function AuraSqlQueryPageContent() {
     () => connectionContexts.find((ctx) => ctx.id === selectedContext) || null,
     [connectionContexts, selectedContext]
   );
+  const sqlDisplayDialect = useMemo(() => {
+    if (outputDialect !== 'connection') return outputDialect;
+    return connections.find((conn) => conn.id === selectedConnection)?.db_type || 'postgresql';
+  }, [connections, outputDialect, selectedConnection]);
 
   const baselineTables = useMemo(
     () => new Set(selectedContextRecord?.table_names ?? []),
@@ -464,7 +496,8 @@ function AuraSqlQueryPageContent() {
       const response = await apiClient.generateAuraSqlQueryWithSession(
         activeContextId,
         trimmed,
-        sessionId || undefined
+        sessionId || undefined,
+        outputDialect === 'connection' ? undefined : outputDialect
       );
 
       if (!response.sql) {
@@ -476,6 +509,7 @@ function AuraSqlQueryPageContent() {
             content: response.explanation || 'Could not generate SQL with the selected context.',
             confidenceScore: response.confidence_score ?? 0,
             confidenceLevel: response.confidence_level ?? 'low',
+            validationErrors: response.validation_errors ?? [],
           },
         ]);
         return;
@@ -495,6 +529,7 @@ function AuraSqlQueryPageContent() {
         execution: null,
         showRows: 10,
         showResults: false,
+        validationErrors: response.validation_errors ?? [],
       };
       setChatMessages((prev) => [...prev, assistantMessage]);
 
@@ -527,11 +562,19 @@ function AuraSqlQueryPageContent() {
       setChatMessages((prev) =>
         prev.map((msg) =>
           msg.id === messageId
-            ? { ...msg, execution: result, showRows: msg.showRows ?? 10, showResults: true }
+            ? { ...msg, execution: result, executionError: null, showRows: msg.showRows ?? 10, showResults: true }
             : msg
         )
       );
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to execute SQL';
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, executionError: errorMessage }
+            : msg
+        )
+      );
       reportError(err instanceof Error ? err.message : 'Failed to execute SQL');
     } finally {
       setLoadingExecute(false);
@@ -568,7 +611,7 @@ function AuraSqlQueryPageContent() {
     setChatMessages((prev) =>
       prev.map((msg) =>
         msg.id === messageId
-          ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '') }
+          ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '', sqlDisplayDialect) }
           : msg
       )
     );
@@ -678,10 +721,105 @@ function AuraSqlQueryPageContent() {
     };
   };
 
+  const getMessageChecks = (message: AuraSqlChatMessage) => {
+    const joinedErrors = (message.validationErrors ?? []).join(' ').toLowerCase();
+    const hasSyntaxError = joinedErrors.includes('syntax') || joinedErrors.includes('parse');
+    const hasSchemaError =
+      joinedErrors.includes('table') ||
+      joinedErrors.includes('column') ||
+      joinedErrors.includes('schema');
+
+    const syntax: 'pass' | 'fail' | 'pending' = hasSyntaxError
+      ? 'fail'
+      : message.sql
+      ? 'pass'
+      : 'pending';
+    const verification: 'pass' | 'fail' | 'pending' = hasSchemaError
+      ? 'fail'
+      : message.sourceTables?.length
+      ? 'pass'
+      : message.sql
+      ? 'pass'
+      : 'pending';
+    const typeCheck: 'pass' | 'fail' | 'pending' = message.sql
+      ? 'pass'
+      : (message.validationErrors?.length ?? 0) > 0
+      ? 'fail'
+      : 'pending';
+    const executionStatus: 'pass' | 'fail' | 'pending' = message.execution
+      ? 'pass'
+      : message.executionError
+      ? 'fail'
+      : 'pending';
+    const optimization: 'pass' | 'warn' | 'fail' | 'pending' =
+      message.confidenceLevel === 'high'
+        ? 'pass'
+        : message.confidenceLevel === 'medium'
+        ? 'warn'
+        : message.confidenceLevel === 'low'
+        ? 'fail'
+        : 'pending';
+
+    return [
+      { label: 'Verification', status: verification },
+      { label: 'Types', status: typeCheck },
+      { label: 'Syntax', status: syntax },
+      { label: 'Execution', status: executionStatus },
+      { label: 'Optimized', status: optimization },
+    ];
+  };
+
+  const getCheckBadgeClass = (status: 'pass' | 'warn' | 'fail' | 'pending') => {
+    if (status === 'pass') return 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200';
+    if (status === 'warn') return 'bg-amber-500/15 text-amber-800 dark:text-amber-200';
+    if (status === 'fail') return 'bg-rose-500/15 text-rose-800 dark:text-rose-200';
+    return 'bg-muted text-muted-foreground';
+  };
+
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
   const showLoader = loading || loadingTables || loadingContext || savingContext || loadingGenerate || loadingExecute;
+  const loaderTitle = loading
+    ? 'Loading workspace'
+    : loadingTables
+    ? 'Refreshing table metadata'
+    : loadingContext
+    ? 'Building recommendations'
+    : savingContext
+    ? 'Saving schema context'
+    : loadingGenerate
+    ? 'Generating and validating SQL'
+    : loadingExecute
+    ? 'Executing query'
+    : 'Working';
+  const loaderSubtitle = loading
+    ? 'Syncing connections, contexts, and session history.'
+    : loadingTables
+    ? 'Inspecting database catalog for available tables.'
+    : loadingContext
+    ? 'Analyzing selected schema for targeted prompts.'
+    : savingContext
+    ? 'Persisting selected tables for this session.'
+    : loadingGenerate
+    ? 'Drafting SQL, then checking syntax and schema grounding.'
+    : loadingExecute
+    ? 'Running SQL on the selected connection and collecting results.'
+    : 'Please wait.';
+  const loaderSteps = [
+    { label: 'Load connections and history', active: loading, done: !loading },
+    {
+      label: 'Refresh selected schema context',
+      active: loadingTables || loadingContext || savingContext,
+      done: !loadingTables && !loadingContext && !savingContext,
+    },
+    {
+      label: 'Generate SQL + run validation checks',
+      active: loadingGenerate,
+      done: !loadingGenerate,
+    },
+    { label: 'Execute query and stream rows', active: loadingExecute, done: !loadingExecute },
+  ];
 
   return (
     <div className="relative h-screen overflow-hidden bg-background text-foreground">
@@ -701,21 +839,19 @@ function AuraSqlQueryPageContent() {
       {showLoader ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
-            <p className="text-sm font-semibold">Working on AuraSQL</p>
-            <p className="text-xs text-muted-foreground mt-1">Preparing schema context and SQL output.</p>
+            <p className="text-sm font-semibold">{loaderTitle}</p>
+            <p className="text-xs text-muted-foreground mt-1">{loaderSubtitle}</p>
             <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
-                Loading connections and tables
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Applying schema context
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Generating SQL output
-              </div>
+              {loaderSteps.map((step) => (
+                <div key={step.label} className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      step.active ? 'bg-foreground/70 animate-pulse' : step.done ? 'bg-emerald-500/70' : 'bg-foreground/25'
+                    }`}
+                  />
+                  {step.label}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -837,14 +973,25 @@ function AuraSqlQueryPageContent() {
                                 const insights = getContextInsights(message);
                                 if (!insights) return null;
                                 return (
-                                  <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-xs space-y-2">
+                                  <div className="rounded-xl border border-border/60 bg-card/60 p-2 text-[11px] space-y-1.5">
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {getMessageChecks(message).map((check) => (
+                                        <Badge
+                                          key={`${message.id}-${check.label}`}
+                                          variant="secondary"
+                                          className={`text-[9px] uppercase tracking-[0.12em] ${getCheckBadgeClass(check.status)}`}
+                                        >
+                                          {check.label}: {check.status}
+                                        </Badge>
+                                      ))}
+                                    </div>
                                     <div className="flex items-center justify-between text-muted-foreground">
                                       <span>Context coverage</span>
                                       <span>
                                         {insights.used}/{insights.total} tables
                                       </span>
                                     </div>
-                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/70">
+                                    <div className="h-1 w-full overflow-hidden rounded-full bg-border/70">
                                       <div
                                         className="h-full rounded-full bg-foreground/70"
                                         style={{ width: `${insights.percent}%` }}
@@ -859,6 +1006,15 @@ function AuraSqlQueryPageContent() {
                                   </div>
                                 );
                               })()}
+
+                              {message.validationErrors && message.validationErrors.length > 0 && (
+                                <Alert variant="destructive" className="rounded-xl py-2">
+                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertDescription className="text-xs">
+                                    {message.validationErrors.join(' | ')}
+                                  </AlertDescription>
+                                </Alert>
+                              )}
 
                               <div className="rounded-xl border border-border/60 bg-card/60 p-3">
                                 {message.isEditingSql ? (
@@ -876,7 +1032,7 @@ function AuraSqlQueryPageContent() {
                                       setChatMessages((prev) =>
                                         prev.map((msg) =>
                                           msg.id === message.id
-                                            ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '') }
+                                            ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '', sqlDisplayDialect) }
                                             : msg
                                         )
                                       );
@@ -888,7 +1044,7 @@ function AuraSqlQueryPageContent() {
                                   <pre
                                     className="prism-sql text-xs font-mono whitespace-pre-wrap leading-relaxed min-h-[280px]"
                                     dangerouslySetInnerHTML={{
-                                      __html: highlightSql(formatSql(message.editedSql ?? message.sql ?? '')),
+                                      __html: highlightSql(message.editedSql ?? message.sql ?? '', sqlDisplayDialect),
                                     }}
                                   />
                                 )}
@@ -978,6 +1134,13 @@ function AuraSqlQueryPageContent() {
                                   )}
                                 </div>
                               )}
+
+                              {message.executionError && (
+                                <Alert variant="destructive" className="rounded-xl py-2">
+                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertDescription className="text-xs">{message.executionError}</AlertDescription>
+                                </Alert>
+                              )}
                             </div>
                           )}
                         </div>
@@ -987,7 +1150,7 @@ function AuraSqlQueryPageContent() {
                     {loadingGenerate && (
                       <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Generating SQL...
+                        Drafting SQL and validating syntax/schema...
                       </div>
                     )}
                     <div ref={bottomRef} />
@@ -1196,7 +1359,23 @@ function AuraSqlQueryPageContent() {
                           )}
                         </div>
                       </div>
-
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground" htmlFor="sql-output-dialect">
+                          Output format
+                        </label>
+                        <select
+                          id="sql-output-dialect"
+                          value={outputDialect}
+                          onChange={(event) => setOutputDialect(event.target.value)}
+                          className="rounded-lg border border-border/70 bg-card/70 px-2 py-1 text-xs text-foreground"
+                        >
+                          {OUTPUT_DIALECT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     {historyBanner && <p className="text-xs text-amber-500">{historyBanner}</p>}

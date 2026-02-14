@@ -85,6 +85,7 @@ class AuraSqlQueryRequest(BaseModel):
     context_id: str
     query: str
     session_id: Optional[str] = None
+    output_dialect: Optional[str] = None
 
 
 class AuraSqlQueryResponse(BaseModel):
@@ -94,6 +95,7 @@ class AuraSqlQueryResponse(BaseModel):
     session_id: Optional[str] = None
     confidence_score: Optional[float] = None
     confidence_level: Optional[str] = None
+    validation_errors: Optional[List[str]] = None
 
 
 class AuraSqlExecuteRequest(BaseModel):

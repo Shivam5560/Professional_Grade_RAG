@@ -198,6 +198,7 @@ export interface AuraSqlQueryResponse {
   session_id?: string | null;
   confidence_score?: number | null;
   confidence_level?: 'high' | 'medium' | 'low' | null;
+  validation_errors?: string[] | null;
 }
 
 export interface AuraSqlExecuteResponse {
