@@ -20,12 +20,58 @@ logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Token Helpers
+# Token / Rate-Limit Helpers
 # ---------------------------------------------------------------------------
+
+# Rate limiter: 250k tokens per minute budget
+# We use a conservative 200k soft-limit so we never actually hit the hard 250k
+_TPM_SOFT_LIMIT = 200_000
+_TPM_WINDOW = 60.0  # seconds
+_token_log: List[Tuple[float, int]] = []  # (timestamp, tokens_used)
+_rate_lock = asyncio.Lock()
+
 
 def count_tokens_approx(text: str) -> int:
     """Approximate token count (≈ 4 chars per token for English text)."""
     return max(1, len(text) // 4)
+
+
+def _prune_token_log() -> int:
+    """Remove expired entries from the token log, return current usage."""
+    import time as _time
+    now = _time.time()
+    while _token_log and now - _token_log[0][0] > _TPM_WINDOW:
+        _token_log.pop(0)
+    return sum(t for _, t in _token_log)
+
+
+async def _wait_for_token_budget(estimated_tokens: int) -> None:
+    """
+    Wait until we have enough token budget within the TPM window.
+    Prevents 429 rate-limit errors from the LLM provider.
+    """
+    import time as _time
+
+    while True:
+        async with _rate_lock:
+            used = _prune_token_log()
+            if used + estimated_tokens <= _TPM_SOFT_LIMIT:
+                _token_log.append((_time.time(), estimated_tokens))
+                return  # Budget acquired
+
+            # Calculate how long to wait for oldest entries to expire
+            if _token_log:
+                wait_until = _token_log[0][0] + _TPM_WINDOW
+                sleep_secs = max(0.5, wait_until - _time.time() + 0.2)
+            else:
+                sleep_secs = 1.0
+
+        # Sleep OUTSIDE the lock so other coroutines can proceed
+        logger.log_operation(
+            f"⏳ Rate-limit: waiting {sleep_secs:.1f}s (used ~{used} of {_TPM_SOFT_LIMIT} tokens)",
+            level="INFO",
+        )
+        await asyncio.sleep(sleep_secs)
 
 
 # ---------------------------------------------------------------------------
@@ -83,48 +129,131 @@ async def groq_llm_call(
     prompt: str,
     groq_service,
     temperature: float = 0.0,
+    max_retries: int = 3,
+    use_reasoning: bool = True,
 ) -> str:
     """
-    Call Groq LLM (via LlamaIndex Groq wrapper).
+    Call Groq LLM (via LlamaIndex Groq wrapper) with rate-limit awareness.
     This replaces PageIndex's `ChatGPT_API` and `ChatGPT_API_async`.
+
+    Args:
+        use_reasoning: If True, use the main LLM with reasoning_effort='high'.
+                       If False, use the structured LLM (no reasoning tokens)
+                       which is better for JSON extraction / summaries.
+
+    Includes:
+    - Token budget tracking to stay within 250k TPM
+    - Automatic retry with exponential backoff on rate-limit errors
     """
-    try:
-        llm = groq_service.get_llm()
-        response = await llm.acomplete(prompt)
-        return response.text.strip()
-    except Exception as e:
-        logger.log_error("Groq LLM call", e)
-        raise
+    # Use a lighter estimate: only count prompt tokens (output is harder to predict
+    # and the hard limit protects us). Divide by 2 to avoid over-reserving budget.
+    estimated_tokens = count_tokens_approx(prompt) // 2 + 500
+    await _wait_for_token_budget(estimated_tokens)
+
+    for attempt in range(max_retries):
+        try:
+            if use_reasoning:
+                llm = groq_service.get_llm()
+            else:
+                llm = groq_service.get_structured_llm()
+            response = await llm.acomplete(prompt)
+            result = response.text.strip()
+            if not result:
+                logger.log_operation(
+                    "⚠️  LLM returned empty response, retrying with structured LLM",
+                    level="WARNING",
+                    attempt=attempt + 1,
+                )
+                # Fallback: if reasoning LLM returned empty, try structured
+                if use_reasoning and attempt < max_retries - 1:
+                    llm = groq_service.get_structured_llm()
+                    response = await llm.acomplete(prompt)
+                    result = response.text.strip()
+                if not result:
+                    continue  # Try next attempt
+            return result
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_rate_limit = "rate" in error_msg or "429" in error_msg or "limit" in error_msg
+            if is_rate_limit and attempt < max_retries - 1:
+                wait = (2 ** attempt) * 5  # 5s, 10s, 20s
+                logger.log_operation(
+                    f"⏳ Rate-limited, retrying in {wait}s (attempt {attempt + 1}/{max_retries})",
+                    level="WARNING",
+                )
+                await asyncio.sleep(wait)
+                continue
+            logger.log_error("Groq LLM call", e)
+            raise
+
+    # All retries exhausted — return empty string rather than crashing
+    logger.log_operation("⚠️  All LLM call retries exhausted, returning empty", level="WARNING")
+    return ""
 
 
 def extract_json_from_response(text: str) -> Any:
     """
-    Extract JSON from an LLM response that may contain markdown fences.
+    Extract JSON from an LLM response that may contain:
+    - Markdown code fences (```json ... ```)
+    - Reasoning model <think>...</think> blocks
+    - XML/HTML wrapper tags
+    - Plain text preamble/postscript around the JSON
     """
-    # Try direct parse first
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+    # Step 0: Strip reasoning model thinking blocks (e.g. DeepSeek, QwQ, etc.)
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # Also strip <|thinking|>...<|/thinking|> variant
+    cleaned = re.sub(r"<\|thinking\|>.*?<\|/thinking\|>", "", cleaned, flags=re.DOTALL)
+    # Strip any other XML-style wrapper tags that aren't part of JSON
+    cleaned = re.sub(r"</?(?:response|output|result|answer)>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.strip()
 
-    # Strip markdown code fences
-    cleaned = re.sub(r"```(?:json)?\s*", "", text)
-    cleaned = cleaned.strip().rstrip("`")
+    # Step 1: Try direct parse
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
 
-    # Try to find JSON object/array in text
-    for pattern in [r"\{[\s\S]*\}", r"\[[\s\S]*\]"]:
-        match = re.search(pattern, text)
+    # Step 2: Strip markdown code fences
+    no_fences = re.sub(r"```(?:json)?\s*", "", cleaned)
+    no_fences = no_fences.strip().rstrip("`")
+    try:
+        return json.loads(no_fences)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 3: Find the outermost JSON array [...] — most common for TOC
+    # Use a bracket-counting approach for robustness with nested structures
+    for open_ch, close_ch in [("[", "]"), ("{", "}")]:
+        start_idx = cleaned.find(open_ch)
+        if start_idx == -1:
+            continue
+        depth = 0
+        for i in range(start_idx, len(cleaned)):
+            if cleaned[i] == open_ch:
+                depth += 1
+            elif cleaned[i] == close_ch:
+                depth -= 1
+                if depth == 0:
+                    candidate = cleaned[start_idx : i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break  # Try next bracket type
+
+    # Step 4: Last resort — greedy regex
+    for pattern in [r"\[\s*\{[\s\S]*\}\s*\]", r"\{[\s\S]*\}"]:
+        match = re.search(pattern, cleaned)
         if match:
             try:
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 continue
 
-    logger.log_operation("⚠️  Could not extract JSON from LLM response", level="WARNING")
+    logger.log_operation(
+        "⚠️  Could not extract JSON from LLM response",
+        level="WARNING",
+        response_preview=cleaned[:300],
+    )
     return {}
 
 
@@ -132,16 +261,24 @@ def extract_json_from_response(text: str) -> Any:
 # Tree Generation Prompts and Functions
 # ---------------------------------------------------------------------------
 
-GENERATE_TOC_PROMPT = """You are an expert at extracting hierarchical structure from documents.
+GENERATE_TOC_INIT_PROMPT = """You are an expert at extracting hierarchical tree structure from documents.
 
 Analyze the following document text and generate a hierarchical tree structure (table of contents) that represents the document's natural sections and subsections.
 
-Each node should have:
-- "structure": a numeric hierarchy index (e.g., "1", "1.1", "1.2", "2", "2.1")
-- "title": the original section title from the text
-- "physical_index": the page number (1-indexed) where this section starts
+The structure variable is a PURELY NUMERIC dot-notation index representing the hierarchy position.
+Rules:
+- Top-level sections: "1", "2", "3", ...
+- Subsections: "1.1", "1.2", "2.1", ...
+- Deeper levels: "1.1.1", "1.2.3", ...
+- ALWAYS use numbers only — never letters or words.
+- Appendices, annexes, and back-matter sections MUST continue the numeric sequence after the last chapter.
+  Example: if the last chapter is 5, use "6", "6.1", "6.2" for Appendix A and its subsections.
 
-The document pages are wrapped in <physical_index_X> tags to indicate page boundaries.
+For the title, extract the original section title from the text. Only fix space inconsistency.
+
+The provided text contains tags like <physical_index_X> to indicate the start of page X.
+
+For the physical_index, extract the page number (1-indexed integer) where this section starts.
 
 Return ONLY a JSON array in this exact format:
 [
@@ -153,12 +290,53 @@ Return ONLY a JSON array in this exact format:
     ...
 ]
 
+Be thorough — capture ALL sections and subsections visible in the text. Think carefully about the hierarchy depth.
+
 Document text:
 {document_text}
 """
 
 
-GENERATE_SUMMARY_PROMPT = """You are given a section of a document. Generate a concise summary (2-4 sentences) that captures the main points covered in this section.
+GENERATE_TOC_CONTINUE_PROMPT = """You are an expert at extracting hierarchical tree structure from documents.
+
+You are given a tree structure of the previous part and the text of the current part.
+Your task is to CONTINUE the tree structure from the previous part to include the current part.
+
+The structure variable is a PURELY NUMERIC dot-notation index representing the hierarchy position.
+Rules:
+- ALWAYS use numbers only — never letters or words.
+- Continue numbering from where the previous structure left off.
+- Appendices, annexes, and back-matter sections MUST continue the numeric sequence.
+  Example: if the last item in the previous structure is "5.3", the next top-level section is "6",
+  and its subsections are "6.1", "6.2", etc. — even if the document calls them "Appendix A", "Annex B", etc.
+
+For the title, extract the original section title from the text. Only fix space inconsistency.
+
+The provided text contains tags like <physical_index_X> to indicate the start of page X.
+
+For the physical_index, extract the page number (1-indexed integer) where this section starts.
+
+Return ONLY the ADDITIONAL items as a JSON array (do not repeat items from the previous structure):
+[
+    {{
+        "structure": "x.x.x",
+        "title": "Section Title",
+        "physical_index": 5
+    }},
+    ...
+]
+
+Be thorough — capture ALL new sections and subsections visible in the current part.
+
+Previous tree structure:
+{previous_toc}
+
+Current part text:
+{document_text}
+"""
+
+
+GENERATE_SUMMARY_PROMPT = """You are given a section of a document. Generate a concise but detailed summary (3-5 sentences) that captures the main points, key data, and conclusions covered in this section. Include specific figures, terms, or names that would help identify whether this section is relevant to a given question.
 
 Section Title: {title}
 Section Text: {text}
@@ -172,6 +350,44 @@ Document structure:
 {tree_json}
 
 Return ONLY the description text, nothing else."""
+
+
+def _build_page_groups(
+    pages: List[Tuple[str, int]],
+    max_pages_per_chunk: int,
+    max_tokens_per_group: int = 20000,
+) -> List[Tuple[int, int]]:
+    """
+    Split pages into groups for TOC generation, respecting both page count
+    and token budget (mirrors PageIndex's `page_list_to_group_text`).
+
+    Returns list of (start_page, end_page) tuples (1-indexed, inclusive).
+    """
+    total_pages = len(pages)
+    if total_pages == 0:
+        return []
+
+    groups: List[Tuple[int, int]] = []
+    group_start = 0
+    group_tokens = 0
+
+    for i, (_, tok) in enumerate(pages):
+        if (
+            group_tokens + tok > max_tokens_per_group
+            or (i - group_start) >= max_pages_per_chunk
+        ) and i > group_start:
+            # Close current group
+            groups.append((group_start + 1, i))  # 1-indexed, inclusive
+            group_start = max(i - 1, group_start)  # 1-page overlap
+            group_tokens = pages[max(i - 1, 0)][1] + tok
+        else:
+            group_tokens += tok
+
+    # Add the final group
+    if group_start < total_pages:
+        groups.append((group_start + 1, total_pages))
+
+    return groups
 
 
 async def generate_tree_from_pdf(
@@ -207,20 +423,40 @@ async def generate_tree_from_pdf(
             "structure": [],
         }
 
-    # Step 2: Generate TOC by processing page groups
+    # Step 2: Generate TOC using continuation strategy (like PageIndex source)
+    #   - First chunk: generate initial TOC
+    #   - Subsequent chunks: continue TOC with awareness of previous structure
+    # This produces a much more coherent and accurate tree.
     all_toc_items: List[Dict] = []
-    for chunk_start in range(0, total_pages, max_pages_per_chunk):
-        chunk_end = min(chunk_start + max_pages_per_chunk, total_pages)
-        page_text = get_text_of_pages(pages, chunk_start + 1, chunk_end, tag=True)
 
-        prompt = GENERATE_TOC_PROMPT.format(document_text=page_text)
-        response = await groq_llm_call(prompt, groq_service)
+    # Build page groups using token-based grouping (mirrors PageIndex's page_list_to_group_text)
+    page_groups = _build_page_groups(pages, max_pages_per_chunk)
+    logger.log_operation(f"📑 Split PDF into {len(page_groups)} page groups for TOC")
+
+    for group_idx, (group_start, group_end) in enumerate(page_groups):
+        page_text = get_text_of_pages(pages, group_start, group_end, tag=True)
+
+        if group_idx == 0:
+            # First group: generate initial TOC
+            prompt = GENERATE_TOC_INIT_PROMPT.format(document_text=page_text)
+        else:
+            # Subsequent groups: continue TOC with previous context
+            prompt = GENERATE_TOC_CONTINUE_PROMPT.format(
+                previous_toc=json.dumps(all_toc_items, indent=2)[:8000],
+                document_text=page_text,
+            )
+
+        response = await groq_llm_call(prompt, groq_service, use_reasoning=False)
         toc_items = extract_json_from_response(response)
 
         if isinstance(toc_items, list):
             all_toc_items.extend(toc_items)
 
-    logger.log_operation(f"📋 Generated {len(all_toc_items)} TOC items")
+        logger.log_operation(
+            f"📋 TOC group {group_idx + 1}/{len(page_groups)}: +{len(toc_items) if isinstance(toc_items, list) else 0} items"
+        )
+
+    logger.log_operation(f"📋 Generated {len(all_toc_items)} TOC items total")
 
     # Deduplicate and clean
     seen_titles = set()
@@ -252,15 +488,15 @@ async def generate_tree_from_pdf(
     # Step 4: Attach text content
     _attach_text_to_nodes(tree, pages)
 
-    # Step 5: Generate summaries
-    await _generate_summaries(tree, groq_service)
+    # Step 5: Generate summaries (batched to stay within TPM limit)
+    await _generate_summaries_batched(tree, groq_service)
 
     # Step 6: Generate document description
     tree_for_desc = _remove_text_fields(copy.deepcopy(tree))
     desc_prompt = GENERATE_DOC_DESCRIPTION_PROMPT.format(
         tree_json=json.dumps(tree_for_desc, indent=2)[:8000]
     )
-    doc_description = await groq_llm_call(desc_prompt, groq_service)
+    doc_description = await groq_llm_call(desc_prompt, groq_service, use_reasoning=False)
 
     result = {
         "doc_name": get_pdf_title(pdf_path),
@@ -276,12 +512,84 @@ async def generate_tree_from_pdf(
 # Internal Tree Helpers
 # ---------------------------------------------------------------------------
 
+def _safe_struct_sort_key(structure: str) -> List[int]:
+    """
+    Safe sort key for structure strings — handles non-numeric parts gracefully.
+    Non-numeric / mixed parts (e.g. 'Appendix A', 'A') sort after all numeric parts.
+    """
+    parts = str(structure).split(".")
+    result = []
+    for p in parts:
+        digits = re.sub(r"\D", "", p.strip())
+        result.append(int(digits) if digits else 9999)
+    return result
+
+
+def _normalize_toc_structures(items: List[Dict]) -> List[Dict]:
+    """
+    Remap any non-numeric structure strings to purely numeric dot-notation.
+    Preserves the hierarchy: 'Appendix A' → next top-level number,
+    'Appendix A.1' → '<parent_num>.1', etc.
+    Items that are already purely numeric are untouched.
+    """
+    # Determine the highest existing top-level numeric index
+    max_top = 0
+    for item in items:
+        s = str(item.get("structure", "1")).strip()
+        top = s.split(".")[0].strip()
+        if re.match(r"^\d+$", top):
+            max_top = max(max_top, int(top))
+
+    next_top = max_top + 1
+    prefix_map: Dict[str, str] = {}  # original prefix → numeric equivalent
+
+    for item in items:
+        s = str(item.get("structure", "1")).strip()
+        parts = [p.strip() for p in s.split(".")]
+
+        # Check if every part is already purely numeric
+        if all(re.match(r"^\d+$", p) for p in parts):
+            continue  # Nothing to fix
+
+        new_parts: List[str] = []
+        for depth, p in enumerate(parts):
+            if re.match(r"^\d+$", p):
+                new_parts.append(p)
+            else:
+                orig_prefix = ".".join(parts[: depth + 1])
+                if orig_prefix not in prefix_map:
+                    if depth == 0:
+                        prefix_map[orig_prefix] = str(next_top)
+                        next_top += 1
+                    else:
+                        numeric_parent = ".".join(new_parts)  # already converted
+                        # Count how many siblings under this numeric parent already mapped
+                        sibling_count = sum(
+                            1
+                            for v in prefix_map.values()
+                            if v.startswith(numeric_parent + ".")
+                            and v.count(".") == depth
+                        )
+                        prefix_map[orig_prefix] = f"{numeric_parent}.{sibling_count + 1}"
+
+                # Keep only the last component to build the new structure
+                mapped = prefix_map[orig_prefix]
+                new_parts.append(mapped.split(".")[-1])
+
+        item["structure"] = ".".join(new_parts)
+
+    return items
+
+
 def _build_tree_from_flat(
     items: List[Dict], total_pages: int
 ) -> List[Dict]:
     """Convert flat TOC list with structure indices into a hierarchical tree."""
-    # Sort by structure index
-    items.sort(key=lambda x: [int(p) for p in str(x.get("structure", "0")).split(".")])
+    # Normalise any non-numeric structure strings BEFORE sorting
+    items = _normalize_toc_structures(items)
+
+    # Sort by structure index (safe against any remaining edge-cases)
+    items.sort(key=lambda x: _safe_struct_sort_key(x.get("structure", "0")))
 
     # Calculate end pages
     for i, item in enumerate(items):
@@ -349,28 +657,54 @@ def _attach_text_to_nodes(nodes: Any, pages: List[Tuple[str, int]]):
             _attach_text_to_nodes(nodes["nodes"], pages)
 
 
-async def _generate_summaries(nodes: Any, groq_service):
-    """Recursively generate summaries for all nodes using Groq."""
-    if isinstance(nodes, list):
-        tasks = [_generate_summaries(node, groq_service) for node in nodes]
-        await asyncio.gather(*tasks)
-    elif isinstance(nodes, dict):
-        text = nodes.get("text", "")
-        title = nodes.get("title", "")
-        if text:
-            # Truncate very long text for summary
-            truncated = text[:6000]
-            prompt = GENERATE_SUMMARY_PROMPT.format(title=title, text=truncated)
-            try:
-                summary = await groq_llm_call(prompt, groq_service)
-                nodes["summary"] = summary
-            except Exception:
-                nodes["summary"] = f"Section: {title}"
-        else:
-            nodes["summary"] = f"Section: {title}"
+def _collect_all_nodes(nodes: Any) -> List[Dict]:
+    """Collect all nodes from tree into a flat list (by reference)."""
+    result: List[Dict] = []
+    items = nodes if isinstance(nodes, list) else [nodes]
+    for node in items:
+        if isinstance(node, dict):
+            result.append(node)
+            if "nodes" in node:
+                result.extend(_collect_all_nodes(node["nodes"]))
+    return result
 
-        if "nodes" in nodes:
-            await _generate_summaries(nodes["nodes"], groq_service)
+
+async def _generate_summaries_batched(
+    tree: Any,
+    groq_service,
+    batch_size: int = 5,
+):
+    """
+    Generate summaries for all nodes in small batches to stay within TPM limits.
+    Instead of firing all summaries concurrently (which blows through 250k TPM),
+    we process them in batches of `batch_size` with rate-limit-aware calls.
+    """
+    all_nodes = _collect_all_nodes(tree)
+    total = len(all_nodes)
+    logger.log_operation(f"📝 Generating summaries for {total} nodes (batch_size={batch_size})")
+
+    for i in range(0, total, batch_size):
+        batch = all_nodes[i : i + batch_size]
+
+        async def _summarize(node: Dict) -> None:
+            text = node.get("text", "")
+            title = node.get("title", "")
+            if text:
+                truncated = text[:6000]
+                prompt = GENERATE_SUMMARY_PROMPT.format(title=title, text=truncated)
+                try:
+                    summary = await groq_llm_call(prompt, groq_service, use_reasoning=False)
+                    node["summary"] = summary
+                except Exception:
+                    node["summary"] = f"Section: {title}"
+            else:
+                node["summary"] = f"Section: {title}"
+
+        tasks = [_summarize(node) for node in batch]
+        await asyncio.gather(*tasks)
+        logger.log_operation(
+            f"📝 Summaries: {min(i + batch_size, total)}/{total} done"
+        )
 
 
 def _remove_text_fields(data: Any) -> Any:

@@ -63,7 +63,7 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="documents")
-    tree_structure = relationship("DocumentTreeStructure", back_populates="document", uselist=False)
+    tree_structure = relationship("DocumentTreeStructure", back_populates="document", uselist=False, cascade="all, delete-orphan")
 
 
 class DocumentTreeStructure(Base):
@@ -71,7 +71,7 @@ class DocumentTreeStructure(Base):
     __tablename__ = "document_tree_structures_nexus_rag"
 
     id = Column(Integer, primary_key=True, index=True)
-    document_id = Column(String, ForeignKey("documents_nexus_rag.id"), unique=True, nullable=False)
+    document_id = Column(String, ForeignKey("documents_nexus_rag.id", ondelete="CASCADE"), unique=True, nullable=False)
     tree_json = Column(JSON, nullable=False)       # Full tree structure JSON
     doc_description = Column(Text, nullable=True)   # LLM-generated document description
     node_count = Column(Integer, default=0)         # Total nodes in tree
@@ -89,8 +89,8 @@ class TreeNode(Base):
     __tablename__ = "tree_nodes_nexus_rag"
 
     id = Column(Integer, primary_key=True, index=True)
-    tree_id = Column(Integer, ForeignKey("document_tree_structures_nexus_rag.id"), nullable=False)
-    document_id = Column(String, ForeignKey("documents_nexus_rag.id"), nullable=False)
+    tree_id = Column(Integer, ForeignKey("document_tree_structures_nexus_rag.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(String, ForeignKey("documents_nexus_rag.id", ondelete="CASCADE"), nullable=False)
     node_id = Column(String, nullable=False)         # e.g., "0001", "0002"
     title = Column(String, nullable=False)
     summary = Column(Text, nullable=True)

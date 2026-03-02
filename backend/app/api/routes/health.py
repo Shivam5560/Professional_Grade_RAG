@@ -4,7 +4,7 @@ Health check endpoints.
 
 from fastapi import APIRouter, status
 from app.models.schemas import HealthResponse
-from app.services.groq_service import get_groq_service
+from app.services.llm_service import get_llm_service
 from app.services.vector_store import get_vector_store_service
 from app.services.bm25_service import get_bm25_service
 from app.config import settings
@@ -47,9 +47,9 @@ async def health_check():
             embedding_healthy = False
             embedding_label = "unsupported_embedding_provider"
         
-        # Check Groq service (LLM) - cached for 60s to prevent excessive API calls
-        groq_service = get_groq_service()
-        groq_healthy = await groq_service.check_health()
+        # Check LLM service - cached for 60s to prevent excessive API calls
+        llm_svc = get_llm_service()
+        llm_healthy = await llm_svc.check_health()
         
         # Check vector store (PostgreSQL)
         vector_store = get_vector_store_service()
@@ -61,18 +61,18 @@ async def health_check():
         bm25_healthy = bm25_stats.get("index_available", False)
         
         # Determine overall status
-        all_healthy = embedding_healthy and groq_healthy and postgres_healthy
+        all_healthy = embedding_healthy and llm_healthy and postgres_healthy
         
         if all_healthy:
             overall_status = "healthy"
-        elif groq_healthy or postgres_healthy:
+        elif llm_healthy or postgres_healthy:
             overall_status = "degraded"
         else:
             overall_status = "unhealthy"
         
         components = {
             embedding_label: "connected" if embedding_healthy else "disconnected",
-            "groq_llm": "connected" if groq_healthy else "disconnected",
+            "llm": "connected" if llm_healthy else "disconnected",
             "postgres_vector_store": "connected" if postgres_healthy else "disconnected",
             "bm25_index": "loaded" if bm25_healthy else "not_loaded",
         }
@@ -92,7 +92,7 @@ async def health_check():
             status="unhealthy",
             components={
                 "embedding_service": "unknown",
-                "groq_llm": "unknown",
+                "llm": "unknown",
                 "postgres_vector_store": "unknown",
                 "bm25_index": "unknown",
             },

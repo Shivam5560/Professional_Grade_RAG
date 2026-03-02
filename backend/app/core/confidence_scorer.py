@@ -327,7 +327,7 @@ class ConfidenceScorer:
         Returns:
             LLM's self-assessment as a string
         """
-        from app.services.groq_service import get_groq_service
+        from app.services.llm_service import get_llm_service
         
         assessment_prompt = f"""You are evaluating the quality of an answer you just generated.
 
@@ -349,8 +349,8 @@ Example: "8.5" or "7" or "9"
 Your assessment:"""
 
         try:
-            groq_service = get_groq_service()
-            llm = groq_service.get_llm()
+            llm_svc = get_llm_service()
+            llm = llm_svc.get_llm()
             
             # Get LLM assessment
             response = await llm.acomplete(assessment_prompt)

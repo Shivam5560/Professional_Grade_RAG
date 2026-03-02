@@ -36,7 +36,7 @@ from app.models.aurasql_schemas import (
 )
 from app.services.aurasql_db import list_tables, get_table_schema, execute_sql
 from app.services.aurasql_vector_store import get_aurasql_vector_store
-from app.services.groq_service import get_groq_service
+from app.services.llm_service import get_llm_service
 from app.utils.aurasql_prompts import system_prompt, recommendations_prompt
 from app.utils.crypto import encrypt_secret, decrypt_secret
 def _validate_schema_for_connection(payload) -> None:
@@ -825,7 +825,7 @@ async def get_recommendations(
     if not context:
         raise HTTPException(status_code=404, detail="Context not found")
 
-    groq_service = get_groq_service()
+    groq_service = get_llm_service()
     from llama_index.core import Settings
     Settings.llm = groq_service.get_aurasql_llm()
 
@@ -864,7 +864,7 @@ async def generate_query(
         .first()
     )
 
-    groq_service = get_groq_service()
+    groq_service = get_llm_service()
     from llama_index.core import Settings
     Settings.llm = groq_service.get_aurasql_llm()
 

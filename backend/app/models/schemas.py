@@ -28,7 +28,7 @@ class ContextFile(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat queries."""
     
-    query: str = Field(..., min_length=1, max_length=10000, description="User query")
+    query: str = Field(..., min_length=1, description="User query")
     session_id: Optional[str] = Field(None, description="Session identifier for chat history")
     user_id: Optional[int] = Field(None, description="User identifier for associating chat sessions")
     stream: bool = Field(default=False, description="Enable streaming response")

@@ -72,8 +72,8 @@ async def _determine_default_mode() -> str:
 
     # 3. LLM health (cached)
     try:
-        from app.services.groq_service import get_groq_service
-        if not await get_groq_service().check_health():
+        from app.services.llm_service import get_llm_service
+        if not await get_llm_service().check_health():
             unhealthy = True
     except Exception:
         unhealthy = True
@@ -218,8 +218,8 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
 
         if diagram_xml is None and is_diagram_request(request.query):
             try:
-                from app.services.groq_service import get_groq_service
-                llm = get_groq_service().get_llm()
+                from app.services.llm_service import get_llm_service
+                llm = get_llm_service().get_llm()
                 logger.info(
                     "diagram_fallback_start",
                     session_id=session_id,
@@ -348,8 +348,8 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
                 if diagram_xml is None and is_diagram_request(request.query):
                     try:
-                        from app.services.groq_service import get_groq_service
-                        llm = get_groq_service().get_llm()
+                        from app.services.llm_service import get_llm_service
+                        llm = get_llm_service().get_llm()
                         logger.info(
                             "diagram_fallback_start",
                             session_id=session_id,
@@ -426,8 +426,8 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
                     if diagram_xml is None and is_diagram_request(request.query):
                         try:
-                            from app.services.groq_service import get_groq_service
-                            llm = get_groq_service().get_llm()
+                            from app.services.llm_service import get_llm_service
+                            llm = get_llm_service().get_llm()
                             logger.info(
                                 "diagram_fallback_start",
                                 session_id=session_id,

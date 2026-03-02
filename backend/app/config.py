@@ -11,7 +11,13 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # Groq Configuration
+    # LLM Provider Configuration
+    llm_provider: str = Field(default="groq", alias="LLM_PROVIDER")  # "groq" or "openrouter"
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")  # Overrides provider-specific key
+    llm_model: str = Field(default="", alias="LLM_MODEL")  # Overrides provider-specific model
+    llm_structured_model: str = Field(default="", alias="LLM_STRUCTURED_MODEL")  # Small model for JSON tasks
+
+    # Groq Configuration (legacy — used as fallback when LLM_PROVIDER="groq")
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-70b-versatile", alias="GROQ_MODEL")
     

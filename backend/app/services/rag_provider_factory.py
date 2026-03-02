@@ -5,7 +5,7 @@ Single source of truth for LLM, Embedding, and Reranker instances
 shared across all 3 tools: RAG Chat, AuraSQL, and Nexus Resume.
 
 Each tool uses a DIFFERENT pgvector table but the SAME:
-  - LLM provider (Groq)
+  - LLM provider (configurable: Groq / OpenRouter)
   - Embedding provider (Remote / Cohere)
   - Reranker provider (Remote / Cohere) — not used by Nexus Resume
 """
@@ -83,30 +83,30 @@ def get_embed_dim() -> int:
 
 def get_llm():
     """
-    Return the primary LLM instance (Groq).
+    Return the primary LLM instance.
     Used by RAG Chat, Nexus Resume, and PageIndex.
     """
-    from app.services.groq_service import get_groq_service
+    from app.services.llm_service import get_llm_service
 
-    return get_groq_service().get_llm()
+    return get_llm_service().get_llm()
 
 
 def get_aurasql_llm():
     """
-    Return the AuraSQL-specific LLM instance (Groq, lower max_tokens).
+    Return the AuraSQL-specific LLM instance (lower max_tokens).
     """
-    from app.services.groq_service import get_groq_service
+    from app.services.llm_service import get_llm_service
 
-    return get_groq_service().get_aurasql_llm()
+    return get_llm_service().get_aurasql_llm()
 
 
 def get_nexus_llm():
     """
     Return the Nexus Resume LLM instance (uses main model for better quality).
     """
-    from app.services.groq_service import get_groq_service
+    from app.services.llm_service import get_llm_service
 
-    return get_groq_service().get_nexus_llm()
+    return get_llm_service().get_nexus_llm()
 
 
 def get_reranker():

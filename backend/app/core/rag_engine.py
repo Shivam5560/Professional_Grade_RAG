@@ -11,7 +11,7 @@ from app.core.retriever import get_hybrid_retriever
 from app.core.reranker import get_reranker
 from app.core.confidence_scorer import get_confidence_scorer
 from app.core.context_manager import get_context_manager
-from app.services.groq_service import get_groq_service
+from app.services.llm_service import get_llm_service
 from app.models.prompts import PROFESSIONAL_SYSTEM_PROMPT
 from app.models.schemas import SourceReference
 from app.config import settings
@@ -33,7 +33,7 @@ class RAGEngine:
     def __init__(self):
         """Initialize RAG engine with all components."""
         # Get services
-        self.groq_service = get_groq_service()
+        self.llm_service = get_llm_service()
         self.context_manager = get_context_manager()
         self.confidence_scorer = get_confidence_scorer()
         
@@ -41,8 +41,8 @@ class RAGEngine:
         self.hybrid_retriever = None
         self.reranker = get_reranker()
         
-        # Get LLM from Groq service
-        self.llm = self.groq_service.get_llm()
+        # Get LLM from service
+        self.llm = self.llm_service.get_llm()
         
         logger.log_operation("🔧 RAG engine initialized")
     

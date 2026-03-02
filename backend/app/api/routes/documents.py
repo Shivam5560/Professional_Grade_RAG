@@ -24,7 +24,7 @@ from app.utils.validators import validate_file_extension, validate_file_size
 from app.utils.logger import get_logger
 from app.config import settings
 from app.db.database import get_db, SessionLocal
-from app.db.models import Document
+from app.db.models import Document, DocumentTreeStructure, TreeNode
 
 logger = get_logger(__name__)
 
@@ -253,9 +253,18 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db: Session = Depend
                 success = await doc_processor.delete_document(document_id)
                 
                 if success:
-                    # Delete from database
+                    # Delete tree nodes and tree structure first (FK constraints)
+                    db.query(TreeNode).filter(TreeNode.document_id == document_id).delete()
+                    db.query(DocumentTreeStructure).filter(DocumentTreeStructure.document_id == document_id).delete()
+                    # Delete the document record
                     db.delete(db_document)
                     db.commit()
+                    
+                    # Delete PDF file from disk
+                    pdf_path = os.path.join(settings.data_dir, "documents", f"{document_id}.pdf")
+                    if os.path.exists(pdf_path):
+                        os.remove(pdf_path)
+                    
                     deleted_count += 1
                     logger.info(
                         "document_deleted",
@@ -333,6 +342,9 @@ async def delete_document(document_id: str, db: Session = Depends(get_db)):
         # Delete from database first
         db_document = db.query(Document).filter(Document.id == document_id).first()
         if db_document:
+            # Delete tree nodes and tree structure first (FK constraints)
+            db.query(TreeNode).filter(TreeNode.document_id == document_id).delete()
+            db.query(DocumentTreeStructure).filter(DocumentTreeStructure.document_id == document_id).delete()
             db.delete(db_document)
             db.commit()
         

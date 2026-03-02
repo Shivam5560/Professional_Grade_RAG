@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { formatTimestamp } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import type { Message } from '@/lib/types';
 import { DrawioDiagram } from './DrawioDiagram';
 
@@ -31,6 +32,62 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
     const trimmed = value.trim();
     const match = trimmed.match(/^```(?:md|markdown)?\s*([\s\S]*?)\s*```$/i);
     return match ? match[1].trim() : value;
+  }, []);
+
+  /**
+   * Preprocess markdown to fix common rendering issues:
+   * 1. Convert <br>, <br/>, <br /> to proper Markdown line breaks
+   * 2. Normalize stray HTML that causes half-raw rendering
+   * 3. Ensure consistent formatting
+   */
+  const preprocessMarkdown = useCallback((text: string): string => {
+    let processed = text;
+
+    // Convert <br>, <br/>, <br /> variants to double newlines for block separation
+    // or two-spaces + newline for inline line breaks
+    processed = processed.replace(/<br\s*\/?\s*>\s*<br\s*\/?\s*>/gi, '\n\n');
+    processed = processed.replace(/<br\s*\/?\s*>/gi, '  \n');
+
+    // Fix <p> tags that sometimes appear in LLM output
+    processed = processed.replace(/<p>/gi, '\n\n');
+    processed = processed.replace(/<\/p>/gi, '\n');
+
+    // Fix <b> and <i> tags to Markdown equivalents
+    processed = processed.replace(/<b>(.*?)<\/b>/gi, '**$1**');
+    processed = processed.replace(/<i>(.*?)<\/i>/gi, '*$1*');
+    processed = processed.replace(/<strong>(.*?)<\/strong>/gi, '**$1**');
+    processed = processed.replace(/<em>(.*?)<\/em>/gi, '*$1*');
+
+    // Fix <ul>/<ol>/<li> tags to Markdown lists
+    processed = processed.replace(/<ul>/gi, '\n');
+    processed = processed.replace(/<\/ul>/gi, '\n');
+    processed = processed.replace(/<ol>/gi, '\n');
+    processed = processed.replace(/<\/ol>/gi, '\n');
+    processed = processed.replace(/<li>/gi, '- ');
+    processed = processed.replace(/<\/li>/gi, '\n');
+
+    // Fix <h1>-<h6> tags to Markdown headings
+    processed = processed.replace(/<h1>(.*?)<\/h1>/gi, '# $1\n');
+    processed = processed.replace(/<h2>(.*?)<\/h2>/gi, '## $1\n');
+    processed = processed.replace(/<h3>(.*?)<\/h3>/gi, '### $1\n');
+    processed = processed.replace(/<h4>(.*?)<\/h4>/gi, '#### $1\n');
+    processed = processed.replace(/<h5>(.*?)<\/h5>/gi, '##### $1\n');
+    processed = processed.replace(/<h6>(.*?)<\/h6>/gi, '###### $1\n');
+
+    // Clean up <div> wrappers (common in mixed output)
+    processed = processed.replace(/<div[^>]*>/gi, '\n');
+    processed = processed.replace(/<\/div>/gi, '\n');
+
+    // Fix <a> tags to Markdown links
+    processed = processed.replace(/<a\s+href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+
+    // Clean up <span> tags (strip them, keep content)
+    processed = processed.replace(/<span[^>]*>(.*?)<\/span>/gi, '$1');
+
+    // Fix consecutive newlines (max 2)
+    processed = processed.replace(/\n{3,}/g, '\n\n');
+
+    return processed;
   }, []);
 
   const extractedContent = useMemo(() => {
@@ -71,8 +128,8 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
       xmlParts = [...diagramXmlParts, ...remainingXml];
     }
 
-    return { text: textParts.join('\n\n'), diagrams: xmlParts };
-  }, [message.content, message.diagramXml, unwrapMarkdownFence]);
+    return { text: preprocessMarkdown(textParts.join('\n\n')), diagrams: xmlParts };
+  }, [message.content, message.diagramXml, unwrapMarkdownFence, preprocessMarkdown]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -190,6 +247,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                 {extractedContent.text && (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
                     components={{
                       table: ({ ...props }) => (
                         <div className="overflow-x-auto my-4">
@@ -328,8 +386,8 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                     <span className="font-semibold text-primary">Reasoning Steps</span>
                   </div>
                   <div className="text-foreground/80 leading-relaxed whitespace-pre-wrap prose prose-sm max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.reasoning}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                      {preprocessMarkdown(message.reasoning)}
                     </ReactMarkdown>
                   </div>
                 </div>

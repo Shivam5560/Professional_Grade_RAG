@@ -16,7 +16,7 @@ from app.core.pageindex_utils import (
     _count_nodes,
 )
 from app.db.models import Document, DocumentTreeStructure, TreeNode
-from app.services.groq_service import GroqService
+from app.services.llm_service import LLMService
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,7 +30,7 @@ class PageIndexService:
     - Retrieve tree for reasoning-based RAG
     """
 
-    def __init__(self, groq_service: GroqService):
+    def __init__(self, groq_service: LLMService):
         self.groq_service = groq_service
 
     # ------------------------------------------------------------------
@@ -219,6 +219,6 @@ def get_pageindex_service() -> PageIndexService:
     """Get or create the global PageIndexService."""
     global _pageindex_service
     if _pageindex_service is None:
-        from app.services.groq_service import get_groq_service
-        _pageindex_service = PageIndexService(get_groq_service())
+        from app.services.llm_service import get_llm_service
+        _pageindex_service = PageIndexService(get_llm_service())
     return _pageindex_service

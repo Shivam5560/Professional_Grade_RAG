@@ -38,13 +38,13 @@ async def lifespan(app: FastAPI):
     )
     
     # Initialize services (lazy loading will occur on first use)
-    from app.services.groq_service import get_groq_service
+    from app.services.llm_service import get_llm_service
     from app.services.vector_store import get_vector_store_service
     from app.services.bm25_service import get_bm25_service
     
     try:
         # Warm up services
-        groq_service = get_groq_service()
+        llm_svc = get_llm_service()
         vector_store = get_vector_store_service()
         bm25_service = get_bm25_service()
         
@@ -52,22 +52,23 @@ async def lifespan(app: FastAPI):
         embed_model = vector_store.embed_model
         
         # Configure LlamaIndex global Settings to prevent OpenAI defaults
-        Settings.llm = groq_service.get_llm()
+        Settings.llm = llm_svc.get_llm()
         Settings.embed_model = embed_model
         Settings.chunk_size = settings.chunk_size
         Settings.chunk_overlap = settings.chunk_overlap
         
         logger.log_operation(
             "LlamaIndex settings configured",
-            llm_model=settings.groq_model,
+            llm_provider=settings.llm_provider,
+            llm_model=llm_svc.model,
             embed_provider=settings.embedding_provider,
             chunk_size=settings.chunk_size,
             remote_embeddings=settings.use_remote_embedding_service
         )
         
-        groq_healthy = await groq_service.check_health()
-        if not groq_healthy:
-            logger.log_operation("⚠️  Groq LLM not available", level="WARNING")
+        llm_healthy = await llm_svc.check_health()
+        if not llm_healthy:
+            logger.log_operation("⚠️  LLM not available", level="WARNING")
         
         logger.log_operation("✅ All services initialized successfully")
         

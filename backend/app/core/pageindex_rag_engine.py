@@ -19,7 +19,7 @@ from app.core.pageindex_utils import (
     build_node_map,
 )
 from app.services.pageindex_service import PageIndexService
-from app.services.groq_service import GroqService
+from app.services.llm_service import LLMService
 from app.models.schemas import SourceReference
 from app.config import settings
 from app.utils.logger import get_logger
@@ -43,19 +43,21 @@ Tree Structure (without full text — only titles and summaries):
 
 User Question: {query}
 
-Analyze the tree structure and select the most relevant nodes. Think step-by-step:
-1. What is the user asking about?
-2. Which top-level sections are likely to contain the answer?
-3. Which sub-sections are most specific to the question?
+Analyze the tree structure carefully and select the most relevant nodes. Think through this step-by-step:
+1. What exactly is the user asking about? Identify the key concepts and entities.
+2. Which top-level sections are likely to contain the answer based on their titles and summaries?
+3. Which sub-sections are most specific to the question? Prefer deeper, more specific nodes.
+4. Are there multiple aspects to the question that might be covered in different sections?
+5. Could any seemingly unrelated sections contain supporting context?
 
 Return your analysis as JSON in this exact format:
 {{
-    "reasoning": "Your step-by-step reasoning about which sections are relevant and why",
+    "reasoning": "Your detailed step-by-step reasoning about which sections are relevant and why",
     "selected_node_ids": ["0001", "0003", "0005"],
     "confidence": "high|medium|low"
 }}
 
-Select between 1 and 5 nodes. Prefer more specific (deeper) nodes over broad parent nodes when possible. Only select nodes whose summaries suggest they contain relevant information."""
+Select between 1 and 8 nodes. Prefer more specific (deeper) nodes over broad parent nodes when possible. Select parent nodes only when no child node is specific enough. If the question spans multiple topics, select nodes from each relevant topic area."""
 
 
 THINK_MODE_ANSWER_PROMPT = """You are an expert AI assistant using a reasoning-based retrieval system. You navigated a document's hierarchical structure to find the most relevant sections for the user's question.
@@ -68,16 +70,19 @@ THINK_MODE_ANSWER_PROMPT = """You are an expert AI assistant using a reasoning-b
 
 **User Question:** {query}
 
-Provide a comprehensive answer based on the retrieved sections above.
+Provide a comprehensive, accurate, and well-structured answer based on the retrieved sections above.
 
 **Instructions:**
-- Use ALL relevant information from the retrieved sections
+- Carefully analyze ALL retrieved sections before formulating your answer
+- Synthesize information across multiple sections when relevant
 - Cite sections using [Section: Title] format
-- Structure your response with clear headings and formatting
-- Be thorough but concise
-- If the retrieved sections don't fully answer the question, say so honestly
-
-**Format your response with proper Markdown.**
+- Structure your response with clear Markdown headings (##, ###), bullet points, and emphasis
+- Use tables when comparing data or presenting structured information
+- Be thorough in your analysis — include specific data points, figures, and quotes when available
+- If the retrieved sections don't fully answer the question, clearly state what is missing
+- Do NOT use raw HTML tags like <br> — use proper Markdown line breaks (double newline or two trailing spaces)
+- For line breaks within paragraphs, use two trailing spaces followed by a newline
+- Ensure all formatting is clean Markdown — no mixing of HTML and Markdown
 
 **Diagram Requests:**
 If the user asks for an architecture diagram, flow diagram, or sequence diagram, generate it as draw.io XML using the `<mxfile>` format. Place the XML immediately after the relevant section heading (e.g., after ## Architecture or ## System Design) in a fenced ```xml block. Keep the diagram focused and readable.
@@ -113,7 +118,7 @@ class PageIndexRAGEngine:
 
     def __init__(
         self,
-        groq_service: GroqService,
+        groq_service: LLMService,
         pageindex_service: PageIndexService,
     ):
         self.groq_service = groq_service
@@ -238,7 +243,7 @@ class PageIndexRAGEngine:
             search_prompt = TREE_SEARCH_PROMPT.format(
                 doc_name=doc_name,
                 doc_description=doc_description,
-                tree_structure=json.dumps(tree_no_text, indent=2)[:12000],
+                tree_structure=json.dumps(tree_no_text, indent=2)[:20000],
                 query=query,
             )
 
@@ -312,11 +317,11 @@ class PageIndexRAGEngine:
         context_str = ""
         for section in all_context_sections:
             context_str += f"\n\n---\n**[{section['doc_name']} — {section['title']}]** (Pages {section['start_page']}-{section['end_page']})\n\n"
-            context_str += section["text"][:8000]  # Limit per section
+            context_str += section["text"][:12000]  # Limit per section
 
         # Truncate total context if needed
-        if len(context_str) > 30000:
-            context_str = context_str[:30000] + "\n\n[Context truncated for length]"
+        if len(context_str) > 60000:
+            context_str = context_str[:60000] + "\n\n[Context truncated for length]"
 
         answer_prompt = THINK_MODE_ANSWER_PROMPT.format(
             reasoning=combined_reasoning,
@@ -486,10 +491,10 @@ def get_pageindex_rag_engine() -> PageIndexRAGEngine:
     """Get or create the global PageIndexRAGEngine."""
     global _pageindex_rag_engine
     if _pageindex_rag_engine is None:
-        from app.services.groq_service import get_groq_service
+        from app.services.llm_service import get_llm_service
         from app.services.pageindex_service import get_pageindex_service
         _pageindex_rag_engine = PageIndexRAGEngine(
-            groq_service=get_groq_service(),
+            groq_service=get_llm_service(),
             pageindex_service=get_pageindex_service(),
         )
     return _pageindex_rag_engine
