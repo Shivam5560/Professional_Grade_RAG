@@ -8,6 +8,7 @@ import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ShaderAnimation } from "@/components/ui/shader-animation"
 import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast } from "lucide-react"
 import { useAppTheme } from "@/hooks/useAppTheme"
 import { type ThemePalette } from "@/lib/theme"
@@ -200,6 +201,10 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground relative overflow-x-hidden flex flex-col">
+      <div className="pointer-events-none absolute inset-0 opacity-45">
+        <ShaderAnimation className="w-full h-full" speed={0.08} />
+      </div>
+
       {/* Brand - Top Right Corner */}
       <div className="absolute top-4 right-4 lg:top-6 lg:right-8 z-50 flex items-center space-x-2 lg:space-x-3">
         <DropdownMenu>

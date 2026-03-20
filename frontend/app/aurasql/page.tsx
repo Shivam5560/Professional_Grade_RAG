@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Database, Plus, Sparkles, Layers, Trash2, Code2, PlayCircle, Clock } from 'lucide-react';
+import { Database, Plus, Sparkles, Layers, Trash2, Code2, PlayCircle, Clock, MessageSquare, Home, ChevronDown } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlHistoryItem, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import { useToast } from '@/hooks/useToast';
 import AuthPage from '@/app/auth/page';
+import VerticalMagnificationDock from '@/components/ui/vertical-magnification-dock';
 
 export default function AuraSqlHomePage() {
   const router = useRouter();
@@ -24,6 +25,9 @@ export default function AuraSqlHomePage() {
   const [history, setHistory] = useState<AuraSqlHistoryItem[]>([]);
   const [sessions, setSessions] = useState<AuraSqlSession[]>([]);
   const [contextPage, setContextPage] = useState(0);
+  const [activePanel, setActivePanel] = useState<'history' | 'actions'>('history');
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast, confirm: toastConfirm } = useToast();
@@ -134,6 +138,49 @@ export default function AuraSqlHomePage() {
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
+  const sortedSessions = [...sessions].sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at).getTime();
+    const bTime = new Date(b.updated_at || b.created_at).getTime();
+    return bTime - aTime;
+  });
+  const topFiveSessions = sortedSessions.slice(0, 5);
+  const extraSessions = sortedSessions.slice(5);
+
+  const dockItems = [
+    {
+      icon: <MessageSquare size={18} />,
+      label: 'History',
+      onClick: () => setActivePanel('history' as const),
+      className: activePanel === 'history' ? 'ring-2 ring-ring' : '',
+    },
+    {
+      icon: <Plus size={18} />,
+      label: 'New Chat',
+      onClick: () => router.push('/aurasql/query'),
+    },
+    {
+      icon: <Database size={18} />,
+      label: 'Connection',
+      onClick: () => router.push('/aurasql/connections/new'),
+    },
+    {
+      icon: <Layers size={18} />,
+      label: 'Context',
+      onClick: () => router.push('/aurasql/contexts/new'),
+    },
+    {
+      icon: <Sparkles size={18} />,
+      label: 'Actions',
+      onClick: () => setActivePanel('actions' as const),
+      className: activePanel === 'actions' ? 'ring-2 ring-ring' : '',
+    },
+    {
+      icon: <Home size={18} />,
+      label: 'Dashboard',
+      onClick: () => router.push('/'),
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0 app-aurora" />
@@ -149,46 +196,108 @@ export default function AuraSqlHomePage() {
         <div className="max-w-[1400px] mx-auto">
           <div className="flex flex-col lg:flex-row gap-6">
             <aside className="w-full lg:w-[34%]">
-              <Card className="glass-panel sheen-border border-border/60 bg-accent-soft h-full">
-                <CardHeader>
-                  <CardTitle>History</CardTitle>
-                  <CardDescription>Chat sessions powered by AuraSQL.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[520px]">
-                  <ScrollArea className="h-full pr-3">
-                    {loading ? (
-                      <div className="space-y-3">
-                        {[1,2,3,4].map(i => (
-                          <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
-                            <Skeleton className="h-4 w-3/4 mb-2" />
-                            <Skeleton className="h-3 w-1/2" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : sessions.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No history yet.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {sessions.map((session) => (
+              <div className="glass-panel sheen-border border-border/60 bg-accent-soft h-full rounded-xl p-3 flex gap-3">
+                <div className="pt-2">
+                  <VerticalMagnificationDock items={dockItems} panelWidth={66} baseItemSize={44} magnification={64} />
+                </div>
+
+                <div className="flex-1 rounded-2xl border border-border/60 bg-card/60 p-3 min-w-0 h-[560px]">
+                  {activePanel === 'history' ? (
+                    <div className="h-full flex flex-col">
+                      <button
+                        type="button"
+                        onClick={() => setIsHistoryExpanded((prev) => !prev)}
+                        className="w-full flex items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm font-semibold"
+                      >
+                        <span>AuraSQL History</span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isHistoryExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isHistoryExpanded && (
+                        <>
+                          <ScrollArea className="flex-1 mt-3 pr-1">
+                            {loading ? (
+                              <div className="space-y-3">
+                                {[1,2,3,4].map(i => (
+                                  <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
+                                    <Skeleton className="h-4 w-3/4 mb-2" />
+                                    <Skeleton className="h-3 w-1/2" />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : topFiveSessions.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No history yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {topFiveSessions.map((session) => (
+                                  <button
+                                    key={session.id}
+                                    type="button"
+                                    onClick={() => router.push(`/aurasql/query?session=${session.id}`)}
+                                    className="w-full text-left rounded-xl border border-border/60 bg-card/60 px-3 py-2 hover:border-foreground/20 hover:bg-card/80 transition-all"
+                                  >
+                                    <p className="text-sm font-semibold text-foreground line-clamp-2">
+                                      {session.title || 'AuraSQL chat'}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Updated {session.updated_at || session.created_at}
+                                    </p>
+                                  </button>
+                                ))}
+
+                                {showAllHistory && extraSessions.map((session) => (
+                                  <button
+                                    key={session.id}
+                                    type="button"
+                                    onClick={() => router.push(`/aurasql/query?session=${session.id}`)}
+                                    className="w-full text-left rounded-xl border border-border/60 bg-card/60 px-3 py-2 hover:border-foreground/20 hover:bg-card/80 transition-all"
+                                  >
+                                    <p className="text-sm font-semibold text-foreground line-clamp-2">
+                                      {session.title || 'AuraSQL chat'}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Updated {session.updated_at || session.created_at}
+                                    </p>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </ScrollArea>
+
                           <button
-                            key={session.id}
                             type="button"
-                            onClick={() => router.push(`/aurasql/query?session=${session.id}`)}
-                            className="w-full text-left rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-foreground/20 hover:bg-card/80 hover:shadow-sm transition-all"
+                            className="mt-3 w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowAllHistory((prev) => !prev)}
+                            disabled={extraSessions.length === 0}
                           >
-                            <p className="text-sm font-semibold text-foreground line-clamp-2">
-                              {session.title || 'AuraSQL chat'}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Updated {session.updated_at || session.created_at}
-                            </p>
+                            {extraSessions.length === 0
+                              ? 'All chats shown'
+                              : showAllHistory
+                                ? 'Show less'
+                                : `Show more (${extraSessions.length})`}
                           </button>
-                        ))}
-                      </div>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col gap-2">
+                      <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Quick Actions</p>
+                      <Button onClick={() => router.push('/aurasql/query')} className="justify-start">
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Chat
+                      </Button>
+                      <Button variant="outline" onClick={() => router.push('/aurasql/connections/new')} className="justify-start">
+                        <Database className="h-4 w-4 mr-2" />
+                        New Connection
+                      </Button>
+                      <Button variant="outline" onClick={() => router.push('/aurasql/contexts/new')} className="justify-start">
+                        <Layers className="h-4 w-4 mr-2" />
+                        New Context
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </aside>
 
             <section className="flex-1 space-y-8">
