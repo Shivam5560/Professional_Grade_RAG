@@ -2,10 +2,10 @@
  * Custom React hook for managing chat state and interactions.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '@/lib/api';
-import { Message, ChatResponse, RAGMode, AskFileContent } from '@/lib/types';
+import { Message, ChatResponse, RAGMode, AskFileContent, TokenUsage } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 
 export function useChat(initialSessionId?: string) {
@@ -13,7 +13,31 @@ export function useChat(initialSessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestTokenUsage, setLatestTokenUsage] = useState<TokenUsage | undefined>(undefined);
   const { user } = useAuthStore();
+  const tokenBufferRef = useRef<Record<string, string>>({});
+  const flushTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+
+  const flushBufferedTokens = useCallback((assistantMessageId: string) => {
+    const buffered = tokenBufferRef.current[assistantMessageId];
+    if (!buffered) return;
+
+    setMessages((prev) => prev.map((msg) => (
+      msg.id === assistantMessageId
+        ? { ...msg, content: `${msg.content}${buffered}`, isTyping: true }
+        : msg
+    )));
+
+    tokenBufferRef.current[assistantMessageId] = '';
+  }, []);
+
+  const scheduleFlush = useCallback((assistantMessageId: string) => {
+    if (flushTimerRef.current[assistantMessageId]) return;
+    flushTimerRef.current[assistantMessageId] = setTimeout(() => {
+      flushBufferedTokens(assistantMessageId);
+      flushTimerRef.current[assistantMessageId] = null;
+    }, 80);
+  }, [flushBufferedTokens]);
 
   const sendMessage = useCallback(async (
     query: string, 
@@ -61,16 +85,19 @@ export function useChat(initialSessionId?: string) {
         if (event === 'token') {
           const token = (data as { token?: string })?.token ?? '';
           if (!token) return;
-          setMessages((prev) => prev.map((msg) => (
-            msg.id === assistantMessageId
-              ? { ...msg, content: `${msg.content}${token}`, isTyping: true }
-              : msg
-          )));
+          tokenBufferRef.current[assistantMessageId] = `${tokenBufferRef.current[assistantMessageId] ?? ''}${token}`;
+          scheduleFlush(assistantMessageId);
           return;
         }
 
         if (event === 'final') {
           const finalData = data as ChatResponse;
+          if (flushTimerRef.current[assistantMessageId]) {
+            clearTimeout(flushTimerRef.current[assistantMessageId]!);
+            flushTimerRef.current[assistantMessageId] = null;
+          }
+          flushBufferedTokens(assistantMessageId);
+
           setMessages((prev) => prev.map((msg) => (
             msg.id === assistantMessageId
               ? {
@@ -81,10 +108,12 @@ export function useChat(initialSessionId?: string) {
                   sources: finalData.sources,
                   mode: finalData.mode,
                   diagramXml: finalData.diagram_xml,
+                  tokenUsage: finalData.token_usage,
                   isTyping: false,
                 }
               : msg
           )));
+          setLatestTokenUsage(finalData.token_usage);
         }
       });
 
@@ -97,6 +126,11 @@ export function useChat(initialSessionId?: string) {
       }
       return response;
     } catch (err) {
+      if (flushTimerRef.current[assistantMessageId]) {
+        clearTimeout(flushTimerRef.current[assistantMessageId]!);
+        flushTimerRef.current[assistantMessageId] = null;
+      }
+      tokenBufferRef.current[assistantMessageId] = '';
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
       setError(errorMessage);
       setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id && msg.id !== assistantMessageId));
@@ -117,6 +151,7 @@ export function useChat(initialSessionId?: string) {
       // Force state reset - use functional updates to ensure fresh state
       setMessages(() => []);
       setError(() => null);
+      setLatestTokenUsage(() => undefined);
       setSessionId(() => newSessionId);
       
       return newSessionId;
@@ -126,6 +161,7 @@ export function useChat(initialSessionId?: string) {
       const newSessionId = uuidv4();
       setMessages(() => []);
       setError(() => null);
+      setLatestTokenUsage(() => undefined);
       setSessionId(() => newSessionId);
       throw err;
     }
@@ -170,5 +206,6 @@ export function useChat(initialSessionId?: string) {
     sendMessage,
     clearChat,
     loadHistory,
+    latestTokenUsage,
   };
 }

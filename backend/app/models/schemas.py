@@ -33,6 +33,16 @@ class AskFileContent(BaseModel):
     content: str = Field(..., description="Extracted plain text content")
 
 
+class TokenUsage(BaseModel):
+    """Approximate token usage metadata for context-window visibility."""
+
+    context_tokens_used: int = Field(..., ge=0, description="Estimated tokens currently used in prompt context")
+    context_tokens_max: int = Field(..., ge=1, description="Maximum model context window tokens")
+    context_utilization_pct: float = Field(..., ge=0.0, le=100.0, description="Context usage percentage")
+    near_limit: bool = Field(default=False, description="Whether usage is near the configured threshold")
+    compaction_applied: bool = Field(default=False, description="Whether history compaction/summarization was applied")
+
+
 class ChatRequest(BaseModel):
     """Request model for chat queries."""
     
@@ -63,6 +73,7 @@ class ChatResponse(BaseModel):
     reasoning: Optional[str] = Field(None, description="Think mode reasoning steps (only present in think mode)")
     mode: Optional[Literal["fast", "think", "ask"]] = Field(default="fast", description="Chat mode used for this response")
     diagram_xml: Optional[str] = Field(None, description="draw.io XML for generated diagrams")
+    token_usage: Optional[TokenUsage] = Field(default=None, description="Context window token usage telemetry")
 
 
 class Message(BaseModel):
@@ -81,6 +92,7 @@ class Message(BaseModel):
     mode: Optional[Literal["fast", "think", "ask"]] = Field(default=None, description="Chat mode used for this message")
     context_files: Optional[List[ContextFile]] = Field(default=None, description="Context files selected for the query")
     diagram_xml: Optional[str] = Field(None, description="draw.io XML for generated diagrams")
+    token_usage: Optional[TokenUsage] = Field(default=None, description="Token usage metadata for this assistant turn")
 
 
 class ChatHistory(BaseModel):

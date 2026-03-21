@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api';
 import { ChatSession } from '@/lib/types';
 import { formatTimestamp } from '@/lib/utils';
-import { ChevronDown, Database, HelpCircle, MessageSquare, Plus, Sparkles } from 'lucide-react';
+import { ChevronDown, Database, HelpCircle, MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 export default function ChatPage() {
   const { isAuthenticated, user } = useAuthStore();
@@ -22,8 +22,8 @@ export default function ChatPage() {
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory } = useChat();
-  const { toast } = useToast();
+  const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory, latestTokenUsage } = useChat();
+  const { toast, confirm } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -70,6 +70,103 @@ export default function ChatPage() {
       toast({ title: 'Failed to load session', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
     }
   };
+
+  const handleDeleteAllHistory = async () => {
+    if (!user || history.length === 0) return;
+    const confirmed = await confirm({
+      title: 'Delete all chats?',
+      description: 'This will permanently remove your entire chat history.',
+      confirmLabel: 'Delete all',
+      cancelLabel: 'Cancel',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiClient.deleteAllChatHistory(user.id);
+      setHistory([]);
+      await clearChat();
+      setIsHistoryPanelVisible(false);
+      toast({
+        title: 'History deleted',
+        description: 'All chats were removed.',
+      });
+    } catch (historyError) {
+      toast({
+        title: 'Delete failed',
+        description: historyError instanceof Error ? historyError.message : 'Unable to delete all chat history.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteSession = async (entry: ChatSession) => {
+    const title = entry.title || 'Untitled chat';
+    const confirmed = await confirm({
+      title: 'Delete chat?',
+      description: `Delete "${title}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiClient.deleteChatSession(entry.id);
+      setHistory((prev) => prev.filter((item) => item.id !== entry.id));
+      if (sessionId === entry.id) {
+        await clearChat();
+      }
+      toast({
+        title: 'Chat deleted',
+        description: 'The conversation has been removed.',
+      });
+    } catch (sessionError) {
+      toast({
+        title: 'Delete failed',
+        description: sessionError instanceof Error ? sessionError.message : 'Unable to delete chat.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const renderHistoryEntry = (entry: ChatSession) => (
+    <div
+      key={entry.id}
+      className={`w-full rounded-xl border px-2 py-2 transition-all ${
+        sessionId === entry.id
+          ? 'border-foreground/20 bg-foreground/10'
+          : 'border-border/60 bg-background/40 hover:bg-background/70'
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          onClick={() => handleLoadSession(entry.id)}
+          className="flex-1 text-left"
+        >
+          <p className="text-xs font-semibold text-foreground line-clamp-2">
+            {entry.title || 'Untitled chat'}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {formatTimestamp(entry.updated_at || entry.created_at)}
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleDeleteSession(entry);
+          }}
+          className="h-7 w-7 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          title="Delete chat"
+          aria-label="Delete chat"
+        >
+          <Trash2 className="h-3.5 w-3.5 mx-auto" />
+        </button>
+      </div>
+    </div>
+  );
 
   const sortedHistory = useMemo(() => {
     return [...history].sort((a, b) => {
@@ -169,45 +266,9 @@ export default function ChatPage() {
                         <p className="text-xs text-muted-foreground px-1">No history yet. Start a new chat.</p>
                       ) : (
                         <div className="space-y-2">
-                          {topFiveHistory.map((entry) => (
-                            <button
-                              key={entry.id}
-                              type="button"
-                              onClick={() => handleLoadSession(entry.id)}
-                              className={`w-full text-left rounded-xl border px-3 py-2 transition-all ${
-                                sessionId === entry.id
-                                  ? 'border-foreground/20 bg-foreground/10'
-                                  : 'border-border/60 bg-background/40 hover:bg-background/70'
-                              }`}
-                            >
-                              <p className="text-xs font-semibold text-foreground line-clamp-2">
-                                {entry.title || 'Untitled chat'}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground mt-1">
-                                {formatTimestamp(entry.updated_at || entry.created_at)}
-                              </p>
-                            </button>
-                          ))}
+                          {topFiveHistory.map((entry) => renderHistoryEntry(entry))}
 
-                          {showAllHistory && extraHistory.map((entry) => (
-                            <button
-                              key={entry.id}
-                              type="button"
-                              onClick={() => handleLoadSession(entry.id)}
-                              className={`w-full text-left rounded-xl border px-3 py-2 transition-all ${
-                                sessionId === entry.id
-                                  ? 'border-foreground/20 bg-foreground/10'
-                                  : 'border-border/60 bg-background/40 hover:bg-background/70'
-                              }`}
-                            >
-                              <p className="text-xs font-semibold text-foreground line-clamp-2">
-                                {entry.title || 'Untitled chat'}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground mt-1">
-                                {formatTimestamp(entry.updated_at || entry.created_at)}
-                              </p>
-                            </button>
-                          ))}
+                          {showAllHistory && extraHistory.map((entry) => renderHistoryEntry(entry))}
                         </div>
                       )}
                     </ScrollArea>
@@ -224,6 +285,17 @@ export default function ChatPage() {
                           ? 'Show less'
                           : `Show more (${extraHistory.length})`}
                     </button>
+                    <button
+                      type="button"
+                      className="mt-2 w-full rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                      onClick={handleDeleteAllHistory}
+                      disabled={history.length === 0}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete all history
+                      </span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -239,6 +311,7 @@ export default function ChatPage() {
                 isLoading={isLoading}
                 error={error}
                 sendMessage={sendMessage}
+                tokenUsage={latestTokenUsage}
               />
             </div>
           </div>

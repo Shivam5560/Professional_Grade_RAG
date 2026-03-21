@@ -13,6 +13,7 @@ import { Header } from '@/components/layout/Header';
 import { useToast } from '@/hooks/useToast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AuraSqlContext } from '@/lib/types';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
@@ -78,6 +79,9 @@ export default function KnowledgeBasePage() {
   if (!isHydrated || (loading && documents.length === 0 && loadingContexts)) {
     return (
       <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 opacity-35">
+          <ShaderAnimation className="w-full h-full" speed={0.08} />
+        </div>
         <div className="pointer-events-none absolute inset-0 app-aurora" />
         <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
         <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
@@ -171,6 +175,9 @@ export default function KnowledgeBasePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 opacity-35">
+          <ShaderAnimation className="w-full h-full" speed={0.08} />
+        </div>
         <div className="pointer-events-none absolute inset-0 app-aurora" />
         <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
         <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
@@ -184,6 +191,9 @@ export default function KnowledgeBasePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 opacity-35">
+        <ShaderAnimation className="w-full h-full" speed={0.08} />
+      </div>
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />

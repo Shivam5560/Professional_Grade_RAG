@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode, AskFileContent } from '@/lib/types';
+import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode, AskFileContent, TokenUsage } from '@/lib/types';
 import { apiClient } from '@/lib/api';
 
 interface ChatInterfaceProps {
@@ -43,6 +43,7 @@ interface ChatInterfaceProps {
   messages: Message[];
   isLoading: boolean;
   error: string | null;
+  tokenUsage?: TokenUsage;
   sendMessage: (
     query: string, 
     contextDocumentIds?: string[],
@@ -57,6 +58,7 @@ export function ChatInterface({
   messages, 
   isLoading, 
   error, 
+  tokenUsage,
   sendMessage 
 }: ChatInterfaceProps) {
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
@@ -228,6 +230,14 @@ export function ChatInterface({
   };
 
   const activeContextCount = mode === 'ask' ? selectedAskFileIds.length : selectedRagFiles.length;
+  const usagePct = Math.max(0, Math.min(100, tokenUsage?.context_utilization_pct ?? 0));
+  const usageDeg = usagePct * 3.6;
+  const usageTier = usagePct >= 85 ? 'high' : usagePct >= 70 ? 'medium' : 'low';
+  const usageColor = usageTier === 'high'
+    ? 'hsl(var(--destructive))'
+    : usageTier === 'medium'
+      ? 'hsl(var(--chart-4))'
+      : 'hsl(var(--chart-2))';
   const modeMeta = mode === 'think'
     ? {
         title: 'Think Mode',
@@ -500,12 +510,37 @@ export function ChatInterface({
                 <Sparkles className="h-3 w-3" />
                 Use the prompt button to insert saved prompts.
               </span>
-              <span>
-                {mode === 'ask' && isAskUploading
-                  ? 'Extracting…'
-                  : isLoading
-                    ? 'Streaming…'
-                    : 'Shift+Enter for newline'}
+              <span className="inline-flex items-center gap-2">
+                {tokenUsage && (
+                  <span className="relative inline-flex items-center group">
+                    <span
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70"
+                      style={{
+                        background: `conic-gradient(${usageColor} ${usageDeg}deg, hsl(var(--muted)) ${usageDeg}deg 360deg)`,
+                      }}
+                      aria-label="Context window usage"
+                    >
+                      <span className="h-3 w-3 rounded-full bg-background" />
+                    </span>
+                    <span className="pointer-events-none absolute bottom-8 right-0 z-30 hidden w-60 rounded-lg border border-border/70 bg-card/95 p-2 text-[10px] text-foreground shadow-xl group-hover:block">
+                      <div className="font-semibold">Context Window</div>
+                      <div>{tokenUsage.context_tokens_used.toLocaleString()} / {tokenUsage.context_tokens_max.toLocaleString()} tokens ({usagePct.toFixed(1)}%)</div>
+                      <div>
+                        Status:{' '}
+                        {usageTier === 'high' ? 'High usage' : usageTier === 'medium' ? 'Watch usage' : 'Healthy'}
+                      </div>
+                      {tokenUsage.compaction_applied && <div>Compaction: applied</div>}
+                      {tokenUsage.near_limit && <div className="text-destructive">Near limit: yes</div>}
+                    </span>
+                  </span>
+                )}
+                <span>
+                  {mode === 'ask' && isAskUploading
+                    ? 'Extracting…'
+                    : isLoading
+                      ? 'Streaming…'
+                      : 'Shift+Enter for newline'}
+                </span>
               </span>
             </div>
           </div>

@@ -24,6 +24,7 @@ import type {
   ResumeGenProject,
 } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 /* ── Step definitions ──────────────────────────────────── */
 const STEPS = [
@@ -144,6 +145,9 @@ export default function ResumeGenPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 opacity-35">
+        <ShaderAnimation className="w-full h-full" speed={0.08} />
+      </div>
       {/* Aurora background */}
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />

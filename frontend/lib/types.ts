@@ -43,6 +43,14 @@ export interface AskFileContent {
   content_length?: number;
 }
 
+export interface TokenUsage {
+  context_tokens_used: number;
+  context_tokens_max: number;
+  context_utilization_pct: number;
+  near_limit: boolean;
+  compaction_applied: boolean;
+}
+
 // Extended message type for UI with additional properties
 export interface Message {
   id?: string;
@@ -57,6 +65,7 @@ export interface Message {
   reasoning?: string;   // Think mode reasoning steps
   mode?: RAGMode;       // Which mode produced this message
   diagramXml?: string;
+  tokenUsage?: TokenUsage;
 }
 
 export interface SourceReference {
@@ -77,6 +86,7 @@ export interface ChatResponse {
   reasoning?: string;
   mode?: RAGMode;
   diagram_xml?: string;
+  token_usage?: TokenUsage;
 }
 
 export interface ChatRequest {

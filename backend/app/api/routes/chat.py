@@ -3,6 +3,8 @@ Chat endpoints for querying the RAG system.
 """
 
 import uuid
+import inspect
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -127,6 +129,54 @@ def _sse_event(event: str, data) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+def _estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
+def _extract_prompt_tokens_from_response(response) -> Optional[int]:
+    if response is None:
+        return None
+
+    def _read_usage(obj) -> Optional[int]:
+        if not isinstance(obj, dict):
+            return None
+        usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else obj
+        if not isinstance(usage, dict):
+            return None
+        value = usage.get("prompt_tokens", usage.get("input_tokens"))
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    candidates = [
+        getattr(response, "raw", None),
+        getattr(response, "additional_kwargs", None),
+        getattr(response, "usage", None),
+        response,
+    ]
+    for candidate in candidates:
+        prompt_tokens = _read_usage(candidate)
+        if prompt_tokens is not None:
+            return prompt_tokens
+    return None
+
+
+def _build_token_usage(prompt_tokens: Optional[int], prompt: str, compaction_applied: bool = False) -> dict:
+    context_max = max(1, settings.llm_context_window)
+    used = prompt_tokens if prompt_tokens is not None else _estimate_tokens(prompt)
+    pct = round((used / context_max) * 100, 2)
+    return {
+        "context_tokens_used": int(used),
+        "context_tokens_max": context_max,
+        "context_utilization_pct": pct,
+        "near_limit": used >= int(context_max * 0.85),
+        "compaction_applied": compaction_applied,
+    }
+
+
 async def _emit_text_tokens(text: str, chunk_size: int = 18):
     """Yield small chunks of text for smoother SSE rendering on frontend."""
     if not text:
@@ -136,10 +186,126 @@ async def _emit_text_tokens(text: str, chunk_size: int = 18):
         await asyncio.sleep(0)
 
 
-async def _query_ask_mode(query: str, ask_files) -> dict:
-    """Direct LLM response without retrieval/vector lookup."""
-    llm = get_llm_service().get_llm()
+async def _iter_llm_tokens(llm, prompt: str):
+    """Yield tokens robustly for wrappers returning async iterator OR awaitable."""
+    def _suffix_delta(previous: str, current: str) -> str:
+        if not current:
+            return ""
+        if not previous:
+            return current
+        if current == previous:
+            return ""
+        if current.startswith(previous):
+            return current[len(previous):]
+        if previous.startswith(current):
+            return ""
 
+        max_prefix = min(len(previous), len(current))
+        prefix_len = 0
+        while prefix_len < max_prefix and previous[prefix_len] == current[prefix_len]:
+            prefix_len += 1
+        return current[prefix_len:]
+
+    stream_obj = llm.astream_complete(prompt)
+
+    if inspect.isawaitable(stream_obj):
+        stream_obj = await stream_obj
+
+    streamed_any = False
+    last_text = ""
+    emitted_text = ""
+
+    if hasattr(stream_obj, "__aiter__"):
+        async for chunk in stream_obj:
+            delta = getattr(chunk, "delta", None)
+            text = getattr(chunk, "text", None)
+
+            if text:
+                candidate = _suffix_delta(last_text, text)
+                last_text = text
+            elif delta:
+                candidate = delta
+            else:
+                candidate = ""
+
+            token = _suffix_delta(emitted_text, candidate)
+
+            if token:
+                streamed_any = True
+                emitted_text += token
+                yield token
+    else:
+        candidate = getattr(stream_obj, "text", None) or str(stream_obj or "")
+        token = _suffix_delta(emitted_text, candidate)
+        if token:
+            streamed_any = True
+            emitted_text += token
+            yield token
+
+    if not streamed_any:
+        fallback_response = await llm.acomplete(prompt)
+        fallback_text = (getattr(fallback_response, "text", None) or str(fallback_response)).strip()
+        if fallback_text:
+            yield fallback_text
+
+
+def _load_recent_session_messages(db: Session, session_id: str, limit: int = 12) -> List[ChatMessage]:
+    """Load recent session messages from DB in ascending order."""
+    recent_desc = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return list(reversed(recent_desc))
+
+
+def _format_history_for_prompt(messages: List[ChatMessage], max_chars: int = 6000) -> str:
+    """Format DB messages into a compact conversation block for prompting."""
+    if not messages:
+        return ""
+
+    # Keep the most recent turns first, then restore chronological order.
+    parts: List[str] = []
+    current_len = 0
+    for msg in reversed(messages):
+        role = "User" if msg.role == "user" else "Assistant"
+        content = (msg.content or "").strip()
+        if not content:
+            continue
+
+        # Prevent a single very long message from starving newer turns.
+        if len(content) > 1200:
+            content = f"{content[:1200]}\n...[truncated]"
+
+        mode_tag = f" [{msg.mode}]" if getattr(msg, "mode", None) else ""
+        block = f"{role}{mode_tag}: {content}"
+        if current_len + len(block) + 1 > max_chars:
+            break
+        parts.append(block)
+        current_len += len(block) + 1
+
+    return "\n".join(reversed(parts))
+
+
+def _sync_context_manager_from_db(session_id: str, messages: List[ChatMessage]) -> None:
+    """Hydrate in-memory chat context from persisted DB history."""
+    context_manager = get_context_manager()
+    context_manager.clear_session(session_id)
+
+    for db_msg in messages:
+        score_value, _ = _extract_confidence_fields(db_msg.confidence_score)
+        context_manager.add_message(
+            session_id=session_id,
+            role=db_msg.role,
+            content=db_msg.content,
+            confidence_score=score_value,
+        )
+
+
+def _build_ask_prompt(query: str, ask_files, conversation_history: Optional[str] = None) -> str:
+    """Build ask-mode prompt with optional in-memory files and chat history."""
     file_blocks = []
     total_chars = 0
     max_chars = 60000
@@ -154,23 +320,94 @@ async def _query_ask_mode(query: str, ask_files) -> dict:
         total_chars += len(clipped)
         file_blocks.append(f"[File: {item.filename}]\n{clipped}")
 
+    history_block = f"Conversation History:\n{conversation_history}\n\n" if conversation_history else ""
+
     if file_blocks:
-        prompt = (
+        return (
             "You are a helpful assistant. Answer the user clearly and concisely. "
-            "Use only the user question and provided file contents below when relevant. "
+            "Use conversation history to maintain continuity, and provided file contents when relevant. "
             "If details are missing, say so explicitly.\n\n"
+            f"{history_block}"
             f"User Question:\n{query}\n\n"
             "Provided File Content:\n"
             + "\n\n".join(file_blocks)
         )
-    else:
-        prompt = (
-            "You are a helpful assistant. Answer the user clearly and concisely.\n\n"
-            f"User Question:\n{query}"
-        )
+
+    return (
+        "You are a helpful assistant. Answer the user clearly and concisely. "
+        "Use conversation history to maintain continuity when relevant.\n\n"
+        f"{history_block}"
+        f"User Question:\n{query}"
+    )
+
+
+def _sanitize_ask_markdown(text: str) -> str:
+    """Normalize malformed emphasis markers in ask-mode output."""
+    if not text:
+        return text
+
+    def _normalize_unmatched_delimiters(value: str, delimiter: str) -> str:
+        parts = value.split(delimiter)
+        if len(parts) <= 2:
+            return value
+        delimiter_count = len(parts) - 1
+        if delimiter_count % 2 == 0:
+            return value
+
+        last_index = value.rfind(delimiter)
+        if last_index == -1:
+            return value
+        return f"{value[:last_index]}{value[last_index + len(delimiter):]}"
+
+    def _normalize_table_cell_emphasis(value: str) -> str:
+        normalized_lines = []
+        for line in value.split("\n"):
+            trimmed = line.strip()
+            if not trimmed.startswith("|") or "|" not in trimmed:
+                normalized_lines.append(line)
+                continue
+
+            cells = line.split("|")
+            if len(cells) < 3:
+                normalized_lines.append(line)
+                continue
+
+            normalized_cells = []
+            for idx, cell in enumerate(cells):
+                if idx == 0 or idx == len(cells) - 1:
+                    normalized_cells.append(cell)
+                    continue
+
+                cleaned = _normalize_unmatched_delimiters(cell, "**")
+                cleaned = _normalize_unmatched_delimiters(cleaned, "__")
+                normalized_cells.append(cleaned)
+
+            normalized_lines.append("|".join(normalized_cells))
+
+        return "\n".join(normalized_lines)
+
+    sanitized = _normalize_table_cell_emphasis(text)
+    sanitized_lines = []
+    for line in sanitized.split("\n"):
+        line = _normalize_unmatched_delimiters(line, "**")
+        line = _normalize_unmatched_delimiters(line, "__")
+        sanitized_lines.append(line)
+
+    return "\n".join(sanitized_lines)
+
+
+async def _query_ask_mode(query: str, ask_files, conversation_history: Optional[str] = None) -> dict:
+    """Direct LLM response without retrieval/vector lookup."""
+    llm = get_llm_service().get_llm()
+    prompt = _build_ask_prompt(query=query, ask_files=ask_files, conversation_history=conversation_history)
 
     response = await llm.acomplete(prompt)
     answer = getattr(response, "text", None) or str(response)
+    answer = _sanitize_ask_markdown(answer)
+    token_usage = _build_token_usage(
+        prompt_tokens=_extract_prompt_tokens_from_response(response),
+        prompt=prompt,
+    )
     return {
         "answer": answer,
         "confidence_score": 72.0,
@@ -178,6 +415,7 @@ async def _query_ask_mode(query: str, ask_files) -> dict:
         "sources": [],
         "processing_time_ms": None,
         "reasoning": None,
+        "token_usage": token_usage,
     }
 
 
@@ -219,6 +457,10 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
                 user_id=request.user_id,
                 title=title
             )
+
+        recent_history = _load_recent_session_messages(db, session_id=session_id)
+        conversation_history = _format_history_for_prompt(recent_history)
+        _sync_context_manager_from_db(session_id, recent_history)
         
         # Save user message
         user_msg = ChatMessage(
@@ -247,6 +489,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             result = await _query_ask_mode(
                 query=request.query,
                 ask_files=request.ask_files,
+                conversation_history=conversation_history,
             )
             result["session_id"] = session_id
         elif mode == "think":
@@ -258,6 +501,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
                 session_id=session_id,
                 user_id=request.user_id,
                 context_document_ids=request.context_document_ids,
+                conversation_history=conversation_history,
             )
         else:
             # Fast mode — existing hybrid RAG
@@ -283,7 +527,6 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
 
         if diagram_xml is None and is_diagram_request(request.query):
             try:
-                from app.services.llm_service import get_llm_service
                 llm = get_llm_service().get_llm()
                 logger.info(
                     "diagram_fallback_start",
@@ -336,6 +579,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             reasoning=result.get("reasoning"),
             mode=mode,
             diagram_xml=diagram_xml,
+            token_usage=result.get("token_usage"),
         )
         
         logger.info(
@@ -376,6 +620,10 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
         db.add(db_session)
         db.commit()
 
+    recent_history = _load_recent_session_messages(db, session_id=session_id)
+    conversation_history = _format_history_for_prompt(recent_history)
+    _sync_context_manager_from_db(session_id, recent_history)
+
     # Save user message
     user_msg = ChatMessage(
         session_id=session_id,
@@ -391,11 +639,30 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
             yield _sse_event("session", {"session_id": session_id, "mode": mode})
 
             if mode == "ask":
-                result = await _query_ask_mode(
+                llm = get_llm_service().get_llm()
+                prompt = _build_ask_prompt(
                     query=request.query,
                     ask_files=request.ask_files,
+                    conversation_history=conversation_history,
                 )
-                result["session_id"] = session_id
+                answer_parts = []
+                async for token in _iter_llm_tokens(llm, prompt):
+                    answer_parts.append(token)
+                    yield _sse_event("token", {"token": token})
+
+                answer = "".join(answer_parts).strip()
+                answer = _sanitize_ask_markdown(answer)
+
+                result = {
+                    "answer": answer,
+                    "confidence_score": 72.0,
+                    "confidence_level": "medium",
+                    "sources": [],
+                    "processing_time_ms": None,
+                    "reasoning": None,
+                    "session_id": session_id,
+                    "token_usage": _build_token_usage(prompt_tokens=None, prompt=prompt),
+                }
 
                 cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
                 result["answer"] = cleaned_answer
@@ -412,9 +679,6 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                         _, diagram_xml = extract_drawio_xml(diagram_text)
                     except Exception as e:
                         logger.warning("diagram_generation_failed", error=str(e))
-
-                async for token in _emit_text_tokens(cleaned_answer):
-                    yield _sse_event("token", {"token": token})
 
                 final_payload = {
                     **result,
@@ -453,6 +717,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                     session_id=session_id,
                     user_id=request.user_id,
                     context_document_ids=request.context_document_ids,
+                    conversation_history=conversation_history,
                 )
 
                 cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
@@ -467,7 +732,6 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
                 if diagram_xml is None and is_diagram_request(request.query):
                     try:
-                        from app.services.llm_service import get_llm_service
                         llm = get_llm_service().get_llm()
                         logger.info(
                             "diagram_fallback_start",
@@ -498,6 +762,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                     "mode": mode,
                     "diagram_xml": diagram_xml,
                     "sources": _serialize_sources(result.get("sources")),
+                    "token_usage": result.get("token_usage"),
                 }
 
                 assistant_msg = ChatMessage(
@@ -545,7 +810,6 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
                     if diagram_xml is None and is_diagram_request(request.query):
                         try:
-                            from app.services.llm_service import get_llm_service
                             llm = get_llm_service().get_llm()
                             logger.info(
                                 "diagram_fallback_start",

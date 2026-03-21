@@ -61,3 +61,23 @@ def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@router.delete("/user/{user_id}/all", status_code=status.HTTP_204_NO_CONTENT)
+def delete_all_chat_history(user_id: int, db: Session = Depends(get_db)):
+    """Delete all chat sessions and messages for a user."""
+    try:
+        user_exists = db.query(User.id).filter(User.id == user_id).first()
+        if not user_exists:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        session_ids = [row[0] for row in db.query(ChatSession.id).filter(ChatSession.user_id == user_id).all()]
+        if session_ids:
+            db.query(ChatMessage).filter(ChatMessage.session_id.in_(session_ids)).delete(synchronize_session=False)
+            db.query(ChatSession).filter(ChatSession.user_id == user_id).delete(synchronize_session=False)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

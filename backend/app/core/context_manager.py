@@ -160,18 +160,38 @@ class ContextManager:
         if not history or len(query.split()) > 10:
             return query
 
-        # Get last few messages for context
-        recent_history = history[-3:] if len(history) >= 3 else history
+        # Exclude the just-added current user message (if present) so we only use prior turns.
+        prior_history = history[:-1] if history and history[-1].role == MessageRole.USER else history
+        if not prior_history:
+            return query
+
+        # Use only a short recent window to avoid query drift.
+        recent_history = prior_history[-4:] if len(prior_history) >= 4 else prior_history
 
         # Build context-aware query
         context_parts = []
         for msg in recent_history:
             if msg.role == MessageRole.USER:
-                context_parts.append(f"Previous question: {msg.content}")
-            # We can include assistant responses if needed, but keeping it simple
+                snippet = (msg.content or "").strip()
+                if snippet:
+                    context_parts.append(f"Previous user question: {snippet}")
+            elif msg.role == MessageRole.ASSISTANT:
+                snippet = (msg.content or "").strip()
+                if snippet:
+                    context_parts.append(f"Previous assistant answer: {snippet[:220]}")
         
         if context_parts:
-            reformulated = f"{' '.join(context_parts)}. Current question: {query}"
+            history_context = "\n".join(context_parts)
+            reformulated = (
+                "Use previous conversation context only if it helps resolve references and follow-ups.\n"
+                f"{history_context}\n"
+                f"Current user question: {query}"
+            )
+
+            # Keep retrieval query compact to avoid hurting lexical/vector matching.
+            max_chars = 1200
+            if len(reformulated) > max_chars:
+                reformulated = reformulated[-max_chars:]
             
             logger.info(
                 "query_reformulated",

@@ -12,7 +12,7 @@ import {
 
 export function useAppTheme() {
   const [mode, setMode] = useState<ThemeMode>('dark');
-  const [palette, setPalette] = useState<ThemePalette>('mono');
+  const [palette, setPalette] = useState<ThemePalette>('graphite');
 
   useEffect(() => {
     const initialMode = readThemeMode();

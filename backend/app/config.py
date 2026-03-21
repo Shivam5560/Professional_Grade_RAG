@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")  # Overrides provider-specific key
     llm_model: str = Field(default="", alias="LLM_MODEL")  # Overrides provider-specific model
     llm_structured_model: str = Field(default="", alias="LLM_STRUCTURED_MODEL")  # Small model for JSON tasks
+    llm_context_window: int = Field(default=131072, alias="LLM_CONTEXT_WINDOW")
 
     # Groq Configuration (legacy — used as fallback when LLM_PROVIDER="groq")
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")

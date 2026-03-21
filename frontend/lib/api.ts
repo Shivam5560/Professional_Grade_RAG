@@ -180,6 +180,12 @@ class ApiClient {
     });
   }
 
+  async deleteAllChatHistory(userId: number): Promise<void> {
+    await this.request(`/history/user/${userId}/all`, {
+      method: 'DELETE',
+    });
+  }
+
   async query(request: ChatRequest): Promise<ChatResponse> {
     return this.request<ChatResponse>('/chat/query', {
       method: 'POST',

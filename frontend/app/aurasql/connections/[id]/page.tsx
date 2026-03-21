@@ -11,6 +11,7 @@ import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 import { Loader2 } from 'lucide-react';
+import { ShaderAnimation } from '@/components/ui/shader-animation';
 
 export default function EditAuraSqlConnectionPage() {
   const router = useRouter();
@@ -81,6 +82,9 @@ export default function EditAuraSqlConnectionPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 opacity-35">
+        <ShaderAnimation className="w-full h-full" speed={0.08} />
+      </div>
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />

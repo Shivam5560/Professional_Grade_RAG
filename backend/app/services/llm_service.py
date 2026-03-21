@@ -155,7 +155,7 @@ class LLMService:
             api_key=self.api_key,
             temperature=0.5,
             max_tokens=8192,
-            context_window=128_000,
+            context_window=settings.llm_context_window,
             reasoning_effort="high",
         )
 
@@ -174,7 +174,7 @@ class LLMService:
             api_key=self.api_key,
             temperature=0.1,
             max_tokens=32_000,
-            context_window=128_000,
+            context_window=settings.llm_context_window,
         )
 
         # Health-check caching

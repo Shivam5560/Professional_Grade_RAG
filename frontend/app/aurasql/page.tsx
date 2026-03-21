@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Database, Plus, Sparkles, Layers, Trash2, Code2, PlayCircle, Clock, MessageSquare, Home, ChevronDown } from 'lucide-react';
+import { Database, Plus, Sparkles, Layers, Trash2, MessageSquare, Home, ChevronDown } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlHistoryItem, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
@@ -112,6 +112,132 @@ export default function AuraSqlHomePage() {
     () => history.filter((item) => item.status === 'executed').length,
     [history]
   );
+  const trackedCount = generatedCount + executedCount;
+  const executionRate = trackedCount > 0 ? Math.round((executedCount / trackedCount) * 100) : 0;
+
+  const statusMix = useMemo(() => {
+    const buckets = history.reduce(
+      (acc, item) => {
+        const status = (item.status || '').toLowerCase();
+        if (status === 'generated') acc.generated += 1;
+        else if (status === 'executed') acc.executed += 1;
+        else if (status.includes('fail') || item.error_message) acc.failed += 1;
+        else acc.other += 1;
+        return acc;
+      },
+      { generated: 0, executed: 0, failed: 0, other: 0 }
+    );
+
+    const total = Math.max(1, buckets.generated + buckets.executed + buckets.failed + buckets.other);
+    return {
+      ...buckets,
+      total,
+      generatedPct: Math.round((buckets.generated / total) * 100),
+      executedPct: Math.round((buckets.executed / total) * 100),
+      failedPct: Math.round((buckets.failed / total) * 100),
+      otherPct: Math.round((buckets.other / total) * 100),
+    };
+  }, [history]);
+
+  const topConnectionActivity = useMemo(() => {
+    if (!history.length || !connections.length) {
+      return [] as Array<{ id: string; name: string; count: number; pct: number }>;
+    }
+    const counts = new Map<string, number>();
+    history.forEach((item) => {
+      if (!item.connection_id) return;
+      counts.set(item.connection_id, (counts.get(item.connection_id) || 0) + 1);
+    });
+
+    const items = Array.from(counts.entries())
+      .map(([id, count]) => {
+        const conn = connections.find((connection) => connection.id === id);
+        return { id, name: conn?.name || 'Unknown connection', count };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const max = Math.max(1, ...items.map((item) => item.count));
+    return items.map((item) => ({ ...item, pct: Math.round((item.count / max) * 100) }));
+  }, [history, connections]);
+
+  const activityByDay = useMemo(() => {
+    const days = 7;
+    const formatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+
+    const parseDateSafe = (raw?: string) => {
+      if (!raw) return null;
+      const first = new Date(raw);
+      if (!Number.isNaN(first.getTime())) return first;
+      const normalized = raw.includes(' ') ? raw.replace(' ', 'T') : raw;
+      const second = new Date(normalized);
+      if (!Number.isNaN(second.getTime())) return second;
+      return null;
+    };
+
+    const slots = Array.from({ length: days }, (_, idx) => {
+      const date = new Date(base);
+      date.setDate(base.getDate() - (days - 1 - idx));
+      const key = date.toISOString().slice(0, 10);
+      return {
+        key,
+        label: formatter.format(date),
+        generated: 0,
+        executed: 0,
+        total: 0,
+      };
+    });
+
+    const byKey = new Map(slots.map((slot) => [slot.key, slot]));
+    history.forEach((item) => {
+      const created = parseDateSafe(item.created_at);
+      if (!created) return;
+      const key = created.toISOString().slice(0, 10);
+      const slot = byKey.get(key);
+      if (!slot) return;
+      if (item.status === 'generated') slot.generated += 1;
+      if (item.status === 'executed') slot.executed += 1;
+      slot.total += 1;
+    });
+
+    const recentHasData = slots.some((slot) => slot.total > 0);
+    if (!recentHasData && history.length > 0) {
+      const grouped = new Map<string, { key: string; date: Date; label: string; generated: number; executed: number; total: number }>();
+      history.forEach((item) => {
+        const created = parseDateSafe(item.created_at);
+        if (!created) return;
+        const day = new Date(created);
+        day.setHours(0, 0, 0, 0);
+        const key = day.toISOString().slice(0, 10);
+        const existing = grouped.get(key) || {
+          key,
+          date: day,
+          label: formatter.format(day),
+          generated: 0,
+          executed: 0,
+          total: 0,
+        };
+        if (item.status === 'generated') existing.generated += 1;
+        if (item.status === 'executed') existing.executed += 1;
+        existing.total += 1;
+        grouped.set(key, existing);
+      });
+
+      const fallback = Array.from(grouped.values())
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+        .slice(-days);
+      const maxFallback = Math.max(1, ...fallback.map((slot) => slot.total));
+      return fallback.map((slot) => ({
+        ...slot,
+        pct: Math.round((slot.total / maxFallback) * 100),
+      }));
+    }
+
+    const max = Math.max(1, ...slots.map((slot) => slot.total));
+    return slots.map((slot) => ({ ...slot, pct: Math.round((slot.total / max) * 100) }));
+  }, [history]);
 
   const recentContexts = useMemo(() => {
     if (generatedHistory.length === 0 || contexts.length === 0) return contexts;
@@ -348,62 +474,136 @@ export default function AuraSqlHomePage() {
                 </div>
               )}
 
-              <div className="grid gap-6 md:grid-cols-3">
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
-                        <Code2 className="h-5 w-5 text-indigo-500" />
+              <div className="grid gap-6 xl:grid-cols-3">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft xl:col-span-1">
+                  <CardHeader>
+                    <CardTitle>Execution Funnel</CardTitle>
+                    <CardDescription>From generated SQL to executed SQL.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className="relative h-24 w-24 rounded-full"
+                        style={{
+                          background: `conic-gradient(hsl(var(--chart-1)) 0 ${executionRate}%, hsl(var(--muted)) ${executionRate}% 100%)`,
+                        }}
+                      >
+                        <div className="absolute inset-2 rounded-full bg-card/90 flex items-center justify-center">
+                          <span className="text-lg font-black text-foreground">{executionRate}%</span>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Generated SQL</p>
-                        <p className="text-xs text-muted-foreground">Total created queries</p>
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Generated</p>
+                        <p className="text-2xl font-black text-foreground"><AnimatedCounter value={generatedCount} /></p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Executed</p>
+                        <p className="text-2xl font-black text-foreground"><AnimatedCounter value={executedCount} /></p>
                       </div>
                     </div>
-                    <p className="text-4xl font-black text-foreground">
-                      <AnimatedCounter value={generatedCount} />
-                    </p>
+                    <div className="rounded-xl border border-border/60 bg-card/60 p-3">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                        <span>Executed out of tracked</span>
+                        <span>{executedCount}/{trackedCount}</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-border/70">
+                        <div className="h-full rounded-full bg-[hsl(var(--chart-1))]" style={{ width: `${Math.max(3, executionRate)}%` }} />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
-                        <PlayCircle className="h-5 w-5 text-emerald-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Executed SQL</p>
-                        <p className="text-xs text-muted-foreground">Total executed queries</p>
+
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft xl:col-span-1">
+                  <CardHeader>
+                    <CardTitle>Status Mix</CardTitle>
+                    <CardDescription>Distribution across generation lifecycle states.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-xl border border-border/60 bg-card/60 p-3">
+                      <div className="h-4 w-full overflow-hidden rounded-full bg-border/70 flex">
+                        <div className="h-full bg-[hsl(var(--chart-2))]" style={{ width: `${statusMix.generatedPct}%` }} />
+                        <div className="h-full bg-[hsl(var(--chart-1))]" style={{ width: `${statusMix.executedPct}%` }} />
+                        <div className="h-full bg-[hsl(var(--chart-5))]" style={{ width: `${statusMix.failedPct}%` }} />
+                        <div className="h-full bg-muted-foreground/40" style={{ width: `${statusMix.otherPct}%` }} />
                       </div>
                     </div>
-                    <p className="text-4xl font-black text-foreground">
-                      <AnimatedCounter value={executedCount} />
-                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-muted-foreground">Generated <span className="float-right text-foreground font-semibold">{statusMix.generated}</span></div>
+                      <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-muted-foreground">Executed <span className="float-right text-foreground font-semibold">{statusMix.executed}</span></div>
+                      <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-muted-foreground">Failed <span className="float-right text-foreground font-semibold">{statusMix.failed}</span></div>
+                      <div className="rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-muted-foreground">Other <span className="float-right text-foreground font-semibold">{statusMix.other}</span></div>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft hover-glow transition-transform hover:-translate-y-1">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
-                        <Clock className="h-5 w-5 text-amber-500" />
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Recent Activity</p>
-                        <p className="text-xs text-muted-foreground">Latest generations</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2 mt-1">
-                      {generatedHistory.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No activity yet</p>
-                      ) : generatedHistory.slice(0, 3).map((item) => (
-                        <div key={item.id} className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="line-clamp-1 max-w-[180px]">
-                            {item.natural_language_query || item.generated_sql || 'SQL execution'}
-                          </span>
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20">generated</Badge>
+
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft xl:col-span-1">
+                  <CardHeader>
+                    <CardTitle>7-Day Activity</CardTitle>
+                    <CardDescription>Daily query generation/execution volume trend.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-44 rounded-xl border border-border/60 bg-card/60 p-3 flex items-end gap-2">
+                      {activityByDay.map((day) => (
+                        <div key={day.key} className="flex-1 flex flex-col items-center gap-2">
+                          <div className="w-full max-w-[24px] h-28 flex items-end">
+                            <div className="w-full rounded-t-md bg-[hsl(var(--chart-3))]" style={{ height: `${Math.max(8, day.pct)}%` }} />
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{day.label}</span>
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
+                  <CardHeader>
+                    <CardTitle>Top Active Connections</CardTitle>
+                    <CardDescription>Connections with highest query activity.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {topConnectionActivity.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No connection activity yet.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {topConnectionActivity.map((item) => (
+                          <div key={item.id} className="rounded-xl border border-border/60 bg-card/60 px-3 py-2">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-foreground font-medium truncate max-w-[70%]">{item.name}</span>
+                              <span className="text-muted-foreground">{item.count}</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-border/70">
+                              <div className="h-full rounded-full bg-[hsl(var(--chart-3))]" style={{ width: `${item.pct}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
+                  <CardHeader>
+                    <CardTitle>Latest Generation Feed</CardTitle>
+                    <CardDescription>Most recent generated SQL intents from user prompts.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {generatedHistory.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No activity yet.</p>
+                    ) : (
+                      generatedHistory.slice(0, 6).map((item) => (
+                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-card/60 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground line-clamp-2">
+                              {item.natural_language_query || item.generated_sql || 'SQL generation'}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-1">{new Date(item.created_at).toLocaleString()}</p>
+                          </div>
+                          <Badge variant="secondary" className="text-[9px] uppercase tracking-[0.14em] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20">
+                            generated
+                          </Badge>
+                        </div>
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>

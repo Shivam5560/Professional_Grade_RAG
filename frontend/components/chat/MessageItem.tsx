@@ -43,6 +43,45 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
   const preprocessMarkdown = useCallback((text: string): string => {
     let processed = text;
 
+    const normalizeUnmatchedDelimiters = (value: string, delimiter: string): string => {
+      const parts = value.split(delimiter);
+      if (parts.length <= 2) return value;
+      const delimiterCount = parts.length - 1;
+      if (delimiterCount % 2 === 0) return value;
+
+      const lastIndex = value.lastIndexOf(delimiter);
+      if (lastIndex === -1) return value;
+      return `${value.slice(0, lastIndex)}${value.slice(lastIndex + delimiter.length)}`;
+    };
+
+    const normalizeTableCellEmphasis = (value: string): string => {
+      return value
+        .split('\n')
+        .map((line) => {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('|') || !trimmed.includes('|')) return line;
+
+          const cells = line.split('|');
+          if (cells.length < 3) return line;
+
+          return cells
+            .map((cell, idx) => {
+              if (idx === 0 || idx === cells.length - 1) return cell;
+
+              let normalizedCell = normalizeUnmatchedDelimiters(cell, '**');
+              normalizedCell = normalizeUnmatchedDelimiters(normalizedCell, '__');
+              return normalizedCell;
+            })
+            .join('|');
+        })
+        .join('\n');
+    };
+
+    // Unescape common markdown escapes emitted by some models
+    processed = processed.replace(/\\\*/g, '*');
+    processed = processed.replace(/\\_/g, '_');
+    processed = processed.replace(/\\`/g, '`');
+
     // Convert <br>, <br/>, <br /> variants to double newlines for block separation
     // or two-spaces + newline for inline line breaks
     processed = processed.replace(/<br\s*\/?\s*>\s*<br\s*\/?\s*>/gi, '\n\n');
@@ -87,8 +126,31 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
     // Fix consecutive newlines (max 2)
     processed = processed.replace(/\n{3,}/g, '\n\n');
 
+    // Table rows need per-cell normalization so delimiters don't leak across columns
+    processed = normalizeTableCellEmphasis(processed);
+
+    // Repair unmatched markdown emphasis delimiters per line
+    processed = processed
+      .split('\n')
+      .map((line) => {
+        let normalizedLine = normalizeUnmatchedDelimiters(line, '**');
+        normalizedLine = normalizeUnmatchedDelimiters(normalizedLine, '__');
+        return normalizedLine;
+      })
+      .join('\n');
+
     return processed;
   }, []);
+
+  const typingPreview = useMemo(() => {
+    if (!message.isTyping) return '';
+    return message.content
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*/g, '')
+      .replace(/__/g, '');
+  }, [message.content, message.isTyping]);
 
   const extractedContent = useMemo(() => {
     const content = message.content;
@@ -244,71 +306,75 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
               <p className="whitespace-pre-wrap m-0 leading-relaxed font-medium tracking-wide">{message.content}</p>
             ) : (
               <>
-                {extractedContent.text && (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                    components={{
-                      table: ({ ...props }) => (
-                        <div className="overflow-x-auto my-4">
-                          <table className="min-w-full divide-y divide-border" {...props} />
-                        </div>
-                      ),
-                      th: ({ ...props }) => (
-                        <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
-                      ),
-                      td: ({ ...props }) => (
-                        <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
-                      ),
-                      h1: ({ ...props }) => (
-                        <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
-                      ),
-                      h2: ({ ...props }) => (
-                        <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
-                      ),
-                      h3: ({ ...props }) => (
-                        <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
-                      ),
-                      p: ({ ...props }) => (
-                        <p className="mb-3 leading-relaxed text-foreground" {...props} />
-                      ),
-                      ul: ({ ...props }) => (
-                        <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
-                      ),
-                      ol: ({ ...props }) => (
-                        <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
-                      ),
-                      li: ({ ...props }) => (
-                        <li className="text-foreground leading-relaxed pl-1" {...props} />
-                      ),
-                      code: ({ inline, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => 
-                        inline ? (
-                          <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
-                        ) : (
-                          <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
+                {message.isTyping ? (
+                  <p className="whitespace-pre-wrap m-0 leading-relaxed text-foreground">{typingPreview}</p>
+                ) : (
+                  extractedContent.text && (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        table: ({ ...props }) => (
+                          <div className="overflow-x-auto my-4">
+                            <table className="min-w-full divide-y divide-border" {...props} />
+                          </div>
                         ),
-                      pre: ({ ...props }) => (
-                        <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
-                      ),
-                      blockquote: ({ ...props }) => (
-                        <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
-                      ),
-                      hr: ({ ...props }) => (
-                        <hr className="my-4 border-border" {...props} />
-                      ),
-                      strong: ({ ...props }) => (
-                        <strong className="font-semibold text-foreground" {...props} />
-                      ),
-                      em: ({ ...props }) => (
-                        <em className="italic text-foreground/80" {...props} />
-                      ),
-                      a: ({ ...props }) => (
-                        <a className="text-foreground underline underline-offset-2" {...props} />
-                      ),
-                    }}
-                  >
-                    {extractedContent.text}
-                  </ReactMarkdown>
+                        th: ({ ...props }) => (
+                          <th className="bg-muted/70 px-3 py-2 text-left text-xs font-semibold text-foreground border border-border" {...props} />
+                        ),
+                        td: ({ ...props }) => (
+                          <td className="px-3 py-2 text-sm border border-border text-foreground/90" {...props} />
+                        ),
+                        h1: ({ ...props }) => (
+                          <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground border-b border-border/80 pb-2" {...props} />
+                        ),
+                        h2: ({ ...props }) => (
+                          <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground" {...props} />
+                        ),
+                        h3: ({ ...props }) => (
+                          <h3 className="text-lg font-semibold mt-4 mb-2 text-foreground" {...props} />
+                        ),
+                        p: ({ ...props }) => (
+                          <p className="mb-3 leading-relaxed text-foreground" {...props} />
+                        ),
+                        ul: ({ ...props }) => (
+                          <ul className="list-disc list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground" {...props} />
+                        ),
+                        ol: ({ ...props }) => (
+                          <ol className="list-decimal list-outside ml-6 my-3 space-y-2 text-foreground marker:text-foreground marker:font-semibold" {...props} />
+                        ),
+                        li: ({ ...props }) => (
+                          <li className="text-foreground leading-relaxed pl-1" {...props} />
+                        ),
+                        code: ({ inline, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => 
+                          inline ? (
+                            <code className="bg-muted/80 px-2 py-0.5 rounded text-sm font-mono text-foreground border border-border shadow-inner" {...props} />
+                          ) : (
+                            <code className="block bg-muted/80 p-4 rounded-lg text-sm font-mono overflow-x-auto my-3 text-foreground border border-border shadow-lg shadow-teal-500/10" {...props} />
+                          ),
+                        pre: ({ ...props }) => (
+                          <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
+                        ),
+                        blockquote: ({ ...props }) => (
+                          <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
+                        ),
+                        hr: ({ ...props }) => (
+                          <hr className="my-4 border-border" {...props} />
+                        ),
+                        strong: ({ ...props }) => (
+                          <strong className="font-semibold text-foreground" {...props} />
+                        ),
+                        em: ({ ...props }) => (
+                          <em className="italic text-foreground/80" {...props} />
+                        ),
+                        a: ({ ...props }) => (
+                          <a className="text-foreground underline underline-offset-2" {...props} />
+                        ),
+                      }}
+                    >
+                      {extractedContent.text}
+                    </ReactMarkdown>
+                  )
                 )}
                 {extractedContent.diagrams.map((diagramXml, idx) => (
                   <DrawioDiagram key={idx} xml={diagramXml} title="Generated diagram" />

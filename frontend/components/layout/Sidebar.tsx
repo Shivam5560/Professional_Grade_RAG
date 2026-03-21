@@ -111,6 +111,35 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
     }
   };
 
+  const handleDeleteAllHistory = async () => {
+    if (!user || history.length === 0) return;
+    const confirmed = await confirm({
+      title: 'Delete all chats?',
+      description: 'This will permanently remove your entire chat history.',
+      confirmLabel: 'Delete all',
+      cancelLabel: 'Cancel',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+
+    try {
+      await apiClient.deleteAllChatHistory(user.id);
+      setHistory([]);
+      onNewChat();
+      toast({
+        title: 'History deleted',
+        description: 'All chats were removed.',
+      });
+      window.dispatchEvent(new CustomEvent('chat-history-updated', { detail: { userId: user.id } }));
+    } catch (error) {
+      toast({
+        title: 'Delete failed',
+        description: error instanceof Error ? error.message : 'Unable to delete all chat history.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const sortedHistory = useMemo(() => {
     return [...history].sort((a, b) => {
       const aTime = new Date(a.updated_at || a.created_at).getTime();
@@ -250,6 +279,14 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
           </div>
         </ScrollArea>
         <div className="pt-3">
+          <Button
+            variant="ghost"
+            className="mb-2 w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleDeleteAllHistory}
+            disabled={history.length === 0}
+          >
+            Delete all history
+          </Button>
           <Button
             variant="ghost"
             className="w-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"

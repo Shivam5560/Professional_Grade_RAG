@@ -5,6 +5,7 @@ Main RAG engine orchestrating retrieval and generation.
 import copy
 import time
 import uuid
+import inspect
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from app.core.retriever import get_hybrid_retriever
@@ -93,6 +94,177 @@ Context from knowledge base:
 User Question: {query}
 
 Provide a comprehensive answer based on the context above."""
+
+    def _estimate_tokens(self, text: str) -> int:
+        if not text:
+            return 0
+        return max(1, len(text) // 4)
+
+    def _extract_prompt_tokens_from_response(self, response) -> Optional[int]:
+        if response is None:
+            return None
+
+        def _read_usage(obj) -> Optional[int]:
+            if not isinstance(obj, dict):
+                return None
+            usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else obj
+            if not isinstance(usage, dict):
+                return None
+            value = usage.get("prompt_tokens", usage.get("input_tokens"))
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        candidates = [
+            getattr(response, "raw", None),
+            getattr(response, "additional_kwargs", None),
+            getattr(response, "usage", None),
+            response,
+        ]
+        for candidate in candidates:
+            prompt_tokens = _read_usage(candidate)
+            if prompt_tokens is not None:
+                return prompt_tokens
+        return None
+
+    def _merge_token_usage_with_response(self, token_usage: dict, response) -> dict:
+        prompt_tokens = self._extract_prompt_tokens_from_response(response)
+        if prompt_tokens is None:
+            return token_usage
+
+        context_max = max(1, settings.llm_context_window)
+        updated = dict(token_usage)
+        updated["context_tokens_used"] = int(prompt_tokens)
+        updated["context_tokens_max"] = context_max
+        updated["context_utilization_pct"] = round((prompt_tokens / context_max) * 100, 2)
+        updated["near_limit"] = prompt_tokens >= int(context_max * 0.85)
+        return updated
+
+    async def _compact_history_if_needed(
+        self,
+        history_str: str,
+        query: str,
+        context_str: str,
+        threshold: float = 0.85,
+    ) -> tuple[str, bool, dict]:
+        context_max = max(1, settings.llm_context_window)
+        projected = self._estimate_tokens(context_str) + self._estimate_tokens(history_str) + self._estimate_tokens(query)
+        near_limit = projected >= int(context_max * threshold)
+
+        if not near_limit or not history_str:
+            usage = {
+                "context_tokens_used": projected,
+                "context_tokens_max": context_max,
+                "context_utilization_pct": round((projected / context_max) * 100, 2),
+                "near_limit": near_limit,
+                "compaction_applied": False,
+            }
+            return history_str, False, usage
+
+        try:
+            llm = self.llm_service.get_structured_llm()
+            prompt = (
+                "Summarize conversation context for continuation in <= 14 bullets. "
+                "Keep facts, constraints, decisions, unresolved questions, and user preferences. "
+                "Drop repetition.\n\n"
+                f"Conversation:\n{history_str}\n\n"
+                f"Current user question:\n{query}"
+            )
+            summary_resp = await llm.acomplete(prompt)
+            compacted = (getattr(summary_resp, "text", None) or str(summary_resp)).strip()
+            compacted = compacted[:9000] if compacted else history_str[:9000]
+        except Exception:
+            compacted = history_str[-9000:]
+
+        projected_after = self._estimate_tokens(context_str) + self._estimate_tokens(compacted) + self._estimate_tokens(query)
+        usage = {
+            "context_tokens_used": projected_after,
+            "context_tokens_max": context_max,
+            "context_utilization_pct": round((projected_after / context_max) * 100, 2),
+            "near_limit": projected_after >= int(context_max * threshold),
+            "compaction_applied": True,
+        }
+        return compacted, True, usage
+
+    def _build_history_only_prompt(self, history_str: str, query: str) -> str:
+        """Build a fallback prompt when retrieval has no relevant context."""
+        history_block = history_str if history_str else "No prior conversation history available."
+        return f"""{PROFESSIONAL_SYSTEM_PROMPT}
+
+You do not have relevant retrieved documents for this question.
+Use prior conversation context to answer only when it is directly relevant and reliable.
+If prior context is insufficient, clearly say what is missing.
+Do not fabricate document citations.
+
+Conversation context:
+{history_block}
+
+User Question: {query}
+
+Provide the most helpful answer possible based on conversation context and general knowledge."""
+
+    async def _iter_llm_tokens(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Yield tokens robustly across LLM wrappers that differ in stream return shape."""
+        def _suffix_delta(previous: str, current: str) -> str:
+            if not current:
+                return ""
+            if not previous:
+                return current
+            if current == previous:
+                return ""
+            if current.startswith(previous):
+                return current[len(previous):]
+            if previous.startswith(current):
+                return ""
+
+            max_prefix = min(len(previous), len(current))
+            prefix_len = 0
+            while prefix_len < max_prefix and previous[prefix_len] == current[prefix_len]:
+                prefix_len += 1
+            return current[prefix_len:]
+
+        stream_obj = self.llm.astream_complete(prompt)
+
+        if inspect.isawaitable(stream_obj):
+            stream_obj = await stream_obj
+
+        streamed_any = False
+        last_text = ""
+        emitted_text = ""
+
+        if hasattr(stream_obj, "__aiter__"):
+            async for chunk in stream_obj:
+                delta = getattr(chunk, "delta", None)
+                text = getattr(chunk, "text", None)
+
+                if text:
+                    candidate = _suffix_delta(last_text, text)
+                    last_text = text
+                elif delta:
+                    candidate = delta
+                else:
+                    candidate = ""
+
+                token = _suffix_delta(emitted_text, candidate)
+
+                if token:
+                    streamed_any = True
+                    emitted_text += token
+                    yield token
+        else:
+            candidate = getattr(stream_obj, "text", None) or str(stream_obj or "")
+            token = _suffix_delta(emitted_text, candidate)
+            if token:
+                streamed_any = True
+                emitted_text += token
+                yield token
+
+        if not streamed_any:
+            fallback_response = await self.llm.acomplete(prompt)
+            fallback_text = (getattr(fallback_response, "text", None) or str(fallback_response)).strip()
+            if fallback_text:
+                yield fallback_text
     
     async def query(
         self,
@@ -205,19 +377,45 @@ Provide a comprehensive answer based on the context above."""
                 )
         
             if not retrieved_nodes:
-                context_msg = ""
-                if context_document_ids and len(context_document_ids) > 0:
-                    context_msg = " in the selected documents"
                 logger.log_operation(
                     "⚠️  No relevant documents found",
                     level="WARNING"
                 )
-                answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
-                confidence_result = {
-                    "confidence_score": 0.0,
-                    "confidence_level": "low",
-                    "breakdown": {}
-                }
+                history_str = self.context_manager.get_context_string(session_id, max_messages=8)
+                history_str, _, token_usage = await self._compact_history_if_needed(
+                    history_str=history_str,
+                    query=query,
+                    context_str="",
+                )
+                if history_str:
+                    fallback_prompt = self._build_history_only_prompt(history_str, query)
+                    response = await self.llm.acomplete(fallback_prompt)
+                    answer = (getattr(response, "text", None) or str(response)).strip()
+                    token_usage = self._merge_token_usage_with_response(token_usage, response)
+                    llm_confidence = self._extract_llm_confidence(answer)
+                    answer = self._clean_answer(answer)
+                    confidence_result = {
+                        "confidence_score": 45.0 if llm_confidence is None else max(35.0, min(65.0, llm_confidence * 100.0)),
+                        "confidence_level": "medium",
+                        "breakdown": {}
+                    }
+                else:
+                    context_msg = ""
+                    if context_document_ids and len(context_document_ids) > 0:
+                        context_msg = " in the selected documents"
+                    answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
+                    confidence_result = {
+                        "confidence_score": 0.0,
+                        "confidence_level": "low",
+                        "breakdown": {}
+                    }
+                    token_usage = {
+                        "context_tokens_used": self._estimate_tokens(query),
+                        "context_tokens_max": max(1, settings.llm_context_window),
+                        "context_utilization_pct": round((self._estimate_tokens(query) / max(1, settings.llm_context_window)) * 100, 2),
+                        "near_limit": False,
+                        "compaction_applied": False,
+                    }
                 sources = []
             else:
                 # Step 2: Reranking with the configured remote/cohere provider
@@ -243,22 +441,19 @@ Provide a comprehensive answer based on the context above."""
                     for node in reranked_nodes
                 ])
                 
-                # Step 4: Get conversation history
-                chat_history = self.context_manager.get_chat_messages(session_id)
-                
-                # Step 5: Generate response with system prompt
-                prompt = f"""{PROFESSIONAL_SYSTEM_PROMPT}
-
-Context from knowledge base:
-{context_str}
-
-User Question: {query}
-
-Provide a comprehensive answer based on the context above."""
+                # Step 4: Build prompt with conversation history
+                history_str = self.context_manager.get_context_string(session_id, max_messages=8)
+                history_str, _, token_usage = await self._compact_history_if_needed(
+                    history_str=history_str,
+                    query=query,
+                    context_str=context_str,
+                )
+                prompt = self._build_prompt(context_str, history_str, query)
                 
                 # Generate answer
                 response = await self.llm.acomplete(prompt)
                 answer = response.text.strip()
+                token_usage = self._merge_token_usage_with_response(token_usage, response)
                 
                 # Extract LLM's self-assessment confidence from the answer
                 llm_confidence = self._extract_llm_confidence(answer)
@@ -294,6 +489,7 @@ Provide a comprehensive answer based on the context above."""
                 "sources": sources,
                 "session_id": session_id,
                 "processing_time_ms": round(processing_time, 2),
+                "token_usage": token_usage,
             }
             
             logger.log_operation(
@@ -385,16 +581,49 @@ Provide a comprehensive answer based on the context above."""
         retrieved_nodes = all_merged[:settings.top_k_retrieval]
 
         if not retrieved_nodes:
-            context_msg = ""
-            if context_document_ids and len(context_document_ids) > 0:
-                context_msg = " in the selected documents"
-            answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
-            confidence_result = {
-                "confidence_score": 0.0,
-                "confidence_level": "low",
-                "breakdown": {},
-            }
+            history_str = self.context_manager.get_context_string(session_id, max_messages=8)
+            history_str, _, token_usage = await self._compact_history_if_needed(
+                history_str=history_str,
+                query=query,
+                context_str="",
+            )
+            if history_str:
+                fallback_prompt = self._build_history_only_prompt(history_str, query)
+                answer_parts: List[str] = []
+                async for token in self._iter_llm_tokens(fallback_prompt):
+                    answer_parts.append(token)
+                    yield {"type": "token", "data": token}
+                answer = "".join(answer_parts).strip()
+                llm_confidence = self._extract_llm_confidence(answer)
+                answer = self._clean_answer(answer)
+                confidence_result = {
+                    "confidence_score": 45.0 if llm_confidence is None else max(35.0, min(65.0, llm_confidence * 100.0)),
+                    "confidence_level": "medium",
+                    "breakdown": {},
+                }
+            else:
+                context_msg = ""
+                if context_document_ids and len(context_document_ids) > 0:
+                    context_msg = " in the selected documents"
+                answer = f"I don't have sufficient information{context_msg} to answer this question accurately."
+                confidence_result = {
+                    "confidence_score": 0.0,
+                    "confidence_level": "low",
+                    "breakdown": {},
+                }
+                token_usage = {
+                    "context_tokens_used": self._estimate_tokens(query),
+                    "context_tokens_max": max(1, settings.llm_context_window),
+                    "context_utilization_pct": round((self._estimate_tokens(query) / max(1, settings.llm_context_window)) * 100, 2),
+                    "near_limit": False,
+                    "compaction_applied": False,
+                }
             sources = []
+
+            # Ensure frontend receives token events even for non-stream fallback text.
+            if not history_str:
+                for idx in range(0, len(answer), 24):
+                    yield {"type": "token", "data": answer[idx: idx + 24]}
         else:
             # Rerank nodes
             reranked_nodes = self.reranker.postprocess_nodes(
@@ -407,15 +636,18 @@ Provide a comprehensive answer based on the context above."""
                 for node in reranked_nodes
             ])
 
-            history_str = self.context_manager.get_context_string(session_id, max_messages=4)
+            history_str = self.context_manager.get_context_string(session_id, max_messages=8)
+            history_str, _, token_usage = await self._compact_history_if_needed(
+                history_str=history_str,
+                query=query,
+                context_str=context_str,
+            )
             prompt = self._build_prompt(context_str, history_str, query)
 
             answer_parts: List[str] = []
-            async for chunk in self.llm.astream_complete(prompt):
-                token = getattr(chunk, "delta", None) or getattr(chunk, "text", None) or ""
-                if token:
-                    answer_parts.append(token)
-                    yield {"type": "token", "data": token}
+            async for token in self._iter_llm_tokens(prompt):
+                answer_parts.append(token)
+                yield {"type": "token", "data": token}
 
             answer = "".join(answer_parts).strip()
 
@@ -446,6 +678,7 @@ Provide a comprehensive answer based on the context above."""
                 "processing_time_ms": round(processing_time, 2),
                 "reasoning": None,
                 "mode": "fast",
+                "token_usage": token_usage,
             },
         }
 

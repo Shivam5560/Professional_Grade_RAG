@@ -29,11 +29,11 @@ export function readThemeMode(): ThemeMode {
 }
 
 export function readThemePalette(): ThemePalette {
-  if (typeof window === 'undefined') return 'mono';
+  if (typeof window === 'undefined') return 'graphite';
   const stored = window.localStorage.getItem(PALETTE_KEY);
   return stored && PALETTE_CLASSES.includes(stored as ThemePalette)
     ? (stored as ThemePalette)
-    : 'mono';
+    : 'graphite';
 }
 
 export function applyTheme(mode: ThemeMode, palette: ThemePalette): void {

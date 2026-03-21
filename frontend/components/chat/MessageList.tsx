@@ -35,8 +35,8 @@ export function MessageList({
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    bottomRef.current?.scrollIntoView({ behavior: isLoading ? 'auto' : 'smooth' });
+  }, [messages.length, isLoading]);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -241,7 +241,6 @@ export function MessageList({
             return (
               <motion.div
                 key={index}
-                layout
                 initial={{ opacity: 0, y: 12, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}

@@ -29,8 +29,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${plexMono.variable} theme-mono dark`}
-      data-theme-palette="mono"
+      className={`${spaceGrotesk.variable} ${plexMono.variable} theme-graphite dark`}
+      data-theme-palette="graphite"
       data-theme-mode="dark"
     >
       <body>

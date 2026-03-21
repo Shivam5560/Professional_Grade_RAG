@@ -62,6 +62,8 @@ Select between 1 and 8 nodes. Prefer more specific (deeper) nodes over broad par
 
 THINK_MODE_ANSWER_PROMPT = """You are an expert AI assistant using a reasoning-based retrieval system. You navigated a document's hierarchical structure to find the most relevant sections for the user's question.
 
+{conversation_history_block}
+
 **Retrieval Reasoning:**
 {reasoning}
 
@@ -135,6 +137,7 @@ class PageIndexRAGEngine:
         session_id: Optional[str] = None,
         user_id: Optional[int] = None,
         context_document_ids: Optional[List[str]] = None,
+        conversation_history: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a think-mode query using PageIndex tree reasoning.
@@ -301,6 +304,34 @@ class PageIndexRAGEngine:
         combined_reasoning = "\n\n".join(all_reasoning_parts) if all_reasoning_parts else "No specific reasoning available."
 
         if not all_context_sections:
+            if conversation_history:
+                history_fallback_prompt = (
+                    "You are a helpful assistant. No relevant document sections were retrieved. "
+                    "Use conversation history to answer only if it is relevant and reliable. "
+                    "If insufficient, say what is missing.\n\n"
+                    f"Conversation History:\n{conversation_history}\n\n"
+                    f"User Question: {query}\n\n"
+                    "Answer concisely with clear structure."
+                )
+                try:
+                    history_answer = await groq_llm_call(history_fallback_prompt, self.groq_service)
+                    if history_answer:
+                        history_conf = self._extract_confidence(history_answer)
+                        history_answer = self._clean_confidence_line(history_answer)
+                        processing_time = (time.time() - start_time) * 1000
+                        return {
+                            "answer": history_answer,
+                            "confidence_score": history_conf if history_conf is not None else 35.0,
+                            "confidence_level": "medium" if (history_conf or 35.0) >= 30 else "low",
+                            "sources": [],
+                            "session_id": session_id or "",
+                            "processing_time_ms": round(processing_time, 2),
+                            "reasoning": combined_reasoning,
+                            "mode": "think",
+                        }
+                except Exception as e:
+                    logger.log_error("Think mode history fallback failed", e)
+
             processing_time = (time.time() - start_time) * 1000
             return {
                 "answer": "I searched the document structure but couldn't find sections relevant to your question. Try rephrasing your question or switching to Fast mode for keyword-based retrieval.",
@@ -323,7 +354,10 @@ class PageIndexRAGEngine:
         if len(context_str) > 60000:
             context_str = context_str[:60000] + "\n\n[Context truncated for length]"
 
+        history_block = f"**Conversation History:**\n{conversation_history}\n" if conversation_history else ""
+
         answer_prompt = THINK_MODE_ANSWER_PROMPT.format(
+            conversation_history_block=history_block,
             reasoning=combined_reasoning,
             context=context_str,
             query=query,
