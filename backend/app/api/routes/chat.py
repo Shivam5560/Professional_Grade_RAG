@@ -3,10 +3,10 @@ Chat endpoints for querying the RAG system.
 """
 
 import uuid
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from app.models.schemas import ChatRequest, ChatResponse, ChatHistory
+from app.models.schemas import ChatRequest, ChatResponse, ChatHistory, AskFileExtractResponse
 from app.core.rag_engine import get_rag_engine
 from app.core.context_manager import get_context_manager
 from app.utils.logger import get_logger
@@ -17,6 +17,10 @@ from app.utils.diagram_utils import extract_drawio_xml, is_diagram_request
 from app.models.prompts import DRAWIO_XML_PROMPT
 from app.config import settings
 import httpx
+from app.services.llm_service import get_llm_service
+from app.services.document_processor import get_document_processor
+from app.utils.validators import validate_file_extension, validate_file_size
+import asyncio
 
 logger = get_logger(__name__)
 
@@ -123,13 +127,68 @@ def _sse_event(event: str, data) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+async def _emit_text_tokens(text: str, chunk_size: int = 18):
+    """Yield small chunks of text for smoother SSE rendering on frontend."""
+    if not text:
+        return
+    for idx in range(0, len(text), chunk_size):
+        yield text[idx: idx + chunk_size]
+        await asyncio.sleep(0)
+
+
+async def _query_ask_mode(query: str, ask_files) -> dict:
+    """Direct LLM response without retrieval/vector lookup."""
+    llm = get_llm_service().get_llm()
+
+    file_blocks = []
+    total_chars = 0
+    max_chars = 60000
+    for item in ask_files or []:
+        content = (item.content or "").strip()
+        if not content:
+            continue
+        remaining = max_chars - total_chars
+        if remaining <= 0:
+            break
+        clipped = content[:remaining]
+        total_chars += len(clipped)
+        file_blocks.append(f"[File: {item.filename}]\n{clipped}")
+
+    if file_blocks:
+        prompt = (
+            "You are a helpful assistant. Answer the user clearly and concisely. "
+            "Use only the user question and provided file contents below when relevant. "
+            "If details are missing, say so explicitly.\n\n"
+            f"User Question:\n{query}\n\n"
+            "Provided File Content:\n"
+            + "\n\n".join(file_blocks)
+        )
+    else:
+        prompt = (
+            "You are a helpful assistant. Answer the user clearly and concisely.\n\n"
+            f"User Question:\n{query}"
+        )
+
+    response = await llm.acomplete(prompt)
+    answer = getattr(response, "text", None) or str(response)
+    return {
+        "answer": answer,
+        "confidence_score": 72.0,
+        "confidence_level": "medium",
+        "sources": [],
+        "processing_time_ms": None,
+        "reasoning": None,
+    }
+
+
 @router.post("/query", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def query(request: ChatRequest, db: Session = Depends(get_db)):
     """
     Query the RAG system with a question.
-    Supports two modes:
+    Supports three modes:
     - fast (default): Hybrid BM25 + Vector retrieval with reranking
     - think: PageIndex reasoning-based tree search
+    - ask: Direct LLM answer without retrieval/vector search
     
     Args:
         request: ChatRequest with query, session_id, and mode
@@ -184,7 +243,13 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         )
         
         # Route to the appropriate engine based on mode
-        if mode == "think":
+        if mode == "ask":
+            result = await _query_ask_mode(
+                query=request.query,
+                ask_files=request.ask_files,
+            )
+            result["session_id"] = session_id
+        elif mode == "think":
             from app.core.pageindex_rag_engine import get_pageindex_rag_engine
             think_engine = get_pageindex_rag_engine()
             result = await think_engine.query(
@@ -325,6 +390,60 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
         try:
             yield _sse_event("session", {"session_id": session_id, "mode": mode})
 
+            if mode == "ask":
+                result = await _query_ask_mode(
+                    query=request.query,
+                    ask_files=request.ask_files,
+                )
+                result["session_id"] = session_id
+
+                cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
+                result["answer"] = cleaned_answer
+
+                if diagram_xml is None and is_diagram_request(request.query):
+                    try:
+                        llm = get_llm_service().get_llm()
+                        diagram_prompt = DRAWIO_XML_PROMPT.format(
+                            query=request.query,
+                            answer=cleaned_answer,
+                        )
+                        diagram_response = await llm.acomplete(diagram_prompt)
+                        diagram_text = getattr(diagram_response, "text", None) or str(diagram_response)
+                        _, diagram_xml = extract_drawio_xml(diagram_text)
+                    except Exception as e:
+                        logger.warning("diagram_generation_failed", error=str(e))
+
+                async for token in _emit_text_tokens(cleaned_answer):
+                    yield _sse_event("token", {"token": token})
+
+                final_payload = {
+                    **result,
+                    "mode": mode,
+                    "diagram_xml": diagram_xml,
+                    "sources": [],
+                }
+
+                assistant_msg = ChatMessage(
+                    session_id=session_id,
+                    role="assistant",
+                    content=cleaned_answer,
+                    confidence_score=json.loads(json.dumps({
+                        "score": result["confidence_score"],
+                        "level": result["confidence_level"],
+                    })),
+                    sources=[],
+                    reasoning=None,
+                    mode=mode,
+                    diagram_xml=diagram_xml,
+                )
+                db.add(assistant_msg)
+                from datetime import datetime
+                db_session.updated_at = datetime.utcnow()
+                db.commit()
+
+                yield _sse_event("final", final_payload)
+                return
+
             if mode == "think":
                 from app.core.pageindex_rag_engine import get_pageindex_rag_engine
                 think_engine = get_pageindex_rag_engine()
@@ -371,8 +490,8 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                     except Exception as e:
                         logger.warning("diagram_generation_failed", error=str(e))
 
-                # Emit the answer as a single token for think mode
-                yield _sse_event("token", {"token": cleaned_answer})
+                async for token in _emit_text_tokens(cleaned_answer):
+                    yield _sse_event("token", {"token": token})
 
                 result_payload = {
                     **result,
@@ -476,6 +595,42 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
             yield _sse_event("error", {"message": "An internal server error occurred"})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/extract-file", response_model=AskFileExtractResponse, status_code=status.HTTP_200_OK)
+async def extract_file_for_ask_mode(file: UploadFile = File(...)):
+    """Extract plain text from a file for ask mode without persisting or indexing it."""
+    try:
+        if not validate_file_extension(file.filename, settings.allowed_file_extensions):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type. Allowed: {', '.join(settings.allowed_file_extensions)}",
+            )
+
+        content = await file.read()
+        if not validate_file_size(len(content), settings.max_upload_size_mb):
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum allowed: {settings.max_upload_size_mb} MB",
+            )
+
+        processor = get_document_processor()
+        extracted_text = await processor.extract_text_from_file(content, file.filename)
+
+        return AskFileExtractResponse(
+            id=str(uuid.uuid4()),
+            filename=file.filename,
+            content=extracted_text,
+            content_length=len(extracted_text),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("ask_file_extract_failed", filename=file.filename, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract file text: {str(e)}",
+        )
 
 
 @router.get("/history/{session_id}", response_model=ChatHistory, status_code=status.HTTP_200_OK)

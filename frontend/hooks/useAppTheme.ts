@@ -11,8 +11,8 @@ import {
 } from '@/lib/theme';
 
 export function useAppTheme() {
-  const [mode, setMode] = useState<ThemeMode>('light');
-  const [palette, setPalette] = useState<ThemePalette>('nexus');
+  const [mode, setMode] = useState<ThemeMode>('dark');
+  const [palette, setPalette] = useState<ThemePalette>('mono');
 
   useEffect(() => {
     const initialMode = readThemeMode();

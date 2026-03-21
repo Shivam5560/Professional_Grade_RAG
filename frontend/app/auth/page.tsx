@@ -7,11 +7,11 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ShaderAnimation } from "@/components/ui/shader-animation"
-import { CheckCircle2, AlertCircle, Brain, Shield, Zap, MessageSquare, Database, UserPlus, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast } from "lucide-react"
+import { Brain, Shield, Zap, MessageSquare, Database, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast, ArrowRight, Loader2 } from "lucide-react"
 import { useAppTheme } from "@/hooks/useAppTheme"
 import { type ThemePalette } from "@/lib/theme"
+import { useToast } from "@/hooks/useToast"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +25,10 @@ import {
 
 export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [isLoginOverlayVisible, setIsLoginOverlayVisible] = useState(false)
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
   const router = useRouter()
+  const { toast } = useToast()
   const { mode, palette, toggleMode, setPalette } = useAppTheme()
   const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: 'nexus', label: 'Nexus Slate', icon: Compass },
@@ -121,41 +121,31 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError(null)
-    setSuccess(null)
+    setIsLoginOverlayVisible(true)
     const formData = new FormData(e.target as HTMLFormElement)
     const email = formData.get("email") as string
     const password = formData.get("password") as string
 
     try {
       await apiClient.login(email, password)
-      setSuccess("Login successful! Redirecting...")
-      setTimeout(() => router.push("/"), 1000)
+      toast({
+        title: "Login successful",
+        description: "Redirecting you to dashboard...",
+      })
+      router.push("/")
     } catch (error: unknown) {
       const errorMessage = error instanceof Error
         ? error.message
         : "Login failed. Please check your credentials."
-      
-      // Check if user not found (400 status or specific error message)
-      if (errorMessage.toLowerCase().includes('user not found') || 
-          errorMessage.toLowerCase().includes('not found') ||
-          errorMessage.toLowerCase().includes('does not exist') ||
-          errorMessage.toLowerCase().includes('no user') ||
-          errorMessage.toLowerCase().includes('invalid email')) {
-        
-        // Show special message for user not found
-        setError("Account not found! Redirecting you to registration...")
-        
-        // Redirect to register tab after 2 seconds
-        setTimeout(() => {
-          setActiveTab('register')
-          setError(null)
-          setSuccess("Please create a new account to continue")
-        }, 2000)
-      } else {
-        setError(errorMessage)
-      }
+      toast({
+        title: "Login failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      setActiveTab('login')
+      router.replace('/auth')
     } finally {
+      setIsLoginOverlayVisible(false)
       setIsLoading(false)
     }
   }
@@ -163,8 +153,6 @@ export default function AuthPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError(null)
-    setSuccess(null)
     const formData = new FormData(e.target as HTMLFormElement)
     const fullName = (formData.get("full-name") as string)?.trim()
     const email = formData.get("email") as string
@@ -172,28 +160,43 @@ export default function AuthPage() {
     const confirmPassword = formData.get("confirm-password") as string
 
     if (!fullName) {
-      setError("Full name is required")
+      toast({
+        title: "Missing full name",
+        description: "Full name is required.",
+        variant: "destructive",
+      })
       setIsLoading(false)
       return
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match")
+      toast({
+        title: "Password mismatch",
+        description: "Passwords do not match.",
+        variant: "destructive",
+      })
       setIsLoading(false)
       return
     }
 
     try {
       await apiClient.register(email, password, fullName)
-      setSuccess("Account created successfully! Logging you in...")
+      toast({
+        title: "Account created",
+        description: "Logging you in...",
+      })
       // Auto login after register
       await apiClient.login(email, password)
-      setTimeout(() => router.push("/"), 1000)
+      router.push("/")
     } catch (error: unknown) {
       const errorMessage = error instanceof Error
         ? error.message
         : "Registration failed. Please try again."
-      setError(errorMessage)
+      toast({
+        title: "Registration failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -204,6 +207,18 @@ export default function AuthPage() {
       <div className="pointer-events-none absolute inset-0 opacity-45">
         <ShaderAnimation className="w-full h-full" speed={0.08} />
       </div>
+
+      {isLoginOverlayVisible && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-background/55 backdrop-blur-md">
+          <div className="glass-panel rounded-2xl px-6 py-5 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Authenticating...</p>
+              <p className="text-xs text-muted-foreground">Please wait while we verify your credentials.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Brand - Top Right Corner */}
       <div className="absolute top-4 right-4 lg:top-6 lg:right-8 z-50 flex items-center space-x-2 lg:space-x-3">
@@ -355,10 +370,17 @@ export default function AuthPage() {
                 <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg">
                   NX
                 </div>
-                <div>
-                  <div className="font-bold text-foreground text-sm">Shivam Sourav</div>
-                  <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata</div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/developer')}
+                  className="text-left group"
+                >
+                  <div className="font-bold text-foreground text-sm inline-flex items-center gap-1.5">
+                    Shivam Sourav
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata • View developer profile</div>
+                </button>
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-muted-foreground mb-0.5">Powered by</div>
@@ -419,24 +441,6 @@ export default function AuthPage() {
                   <TabsTrigger value="login">Login</TabsTrigger>
                   <TabsTrigger value="register">Register</TabsTrigger>
                 </TabsList>
-              
-              {error && (
-                <Alert variant="destructive" className="mb-6 border-red-500/30 bg-red-500/10 text-red-600 backdrop-blur-sm animate-in fade-in-50 slide-in-from-top-5">
-                  {error.toLowerCase().includes('redirecting') ? (
-                    <UserPlus className="h-4 w-4" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4" />
-                  )}
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              
-              {success && (
-                <Alert className="mb-6 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 backdrop-blur-sm animate-in fade-in-50 slide-in-from-top-5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <AlertDescription>{success}</AlertDescription>
-                </Alert>
-              )}
 
               <TabsContent value="login" className="mt-0">
                 <form onSubmit={handleLogin} className="space-y-6">

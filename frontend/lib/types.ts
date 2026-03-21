@@ -34,7 +34,14 @@ export interface ChatMessage {
   diagram_xml?: string;
 }
 
-export type RAGMode = 'fast' | 'think';
+export type RAGMode = 'fast' | 'think' | 'ask';
+
+export interface AskFileContent {
+  id: string;
+  filename: string;
+  content: string;
+  content_length?: number;
+}
 
 // Extended message type for UI with additional properties
 export interface Message {
@@ -80,6 +87,7 @@ export interface ChatRequest {
   context_document_ids?: string[];
   mode?: RAGMode;
   context_files?: { id: string; filename: string }[];
+  ask_files?: AskFileContent[];
 }
 
 export interface ChatHistory {

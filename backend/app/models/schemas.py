@@ -25,6 +25,14 @@ class ContextFile(BaseModel):
     filename: str = Field(..., description="Document filename")
 
 
+class AskFileContent(BaseModel):
+    """Ephemeral extracted file content for ask mode (no vectorization)."""
+
+    id: str = Field(..., description="Ephemeral file identifier")
+    filename: str = Field(..., description="Original filename")
+    content: str = Field(..., description="Extracted plain text content")
+
+
 class ChatRequest(BaseModel):
     """Request model for chat queries."""
     
@@ -33,8 +41,9 @@ class ChatRequest(BaseModel):
     user_id: Optional[int] = Field(None, description="User identifier for associating chat sessions")
     stream: bool = Field(default=False, description="Enable streaming response")
     context_document_ids: Optional[List[str]] = Field(default=None, description="Specific document IDs to use as context")
-    mode: Optional[Literal["fast", "think"]] = Field(default=None, description="RAG mode: fast (hybrid retrieval) or think (PageIndex reasoning)")
+    mode: Optional[Literal["fast", "think", "ask"]] = Field(default=None, description="Chat mode: fast (hybrid retrieval), think (PageIndex reasoning), ask (direct LLM without RAG)")
     context_files: Optional[List[ContextFile]] = Field(default=None, description="Selected context files for UI display")
+    ask_files: Optional[List[AskFileContent]] = Field(default=None, description="Ephemeral extracted files for ask mode")
     
     @validator('query')
     def sanitize_query_input(cls, v):
@@ -52,7 +61,7 @@ class ChatResponse(BaseModel):
     session_id: str = Field(..., description="Session identifier")
     processing_time_ms: Optional[float] = Field(None, description="Processing time in milliseconds")
     reasoning: Optional[str] = Field(None, description="Think mode reasoning steps (only present in think mode)")
-    mode: Optional[Literal["fast", "think"]] = Field(default="fast", description="RAG mode used for this response")
+    mode: Optional[Literal["fast", "think", "ask"]] = Field(default="fast", description="Chat mode used for this response")
     diagram_xml: Optional[str] = Field(None, description="draw.io XML for generated diagrams")
 
 
@@ -69,7 +78,7 @@ class Message(BaseModel):
     )
     sources: Optional[List[SourceReference]] = Field(default=None, description="Source references for assistant messages")
     reasoning: Optional[str] = Field(None, description="Reasoning steps for think mode")
-    mode: Optional[Literal["fast", "think"]] = Field(default=None, description="RAG mode used for this message")
+    mode: Optional[Literal["fast", "think", "ask"]] = Field(default=None, description="Chat mode used for this message")
     context_files: Optional[List[ContextFile]] = Field(default=None, description="Context files selected for the query")
     diagram_xml: Optional[str] = Field(None, description="draw.io XML for generated diagrams")
 
@@ -88,6 +97,15 @@ class DocumentUploadResponse(BaseModel):
     status: Literal["processed", "failed", "processing"] = Field(..., description="Processing status")
     chunks_created: int = Field(..., description="Number of chunks created")
     message: str = Field(..., description="Status message")
+
+
+class AskFileExtractResponse(BaseModel):
+    """Response model for ask-mode ephemeral file extraction."""
+
+    id: str = Field(..., description="Ephemeral file identifier")
+    filename: str = Field(..., description="Original filename")
+    content: str = Field(..., description="Extracted plain text")
+    content_length: int = Field(..., description="Extracted text character length")
 
 
 class DocumentInfo(BaseModel):

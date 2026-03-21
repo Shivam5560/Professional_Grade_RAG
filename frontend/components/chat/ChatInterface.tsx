@@ -10,9 +10,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { ModeSelector } from './ModeSelector';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, ListPlus, Sparkles, ShieldCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  ListPlus,
+  Sparkles,
+  ShieldCheck,
+  Zap,
+  Brain,
+  MessageCircle,
+  Activity,
+  Wrench,
+  ChevronDown,
+  Plus,
+  Loader2,
+} from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -23,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode } from '@/lib/types';
+import type { SourceReference, Message, ChatResponse, DocumentInfo, RAGMode, AskFileContent } from '@/lib/types';
 import { apiClient } from '@/lib/api';
 
 interface ChatInterfaceProps {
@@ -36,6 +48,7 @@ interface ChatInterfaceProps {
     contextDocumentIds?: string[],
     contextFiles?: { id: string; filename: string }[],
     mode?: RAGMode,
+    askFiles?: AskFileContent[],
   ) => Promise<ChatResponse | undefined>;
 }
 
@@ -47,12 +60,17 @@ export function ChatInterface({
   sendMessage 
 }: ChatInterfaceProps) {
   const [latestSources, setLatestSources] = useState<SourceReference[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<DocumentInfo[]>([]);
+  const [selectedRagFiles, setSelectedRagFiles] = useState<DocumentInfo[]>([]);
+  const [askFiles, setAskFiles] = useState<AskFileContent[]>([]);
+  const [selectedAskFileIds, setSelectedAskFileIds] = useState<string[]>([]);
   const [mode, setMode] = useState<RAGMode>('fast');
   const modeTouchedRef = useRef(false);
   const [inputValue, setInputValue] = useState('');
   const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
   const [servicesHealthy, setServicesHealthy] = useState(true);
+  const [isAskUploading, setIsAskUploading] = useState(false);
+  const [isRagUploading, setIsRagUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -125,7 +143,7 @@ export function ChatInterface({
   }, []);
 
   const handleFileToggle = (file: DocumentInfo) => {
-    setSelectedFiles(prev => {
+    setSelectedRagFiles(prev => {
       const exists = prev.find(f => f.id === file.id);
       if (exists) {
         return prev.filter(f => f.id !== file.id);
@@ -136,22 +154,54 @@ export function ChatInterface({
   };
 
   const handleClearAll = () => {
-    setSelectedFiles([]);
+    setSelectedRagFiles([]);
+  };
+
+  const handleAskToggle = (fileId: string) => {
+    setSelectedAskFileIds((prev) => (
+      prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]
+    ));
+  };
+
+  const handleAskUploadFromSelector = async (file: File) => {
+    setIsAskUploading(true);
+    try {
+      const extracted = await apiClient.extractFileForAskMode(file);
+      setAskFiles((prev) => [extracted, ...prev.filter((item) => item.id !== extracted.id)].slice(0, 8));
+      setSelectedAskFileIds((prev) => [...prev, extracted.id]);
+      toast({ title: 'File ready', description: `${file.name} extracted for Ask mode.` });
+    } catch (uploadErr) {
+      toast({
+        title: 'Ask upload failed',
+        description: uploadErr instanceof Error ? uploadErr.message : 'Could not extract file text',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAskUploading(false);
+    }
   };
 
   const handleSend = async (message: string) => {
     try {
-      // Pass selected file IDs as context
-      const contextIds = selectedFiles.length > 0 
-        ? selectedFiles.map(f => f.id) 
+      const contextIds = mode === 'ask'
+        ? undefined
+        : selectedRagFiles.length > 0
+          ? selectedRagFiles.map((f) => f.id)
+          : undefined;
+
+      const contextFilesInfo = mode === 'ask'
+        ? askFiles
+            .filter((file) => selectedAskFileIds.includes(file.id))
+            .map((file) => ({ id: file.id, filename: file.filename }))
+        : selectedRagFiles.length > 0
+          ? selectedRagFiles.map((f) => ({ id: f.id, filename: f.filename }))
+          : undefined;
+
+      const askFilesPayload = mode === 'ask'
+        ? askFiles.filter((file) => selectedAskFileIds.includes(file.id))
         : undefined;
-      
-      // Pass context files for display in message
-      const contextFilesInfo = selectedFiles.length > 0
-        ? selectedFiles.map(f => ({ id: f.id, filename: f.filename }))
-        : undefined;
-      
-      const response = await sendMessage(message, contextIds, contextFilesInfo, mode);
+
+      const response = await sendMessage(message, contextIds, contextFilesInfo, mode, askFilesPayload);
       if (response && response.sources) {
         setLatestSources(response.sources);
         // Chat request succeeded - mark services as healthy and notify Header
@@ -177,27 +227,72 @@ export function ChatInterface({
     });
   };
 
+  const activeContextCount = mode === 'ask' ? selectedAskFileIds.length : selectedRagFiles.length;
+  const modeMeta = mode === 'think'
+    ? {
+        title: 'Think Mode',
+        subtitle: 'Deep reasoning with PageIndex traversal',
+        icon: Brain,
+        tone: 'from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))]',
+      }
+    : mode === 'ask'
+      ? {
+          title: 'Ask Mode',
+          subtitle: 'Direct LLM responses (no retrieval)',
+          icon: MessageCircle,
+          tone: 'from-[hsl(var(--chart-5))] to-[hsl(var(--chart-4))]',
+        }
+      : {
+          title: 'Fast Mode',
+          subtitle: 'Hybrid retrieval with reranking',
+          icon: Zap,
+          tone: 'from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))]',
+        };
+
+  const ModeIcon = modeMeta.icon;
+
   return (
     <Card className="relative flex h-full flex-col overflow-hidden border-none bg-transparent shadow-none">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(520px_circle_at_12%_-8%,hsl(var(--chart-1)/0.18),transparent_60%),radial-gradient(560px_circle_at_88%_110%,hsl(var(--chart-2)/0.16),transparent_62%)]" />
 
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge className="rounded-full bg-foreground text-background px-3 py-1 text-[10px] uppercase tracking-[0.24em]">
-            RAG Chat
+            {mode === 'ask' ? 'Ask Chat' : 'RAG Chat'}
+          </Badge>
+          <Badge
+            className={`rounded-full bg-gradient-to-r ${modeMeta.tone} text-white px-3 py-1 text-[10px] uppercase tracking-[0.2em] border-transparent`}
+          >
+            <ModeIcon className="mr-1.5 h-3 w-3" />
+            {modeMeta.title}
           </Badge>
           <Badge
             variant="outline"
             className="rounded-full border-border/70 bg-card/70 px-3 py-1 text-[10px] uppercase tracking-[0.2em]"
           >
             <ShieldCheck className="mr-1.5 h-3 w-3" />
-            Retrieval + Reasoning
+            {mode === 'ask' ? 'Direct LLM' : 'Retrieval + Reasoning'}
           </Badge>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {selectedFiles.length > 0
-            ? `${selectedFiles.length} context file${selectedFiles.length !== 1 ? 's' : ''} active`
+        <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+          <Activity className={`h-3.5 w-3.5 ${servicesHealthy ? 'text-emerald-400' : 'text-red-400'}`} />
+          {activeContextCount > 0
+            ? `${activeContextCount} context file${activeContextCount !== 1 ? 's' : ''} active`
             : 'No context files selected'}
+        </div>
+      </div>
+
+      <div className="relative z-10 px-4 pt-3">
+        <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{modeMeta.title}</p>
+            <p className="text-xs text-muted-foreground">{modeMeta.subtitle}</p>
+          </div>
+          {mode === 'ask' && (
+            <Badge variant="outline" className="border-border/70 text-[10px] uppercase tracking-[0.18em]">
+              In-memory files only
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -222,78 +317,196 @@ export function ChatInterface({
       <div className="sticky bottom-0 z-20">
         <div className="bg-gradient-to-t from-background/95 via-background/85 to-transparent px-4 pt-6 pb-4">
           <div className="mx-auto w-full max-w-4xl rounded-3xl border border-border/70 bg-card/80 p-4 shadow-[0_32px_90px_-60px_rgba(0,0,0,0.55)] backdrop-blur-xl space-y-3">
-            {/* Quick File Selector - Shows last 5 files, upload, and query options */}
             <QuickFileSelector
-              selectedFiles={selectedFiles}
+              mode={mode}
+              selectedFiles={selectedRagFiles}
               onFileToggle={handleFileToggle}
               onClearAll={handleClearAll}
+              askFiles={askFiles}
+              selectedAskFileIds={selectedAskFileIds}
+              onAskFileToggle={handleAskToggle}
+              onAskUpload={handleAskUploadFromSelector}
+              isAskUploading={isAskUploading}
+              showUploadButton={false}
+              fileInputRef={uploadInputRef}
+              onUploadingChange={setIsRagUploading}
             />
             
-            <div className="flex items-end gap-3">
-              <ModeSelector
-                mode={mode}
-                onModeChange={(nextMode) => {
-                  modeTouchedRef.current = true;
-                  setMode(nextMode);
-                }}
-                disabled={isLoading}
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    disabled={isLoading || promptSuggestions.length === 0}
-                    className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
-                    title="Insert a saved prompt"
-                    aria-label="Insert a saved prompt"
-                  >
-                    <ListPlus className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-80 max-h-[300px] overflow-y-auto">
-                  <DropdownMenuLabel>Prompt Library</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {promptSuggestions.length > 0 ? (
-                    promptSuggestions.map((item) => (
-                      <DropdownMenuItem
-                        key={item.title}
-                        onSelect={() => handlePromptSelect(item.prompt)}
-                        className="cursor-pointer"
-                      >
-                        {item.title}
-                      </DropdownMenuItem>
-                    ))
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isLoading}
+                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      title="Select chat mode"
+                      aria-label="Select chat mode"
+                    >
+                      <ModeIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel>Chat Mode</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        modeTouchedRef.current = true;
+                        setMode('fast');
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Zap className="mr-2 h-4 w-4" />
+                      Fast
+                      {mode === 'fast' && <ChevronDown className="ml-auto h-4 w-4 -rotate-90" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        modeTouchedRef.current = true;
+                        setMode('think');
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Brain className="mr-2 h-4 w-4" />
+                      Think
+                      {mode === 'think' && <ChevronDown className="ml-auto h-4 w-4 -rotate-90" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        modeTouchedRef.current = true;
+                        setMode('ask');
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <MessageCircle className="mr-2 h-4 w-4" />
+                      Ask
+                      {mode === 'ask' && <ChevronDown className="ml-auto h-4 w-4 -rotate-90" />}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70"
+                      title="MCP tools"
+                      aria-label="MCP tools"
+                    >
+                      <Wrench className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-80">
+                    <DropdownMenuLabel>Developer MCP Tools</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled>🩺 health_check · backend health</DropdownMenuItem>
+                    <DropdownMenuItem disabled>💬 chat_query · fast/think/ask</DropdownMenuItem>
+                    <DropdownMenuItem disabled>📚 list_user_documents · user docs</DropdownMenuItem>
+                    <DropdownMenuItem disabled>🧭 list_tools_catalog · tool catalog</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={
+                    isLoading ||
+                    !servicesHealthy ||
+                    (mode === 'ask' ? isAskUploading : isRagUploading)
+                  }
+                  className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                  title={mode === 'ask' ? 'Add ask file' : 'Upload file'}
+                  aria-label={mode === 'ask' ? 'Add ask file' : 'Upload file'}
+                >
+                  {mode === 'ask' ? (
+                    isAskUploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )
+                  ) : isRagUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <DropdownMenuItem disabled>No prompts available</DropdownMenuItem>
+                    <Plus className="h-4 w-4" />
                   )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isLoading || promptSuggestions.length === 0}
+                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      title="Insert a saved prompt"
+                      aria-label="Insert a saved prompt"
+                    >
+                      <ListPlus className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-80 max-h-[300px] overflow-y-auto">
+                    <DropdownMenuLabel>Prompt Library</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {promptSuggestions.length > 0 ? (
+                      promptSuggestions.map((item) => (
+                        <DropdownMenuItem
+                          key={item.title}
+                          onSelect={() => handlePromptSelect(item.prompt)}
+                          className="cursor-pointer"
+                        >
+                          {item.title}
+                        </DropdownMenuItem>
+                      ))
+                    ) : (
+                      <DropdownMenuItem disabled>No prompts available</DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="flex items-end gap-3">
               <div className="flex-1">
                 <MessageInput
                   onSend={handleSend}
-                  disabled={isLoading || !servicesHealthy}
+                  disabled={isLoading || !servicesHealthy || (mode === 'ask' && isAskUploading)}
+                  isSending={isLoading}
                   value={inputValue}
                   onChange={setInputValue}
                   placeholder={
                     mode === 'think'
-                      ? selectedFiles.length > 0
-                        ? `Think deeply about ${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''}...`
+                      ? selectedRagFiles.length > 0
+                        ? `Think deeply about ${selectedRagFiles.length} file${selectedRagFiles.length !== 1 ? 's' : ''}...`
                         : "Ask a complex question (Think mode)..."
-                      : selectedFiles.length > 0
-                        ? `Ask about ${selectedFiles.length} selected file${selectedFiles.length !== 1 ? 's' : ''}...`
+                      : mode === 'ask'
+                        ? selectedAskFileIds.length > 0
+                          ? `Ask directly with ${selectedAskFileIds.length} extracted file${selectedAskFileIds.length !== 1 ? 's' : ''}...`
+                          : 'Ask anything (direct mode, no retrieval)...'
+                      : selectedRagFiles.length > 0
+                        ? `Ask about ${selectedRagFiles.length} selected file${selectedRagFiles.length !== 1 ? 's' : ''}...`
                         : "Ask a question about your documents..."
                   }
                 />
               </div>
             </div>
+            </div>
             <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3" />
-                Prompt library available anytime from the `+` button.
+                Use the prompt button to insert saved prompts.
               </span>
-              <span>Shift+Enter for newline</span>
+              <span>
+                {mode === 'ask' && isAskUploading
+                  ? 'Extracting…'
+                  : isLoading
+                    ? 'Streaming…'
+                    : 'Shift+Enter for newline'}
+              </span>
             </div>
           </div>
         </div>

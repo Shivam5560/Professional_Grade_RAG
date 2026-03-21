@@ -122,6 +122,7 @@ const featuredProjects: FeaturedProject[] = [
   },
 ]
 
+
 const listVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
   visible: {
@@ -317,6 +318,7 @@ export function GlassmorphismPortfolioBlock({
                       </div>
                     ))}
                   </div>
+
                 </div>
 
                 <motion.div

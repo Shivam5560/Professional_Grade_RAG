@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '@/lib/api';
-import { Message, ChatResponse, RAGMode } from '@/lib/types';
+import { Message, ChatResponse, RAGMode, AskFileContent } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 
 export function useChat(initialSessionId?: string) {
@@ -19,7 +19,8 @@ export function useChat(initialSessionId?: string) {
     query: string, 
     contextDocumentIds?: string[],
     contextFiles?: { id: string; filename: string }[],
-    mode?: RAGMode
+    mode?: RAGMode,
+    askFiles?: AskFileContent[],
   ) => {
     if (!query.trim()) return;
 
@@ -35,32 +36,58 @@ export function useChat(initialSessionId?: string) {
       contextFiles: contextFiles,
       mode: mode,
     };
-    setMessages(prev => [...prev, userMessage]);
+    const assistantMessageId = uuidv4();
+    const assistantPlaceholder: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      mode: mode,
+      isTyping: true,
+    };
+    setMessages(prev => [...prev, userMessage, assistantPlaceholder]);
 
     try {
-      const response: ChatResponse = await apiClient.query({
+      const response: ChatResponse = await apiClient.queryStream({
         query,
         session_id: sessionId,
         user_id: user?.id,
         context_document_ids: contextDocumentIds,
         context_files: contextFiles,
+        ask_files: askFiles,
         mode: mode,
-        stream: false,
+        stream: true,
+      }, (event, data) => {
+        if (event === 'token') {
+          const token = (data as { token?: string })?.token ?? '';
+          if (!token) return;
+          setMessages((prev) => prev.map((msg) => (
+            msg.id === assistantMessageId
+              ? { ...msg, content: `${msg.content}${token}`, isTyping: true }
+              : msg
+          )));
+          return;
+        }
+
+        if (event === 'final') {
+          const finalData = data as ChatResponse;
+          setMessages((prev) => prev.map((msg) => (
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: finalData.answer,
+                  confidence_score: finalData.confidence_score,
+                  reasoning: finalData.reasoning,
+                  sources: finalData.sources,
+                  mode: finalData.mode,
+                  diagramXml: finalData.diagram_xml,
+                  isTyping: false,
+                }
+              : msg
+          )));
+        }
       });
 
-      const assistantMessage: Message = {
-        id: uuidv4(),
-        role: 'assistant',
-        content: response.answer,
-        timestamp: new Date().toISOString(),
-        confidence_score: response.confidence_score,
-        reasoning: response.reasoning,
-        sources: response.sources,
-        mode: response.mode,
-        diagramXml: response.diagram_xml,
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
       if (user?.id) {
         window.dispatchEvent(
           new CustomEvent('chat-history-updated', {
@@ -72,7 +99,7 @@ export function useChat(initialSessionId?: string) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
       setError(errorMessage);
-      setMessages(prev => prev.filter(msg => msg.role !== 'user' || msg.id !== userMessage.id));
+      setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id && msg.id !== assistantMessageId));
       throw err;
     } finally {
       setIsLoading(false);

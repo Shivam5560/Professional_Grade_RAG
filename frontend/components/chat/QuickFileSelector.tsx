@@ -1,41 +1,60 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, type RefObject } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, Upload, Database, Loader2, CheckCircle } from 'lucide-react';
+import { X, Plus, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { DocumentInfo } from '@/lib/types';
+import { AskFileContent, DocumentInfo, RAGMode } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import { useToast } from '@/hooks/useToast';
 
 interface QuickFileSelectorProps {
-  selectedFiles: DocumentInfo[];
-  onFileToggle: (file: DocumentInfo) => void;
-  onClearAll: () => void;
+  mode: RAGMode;
+  selectedFiles?: DocumentInfo[];
+  onFileToggle?: (file: DocumentInfo) => void;
+  onClearAll?: () => void;
+  askFiles?: AskFileContent[];
+  selectedAskFileIds?: string[];
+  onAskFileToggle?: (fileId: string) => void;
+  onAskUpload?: (file: File) => Promise<void>;
+  isAskUploading?: boolean;
+  showUploadButton?: boolean;
+  fileInputRef?: RefObject<HTMLInputElement>;
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 export function QuickFileSelector({
-  selectedFiles,
+  mode,
+  selectedFiles = [],
   onFileToggle,
   onClearAll,
+  askFiles = [],
+  selectedAskFileIds = [],
+  onAskFileToggle,
+  onAskUpload,
+  isAskUploading = false,
+  showUploadButton = true,
+  fileInputRef: fileInputRefProp,
+  onUploadingChange,
 }: QuickFileSelectorProps) {
   const { user } = useAuthStore();
   const [recentFiles, setRecentFiles] = useState<DocumentInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const internalFileInputRef = useRef<HTMLInputElement>(null);
+  const resolvedFileInputRef = fileInputRefProp ?? internalFileInputRef;
   const { toast } = useToast();
 
   const loadRecentFiles = useCallback(async () => {
-    if (!user) return;
+    if (!user || mode === 'ask') return;
     
     setLoading(true);
     try {
       const response = await apiClient.getUserDocuments(user.id);
+      const scoped = response.documents.filter((doc) => doc.category === `chat-${mode}`);
       // Get last 5 files sorted by upload date
-      const recent = response.documents
+      const recent = scoped
         .sort((a, b) => new Date(b.upload_date).getTime() - new Date(a.upload_date).getTime())
         .slice(0, 5);
       setRecentFiles(recent);
@@ -44,7 +63,7 @@ export function QuickFileSelector({
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, mode]);
 
   useEffect(() => {
     if (user) {
@@ -53,23 +72,30 @@ export function QuickFileSelector({
   }, [user, loadRecentFiles]);
 
   const handleUploadClick = () => {
-    fileInputRef.current?.click();
+    resolvedFileInputRef.current?.click();
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file) return;
+
+    if (mode === 'ask') {
+      if (!onAskUpload) return;
+      await onAskUpload(file);
+      if (resolvedFileInputRef.current) {
+        resolvedFileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    if (!user || !onFileToggle) return;
 
     setUploading(true);
-    setUploadSuccess(false);
+    onUploadingChange?.(true);
 
     try {
-      const result = await apiClient.uploadDocument(file, user.id, { title: file.name });
+      const result = await apiClient.uploadDocument(file, user.id, { title: file.name, category: `chat-${mode}` });
       
-      // Show success indicator
-      setUploadSuccess(true);
-      setTimeout(() => setUploadSuccess(false), 2000);
-
       // Reload recent files
       await loadRecentFiles();
 
@@ -85,8 +111,8 @@ export function QuickFileSelector({
       onFileToggle(newFile);
 
       // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (resolvedFileInputRef.current) {
+        resolvedFileInputRef.current.value = '';
       }
     } catch (error) {
       console.error('Upload failed:', error);
@@ -97,6 +123,7 @@ export function QuickFileSelector({
       });
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
@@ -104,9 +131,7 @@ export function QuickFileSelector({
     return selectedFiles.some(f => f.id === fileId);
   };
 
-  const handleViewAll = () => {
-    window.location.href = '/knowledge-base';
-  };
+  const isAskFileSelected = (fileId: string) => selectedAskFileIds.includes(fileId);
 
   if (loading) {
     return (
@@ -119,9 +144,45 @@ export function QuickFileSelector({
 
   return (
     <div className="space-y-2">
+      <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+        {mode === 'fast' ? 'Fast mode files' : mode === 'think' ? 'Think mode files' : 'Ask mode files'}
+      </div>
       {/* File badges */}
       <div className="flex flex-wrap items-center gap-2">
-        {recentFiles.length > 0 ? (
+        {mode === 'ask' ? (
+          askFiles.length > 0 ? (
+            askFiles.map((file) => {
+              const selected = isAskFileSelected(file.id);
+              return (
+                <Badge
+                  key={file.id}
+                  variant={selected ? 'default' : 'outline'}
+                  className={`
+                    cursor-pointer rounded-full py-1 px-3 transition-all hover:scale-105
+                    ${selected
+                      ? 'border-transparent bg-gradient-to-r from-[hsl(var(--chart-5))] to-[hsl(var(--chart-4))] text-white hover:brightness-105'
+                      : 'bg-card/80 text-muted-foreground border-border/70 hover:bg-muted/60'
+                    }
+                  `}
+                  onClick={() => onAskFileToggle?.(file.id)}
+                >
+                  <span className="truncate max-w-[150px]">{file.filename}</span>
+                  {selected && (
+                    <X
+                      className="ml-1 h-3 w-3"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAskFileToggle?.(file.id);
+                      }}
+                    />
+                  )}
+                </Badge>
+              );
+            })
+          ) : (
+            <span className="text-sm text-muted-foreground">No files uploaded yet</span>
+          )
+        ) : recentFiles.length > 0 ? (
           <>
             {recentFiles.map((file) => {
               const selected = isFileSelected(file.id);
@@ -136,7 +197,7 @@ export function QuickFileSelector({
                       : 'bg-card/80 text-muted-foreground border-border/70 hover:bg-muted/60'
                     }
                   `}
-                  onClick={() => onFileToggle(file)}
+                  onClick={() => onFileToggle?.(file)}
                 >
                   <span className="truncate max-w-[150px]">{file.filename}</span>
                   {selected && (
@@ -144,7 +205,7 @@ export function QuickFileSelector({
                       className="ml-1 h-3 w-3"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onFileToggle(file);
+                        onFileToggle?.(file);
                       }}
                     />
                   )}
@@ -157,52 +218,41 @@ export function QuickFileSelector({
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1 ml-auto">
-          {selectedFiles.length > 0 && (
+        <div className="flex items-center gap-1">
+          {(mode === 'ask' ? selectedAskFileIds.length > 0 : selectedFiles.length > 0) && (
           <Button
             size="sm"
             variant="ghost"
-            onClick={onClearAll}
+            onClick={mode === 'ask' ? () => selectedAskFileIds.forEach((id) => onAskFileToggle?.(id)) : onClearAll}
             className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           >
             Clear all
           </Button>
           )}
-          
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleUploadClick}
-            disabled={uploading}
-            className="h-7 rounded-full border border-border/60 bg-card/70 px-3 text-xs text-foreground hover:bg-muted/60 hover:text-foreground"
-          >
-            {uploading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : uploadSuccess ? (
-              <CheckCircle className="h-3 w-3" />
-            ) : (
-              <Upload className="h-3 w-3" />
-            )}
-            <span className="ml-1">{uploading ? 'Uploading...' : uploadSuccess ? 'Uploaded!' : 'Upload'}</span>
-          </Button>
 
-          {recentFiles.length > 0 && (
+          {showUploadButton && (
             <Button
               size="sm"
-            variant="ghost"
-            onClick={handleViewAll}
-            className="h-7 rounded-full border border-border/60 bg-card/70 px-3 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          >
-            <Database className="h-3 w-3 mr-1" />
-            View All
-          </Button>
+              variant="outline"
+              onClick={handleUploadClick}
+              disabled={mode === 'ask' ? isAskUploading : uploading}
+              className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 p-0 text-foreground hover:bg-background/90"
+              title={mode === 'ask' ? 'Add ask file' : 'Upload file'}
+              aria-label={mode === 'ask' ? 'Add ask file' : 'Upload file'}
+            >
+              {(mode === 'ask' ? isAskUploading : uploading) ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+            </Button>
           )}
         </div>
       </div>
 
       {/* Hidden file input */}
       <input
-        ref={fileInputRef}
+        ref={resolvedFileInputRef}
         type="file"
         accept=".txt,.md,.pdf,.docx"
         className="hidden"
@@ -210,9 +260,9 @@ export function QuickFileSelector({
       />
 
       {/* Selected count indicator */}
-      {selectedFiles.length > 0 && (
+      {(mode === 'ask' ? selectedAskFileIds.length > 0 : selectedFiles.length > 0) && (
         <div className="text-xs text-muted-foreground">
-          {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected as context
+          {mode === 'ask' ? selectedAskFileIds.length : selectedFiles.length} file{(mode === 'ask' ? selectedAskFileIds.length : selectedFiles.length) !== 1 ? 's' : ''} selected as context
         </div>
       )}
     </div>

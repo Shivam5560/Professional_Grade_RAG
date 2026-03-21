@@ -185,6 +185,16 @@ async def get_user_documents(user_id: int, db: Session = Depends(get_db)):
         UserDocumentResponse with list of user's documents
     """
     try:
+        # One-time backfill for legacy chat uploads that had no category
+        # to support mode-scoped file buckets in chat UI.
+        migrated_count = db.query(Document).filter(
+            Document.user_id == user_id,
+            Document.category.is_(None)
+        ).update({"category": "chat-fast"}, synchronize_session=False)
+        if migrated_count:
+            db.commit()
+            logger.info("legacy_documents_migrated_to_chat_fast", user_id=user_id, count=migrated_count)
+
         # Query documents for this user
         documents = db.query(Document).filter(Document.user_id == user_id).order_by(Document.created_at.desc()).all()
         

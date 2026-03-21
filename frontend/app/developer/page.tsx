@@ -4,11 +4,8 @@ import { useEffect, useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { GlassmorphismPortfolioBlock } from '@/components/ui/glassmorphism-portfolio-block-shadcnui';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
-import { useAuthStore } from '@/lib/store';
-import AuthPage from '@/app/auth/page';
 
 export default function DeveloperPage() {
-  const { isAuthenticated } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -16,7 +13,6 @@ export default function DeveloperPage() {
   }, []);
 
   if (!isMounted) return null;
-  if (!isAuthenticated) return <AuthPage />;
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">

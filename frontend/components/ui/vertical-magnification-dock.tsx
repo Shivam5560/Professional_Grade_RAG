@@ -118,7 +118,7 @@ function DockLabel({ children, className = '', isHovered }: DockLabelProps) {
           animate={{ opacity: 1, x: -8 }}
           exit={{ opacity: 0, x: -2 }}
           transition={{ duration: 0.18 }}
-          className={`${className} absolute left-full ml-2 w-fit whitespace-pre rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground shadow-sm`}
+          className={`${className} absolute left-full ml-2 z-[120] w-fit whitespace-pre rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground shadow-sm pointer-events-none`}
           role="tooltip"
         >
           {children}
@@ -164,7 +164,7 @@ export function VerticalMagnificationDock({
           isHovered.set(0)
           mouseY.set(Infinity)
         }}
-        className={`${className} flex flex-col items-center justify-center gap-2 rounded-3xl border border-border bg-card/60 backdrop-blur-md px-2 py-3 shadow-xl`}
+        className={`${className} relative z-[110] flex flex-col items-center justify-center gap-2 rounded-3xl border border-border bg-card/60 backdrop-blur-md px-2 py-3 shadow-xl overflow-visible`}
         style={{ width: panelWidth }}
         role="toolbar"
         aria-label="Vertical application dock"

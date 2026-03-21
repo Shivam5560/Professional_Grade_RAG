@@ -29,11 +29,11 @@ export function readThemeMode(): ThemeMode {
 }
 
 export function readThemePalette(): ThemePalette {
-  if (typeof window === 'undefined') return 'nexus';
+  if (typeof window === 'undefined') return 'mono';
   const stored = window.localStorage.getItem(PALETTE_KEY);
   return stored && PALETTE_CLASSES.includes(stored as ThemePalette)
     ? (stored as ThemePalette)
-    : 'nexus';
+    : 'mono';
 }
 
 export function applyTheme(mode: ThemeMode, palette: ThemePalette): void {

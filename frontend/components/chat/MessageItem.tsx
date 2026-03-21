@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { User, Bot, FileText, ChevronDown, ChevronUp, Brain, Zap, Copy, Check } from 'lucide-react';
+import { User, Bot, FileText, ChevronDown, ChevronUp, Brain, Zap, Copy, Check, MessageCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatTimestamp } from '@/lib/utils';
@@ -328,10 +328,12 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                   "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg backdrop-blur-sm flex items-center gap-1.5",
                   message.mode === 'think'
                     ? "text-white bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))] border-transparent"
-                    : "text-white bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] border-transparent"
+                    : message.mode === 'ask'
+                      ? "text-white bg-gradient-to-r from-[hsl(var(--chart-5))] to-[hsl(var(--chart-4))] border-transparent"
+                      : "text-white bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] border-transparent"
                 )}>
-                  {message.mode === 'think' ? <Brain className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
-                  {message.mode === 'think' ? 'Think' : 'Fast'}
+                  {message.mode === 'think' ? <Brain className="h-3 w-3" /> : message.mode === 'ask' ? <MessageCircle className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                  {message.mode === 'think' ? 'Think' : message.mode === 'ask' ? 'Ask' : 'Fast'}
                 </div>
               )}
 

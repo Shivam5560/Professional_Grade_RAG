@@ -10,6 +10,7 @@ import {
   User, 
   ChatSession, 
   ChatMessage,
+  AskFileContent,
   UserDocumentResponse,
   BulkDeleteRequest,
   BulkDeleteResponse,
@@ -189,11 +190,92 @@ class ApiClient {
   async queryStream(
     request: ChatRequest,
     onEvent: (event: string, data: unknown) => void
-  ): Promise<void> {
-    // Deprecated streaming transport: route through single /chat/query call
-    // so one user message maps to one backend generation request.
-    const response = await this.query({ ...request, stream: false });
-    onEvent('final', response);
+  ): Promise<ChatResponse> {
+    const doStreamRequest = async () => {
+      return fetch(`${BASE_PATH}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ ...request, stream: true }),
+      });
+    };
+
+    let response = await doStreamRequest();
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        response = await doStreamRequest();
+      }
+    }
+
+    if (!response.ok || !response.body) {
+      const error = await response.json().catch(() => ({ message: 'Streaming failed' }));
+      throw new Error(error.message || 'Streaming failed');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalPayload: ChatResponse | null = null;
+
+    const processEventChunk = (chunk: string) => {
+      const lines = chunk.split('\n');
+      let eventName = 'message';
+      let dataText = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataText += line.slice(5).trim();
+        }
+      }
+
+      if (!dataText) return;
+      let parsed: unknown = dataText;
+      try {
+        parsed = JSON.parse(dataText);
+      } catch {
+        parsed = dataText;
+      }
+
+      onEvent(eventName, parsed);
+      if (eventName === 'final') {
+        finalPayload = parsed as ChatResponse;
+      }
+      if (eventName === 'error') {
+        const errorMessage = typeof parsed === 'object' && parsed && 'message' in parsed
+          ? String((parsed as { message?: unknown }).message ?? 'Streaming error')
+          : 'Streaming error';
+        throw new Error(errorMessage);
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+      for (const eventChunk of events) {
+        if (eventChunk.trim()) {
+          processEventChunk(eventChunk);
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      processEventChunk(buffer);
+    }
+
+    if (!finalPayload) {
+      throw new Error('Streaming completed without final payload');
+    }
+
+    return finalPayload;
   }
 
   async getHistory(sessionId: string): Promise<ChatHistory> {
@@ -250,6 +332,37 @@ class ApiClient {
     }
 
     return response.json() as Promise<Record<string, unknown>>;
+  }
+
+  async extractFileForAskMode(file: File): Promise<AskFileContent> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const doExtract = async () => {
+      const response = await fetch(`${BASE_PATH}/chat/extract-file`, {
+        method: 'POST',
+        headers: {
+          ...this.getAuthHeaders(),
+        },
+        body: formData,
+      });
+      return response;
+    };
+
+    let response = await doExtract();
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        response = await doExtract();
+      }
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Extraction failed' }));
+      throw new Error(error.message || 'Extraction failed');
+    }
+
+    return response.json() as Promise<AskFileContent>;
   }
 
   async getUserDocuments(userId: number): Promise<UserDocumentResponse> {
