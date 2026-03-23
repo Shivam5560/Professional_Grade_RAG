@@ -5,11 +5,9 @@
 import {
   ChatRequest, 
   ChatResponse, 
-  ChatHistory, 
   PingResponse, 
   User, 
-  ChatSession, 
-  ChatMessage,
+  ChatBootstrapResponse,
   AskFileContent,
   UserDocumentResponse,
   BulkDeleteRequest,
@@ -166,12 +164,25 @@ class ApiClient {
     return response.user;
   }
 
-  async getChatHistory(userId: number): Promise<ChatSession[]> {
-    return this.request<ChatSession[]>(`/history/${userId}`);
-  }
-
-  async getSessionMessages(sessionId: string): Promise<ChatMessage[]> {
-    return this.request<ChatMessage[]>(`/history/${sessionId}/messages`);
+  async getChatBootstrap(
+    activeSessionId?: string,
+    options?: { includeMessages?: boolean; sessionLimit?: number; messageLimit?: number }
+  ): Promise<ChatBootstrapResponse> {
+    const params = new URLSearchParams();
+    if (activeSessionId) {
+      params.set('active_session_id', activeSessionId);
+    }
+    if (options?.includeMessages === false) {
+      params.set('include_messages', 'false');
+    }
+    if (typeof options?.sessionLimit === 'number') {
+      params.set('session_limit', String(options.sessionLimit));
+    }
+    if (typeof options?.messageLimit === 'number') {
+      params.set('message_limit', String(options.messageLimit));
+    }
+    const query = params.toString();
+    return this.request<ChatBootstrapResponse>(`/history/bootstrap${query ? `?${query}` : ''}`);
   }
 
   async deleteChatSession(sessionId: string): Promise<void> {
@@ -282,10 +293,6 @@ class ApiClient {
     }
 
     return finalPayload;
-  }
-
-  async getHistory(sessionId: string): Promise<ChatHistory> {
-    return this.request<ChatHistory>(`/chat/history/${sessionId}`);
   }
 
   async clearHistory(sessionId: string): Promise<void> {

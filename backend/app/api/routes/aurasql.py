@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import uuid
+import sqlparse
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from llama_index.core.schema import TextNode
@@ -39,6 +40,9 @@ from app.services.aurasql_vector_store import get_aurasql_vector_store
 from app.services.llm_service import get_llm_service
 from app.utils.aurasql_prompts import system_prompt, recommendations_prompt
 from app.utils.crypto import encrypt_secret, decrypt_secret
+from app.observability import set_llamaindex_trace_params
+
+
 def _validate_schema_for_connection(payload) -> None:
     if payload.db_type == "postgresql" and not payload.schema_name:
         raise HTTPException(status_code=400, detail="PostgreSQL schema_name is required")
@@ -370,6 +374,21 @@ def _extract_sql_fallback(payload: str) -> str:
     if inline:
         return inline.group(1).strip()
     return ""
+
+
+def _validate_read_only_sql(sql: str) -> None:
+    statements = [stmt.strip() for stmt in sqlparse.split(sql) if stmt.strip()]
+    if len(statements) != 1:
+        raise HTTPException(status_code=400, detail="Only a single SQL statement is allowed")
+
+    statement = statements[0]
+    lowered = statement.lstrip().lower()
+    if not lowered.startswith(("select", "with", "explain", "show", "describe", "desc")):
+        raise HTTPException(status_code=400, detail="Only read-only SQL is allowed")
+
+    dangerous_tokens = ("insert", "update", "delete", "drop", "alter", "truncate", "create", "grant", "revoke")
+    if any(re.search(rf"\b{token}\b", lowered) for token in dangerous_tokens):
+        raise HTTPException(status_code=400, detail="Non read-only SQL detected")
 
 
 @router.post("/connections", response_model=AuraSqlConnectionResponse)
@@ -825,9 +844,21 @@ async def get_recommendations(
     if not context:
         raise HTTPException(status_code=404, detail="Context not found")
 
+    set_llamaindex_trace_params(
+        name="aurasql.recommendations",
+        metadata={
+            "context_id": payload.context_id,
+            "table_count": len(context.table_names or []),
+            "schema_table_count": len((context.schema_snapshot or {}).keys()),
+        },
+        user_id=str(current_user.id),
+    )
+
     groq_service = get_llm_service()
     from llama_index.core import Settings
+
     Settings.llm = groq_service.get_aurasql_llm()
+    schema_snapshot = context.schema_snapshot or {}
 
     vector_store = get_aurasql_vector_store()
     query_engine = vector_store.get_query_engine(context.vector_context_id)
@@ -838,7 +869,7 @@ async def get_recommendations(
     if not recommendations:
         recommendations = _extract_recommendations_fallback(result.response)
     if not recommendations:
-        recommendations = _fallback_recommendations_from_tables(context.table_names)
+        recommendations = _fallback_recommendations_from_tables(list(schema_snapshot.keys()) or context.table_names)
     if not recommendations:
         logging.warning("AuraSQL recommendations JSON parse failed")
     return AuraSqlRecommendationsResponse(recommendations=recommendations)
@@ -864,8 +895,21 @@ async def generate_query(
         .first()
     )
 
+    set_llamaindex_trace_params(
+        name="aurasql.query",
+        metadata={
+            "context_id": payload.context_id,
+            "has_output_dialect": bool(payload.output_dialect),
+            "query_length": len(payload.query or ""),
+            "schema_table_count": len((context.schema_snapshot or {}).keys()),
+        },
+        user_id=str(current_user.id),
+        session_id=payload.session_id,
+    )
+
     groq_service = get_llm_service()
     from llama_index.core import Settings
+
     Settings.llm = groq_service.get_aurasql_llm()
 
     prompt = f"{system_prompt}\nUser Query:\n{payload.query}\nDB Type: {connection.db_type}"
@@ -891,6 +935,8 @@ async def generate_query(
         session.context_id = context.id
         session.connection_id = context.connection_id
     db.add(session)
+
+    schema_snapshot = context.schema_snapshot or {}
 
     vector_store = get_aurasql_vector_store()
     query_engine = vector_store.get_query_engine(context.vector_context_id)
@@ -920,7 +966,7 @@ async def generate_query(
     syntax_errors, hallucinated_tables, hallucinated_columns = _validate_sql_with_schema(
         sql=sql,
         db_type=connection.db_type,
-        schema_snapshot=context.schema_snapshot or {},
+        schema_snapshot=schema_snapshot,
     )
     validation_errors = syntax_errors + hallucinated_tables + hallucinated_columns
     if syntax_errors or hallucinated_tables or hallucinated_columns:
@@ -992,11 +1038,25 @@ async def execute_sql_query(
     if not connection or not connection.secret:
         raise HTTPException(status_code=404, detail="Connection not found")
 
+    set_llamaindex_trace_params(
+        name="aurasql.execute",
+        metadata={
+            "connection_id": payload.connection_id,
+            "session_id": payload.session_id,
+            "sql_length": len(payload.sql or ""),
+            "db_type": connection.db_type,
+        },
+        user_id=str(current_user.id),
+        session_id=payload.session_id,
+    )
+
     config = _connection_to_config(connection, decrypt_secret(connection.secret.encrypted_password))
+    _validate_read_only_sql(payload.sql)
 
     session_id = payload.session_id
     try:
         columns, rows = await execute_sql(config, payload.sql)
+
         log_entry = AuraSqlQueryHistory(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
@@ -1023,7 +1083,7 @@ async def execute_sql_query(
         )
         db.add(log_entry)
         db.commit()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="SQL execution failed") from exc
 
     return AuraSqlExecuteResponse(columns=columns, rows=rows)
 

@@ -24,7 +24,8 @@ from app.utils.validators import validate_file_extension, validate_file_size
 from app.utils.logger import get_logger
 from app.config import settings
 from app.db.database import get_db, SessionLocal
-from app.db.models import Document, DocumentTreeStructure, TreeNode
+from app.db.models import Document, DocumentTreeStructure, TreeNode, User
+from app.api.deps import get_current_user
 
 logger = get_logger(__name__)
 
@@ -39,6 +40,7 @@ async def upload_document(
     category: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upload and process a document for a specific user.
@@ -57,6 +59,8 @@ async def upload_document(
         DocumentUploadResponse with processing status
     """
     try:
+        if user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         # Validate file extension
         if not validate_file_extension(file.filename, settings.allowed_file_extensions):
             raise HTTPException(
@@ -169,12 +173,12 @@ async def upload_document(
         logger.error("document_upload_failed", error=str(e), filename=file.filename)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process document: {str(e)}"
+            detail="Failed to process document"
         )
 
 
 @router.get("/my-documents/{user_id}", response_model=UserDocumentResponse, status_code=status.HTTP_200_OK)
-async def get_user_documents(user_id: int, db: Session = Depends(get_db)):
+async def get_user_documents(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Get all documents uploaded by a specific user.
     
@@ -185,6 +189,8 @@ async def get_user_documents(user_id: int, db: Session = Depends(get_db)):
         UserDocumentResponse with list of user's documents
     """
     try:
+        if user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         # One-time backfill for legacy chat uploads that had no category
         # to support mode-scoped file buckets in chat UI.
         migrated_count = db.query(Document).filter(
@@ -222,12 +228,16 @@ async def get_user_documents(user_id: int, db: Session = Depends(get_db)):
         logger.error("failed_to_list_user_documents", error=str(e), user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list documents: {str(e)}"
+            detail="Failed to list documents"
         )
 
 
 @router.post("/bulk-delete", response_model=BulkDeleteResponse, status_code=status.HTTP_200_OK)
-async def bulk_delete_documents(request: BulkDeleteRequest, db: Session = Depends(get_db)):
+async def bulk_delete_documents(
+    request: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Delete multiple documents belonging to a user.
     
@@ -238,6 +248,8 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db: Session = Depend
         BulkDeleteResponse with deletion results
     """
     try:
+        if request.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         deleted_count = 0
         failed_ids = []
         doc_processor = get_document_processor()
@@ -306,12 +318,12 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db: Session = Depend
         logger.error("bulk_deletion_failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete documents: {str(e)}"
+            detail="Failed to delete documents"
         )
 
 
 @router.get("/list", response_model=DocumentListResponse, status_code=status.HTTP_200_OK)
-async def list_documents():
+async def list_documents(current_user: User = Depends(get_current_user)):
     """
     List all ingested documents (legacy endpoint).
     
@@ -336,12 +348,16 @@ async def list_documents():
         logger.error("failed_to_list_documents", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list documents: {str(e)}"
+            detail="Failed to list documents"
         )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: str, db: Session = Depends(get_db)):
+async def delete_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Delete a document and all its chunks.
     
@@ -350,7 +366,10 @@ async def delete_document(document_id: str, db: Session = Depends(get_db)):
     """
     try:
         # Delete from database first
-        db_document = db.query(Document).filter(Document.id == document_id).first()
+        db_document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.user_id == current_user.id,
+        ).first()
         if db_document:
             # Delete tree nodes and tree structure first (FK constraints)
             db.query(TreeNode).filter(TreeNode.document_id == document_id).delete()
@@ -375,7 +394,7 @@ async def delete_document(document_id: str, db: Session = Depends(get_db)):
         logger.error("document_deletion_failed", error=str(e), document_id=document_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete document: {str(e)}"
+            detail="Failed to delete document"
         )
 
 
@@ -426,6 +445,7 @@ async def generate_tree(
     request: TreeGenerationRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Trigger PageIndex tree generation for a document.
@@ -434,6 +454,8 @@ async def generate_tree(
     Only works for PDF documents.
     """
     try:
+        if request.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         # Verify document exists and belongs to user
         db_document = db.query(Document).filter(
             Document.id == document_id,
@@ -496,7 +518,7 @@ async def generate_tree(
         logger.error("generate_tree_failed", error=str(e), document_id=document_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start tree generation: {str(e)}",
+            detail="Failed to start tree generation",
         )
 
 
@@ -505,12 +527,23 @@ async def generate_tree(
     response_model=TreeGenerationResponse,
     status_code=status.HTTP_200_OK,
 )
-async def get_tree_status(document_id: str, db: Session = Depends(get_db)):
+async def get_tree_status(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Get the tree generation status for a document."""
     from app.services.pageindex_service import get_pageindex_service
     from app.db.models import DocumentTreeStructure
 
     pageindex_service = get_pageindex_service()
+
+    doc = db.query(Document.id).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     db_tree = (
         db.query(DocumentTreeStructure)

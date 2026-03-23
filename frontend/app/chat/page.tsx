@@ -22,7 +22,7 @@ export default function ChatPage() {
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const { sessionId, messages, isLoading, error, sendMessage, clearChat, loadHistory, latestTokenUsage } = useChat();
+  const { sessionId, messages, isLoading, error, sendMessage, clearChat, hydrateConversation, latestTokenUsage } = useChat();
   const { toast, confirm } = useToast();
 
   useEffect(() => {
@@ -41,12 +41,15 @@ export default function ChatPage() {
   }, [isSidebarOpen]);
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchBootstrap = async () => {
       if (!user) return;
       setIsHistoryLoading(true);
       try {
-        const sessions = await apiClient.getChatHistory(user.id);
-        setHistory(sessions);
+        const bootstrap = await apiClient.getChatBootstrap();
+        setHistory(bootstrap.sessions);
+        if (bootstrap.active_session_id) {
+          hydrateConversation(bootstrap.active_session_id, bootstrap.messages);
+        }
       } catch (historyError) {
         console.error('Failed to load chat history:', historyError);
       } finally {
@@ -54,8 +57,27 @@ export default function ChatPage() {
       }
     };
 
-    fetchHistory();
-  }, [user, sessionId]);
+    fetchBootstrap();
+  }, [hydrateConversation, user]);
+
+  useEffect(() => {
+    const refreshHistoryOnly = async (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: number }>).detail;
+      if (!user || (detail?.userId && detail.userId !== user.id)) return;
+
+      try {
+        const bootstrap = await apiClient.getChatBootstrap(sessionId, { includeMessages: false });
+        setHistory(bootstrap.sessions);
+      } catch (historyError) {
+        console.error('Failed to refresh chat history:', historyError);
+      }
+    };
+
+    window.addEventListener('chat-history-updated', refreshHistoryOnly as EventListener);
+    return () => {
+      window.removeEventListener('chat-history-updated', refreshHistoryOnly as EventListener);
+    };
+  }, [sessionId, user]);
 
   const handleNewChat = async () => {
     await clearChat();
@@ -64,10 +86,17 @@ export default function ChatPage() {
 
   const handleLoadSession = async (sessionIdToLoad: string) => {
     try {
-      await loadHistory(sessionIdToLoad);
+      setIsHistoryLoading(true);
+      const bootstrap = await apiClient.getChatBootstrap(sessionIdToLoad);
+      setHistory(bootstrap.sessions);
+      if (bootstrap.active_session_id) {
+        hydrateConversation(bootstrap.active_session_id, bootstrap.messages);
+      }
     } catch (error) {
       console.error('Failed to load session:', error);
       toast({ title: 'Failed to load session', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setIsHistoryLoading(false);
     }
   };
 

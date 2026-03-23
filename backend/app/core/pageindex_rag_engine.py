@@ -22,9 +22,27 @@ from app.services.pageindex_service import PageIndexService
 from app.services.llm_service import LLMService
 from app.models.schemas import SourceReference
 from app.config import settings
+from app.observability import set_llamaindex_trace_params
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_think_section_metadata(sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Build metadata-only section payload safe for tracing."""
+    metadata_payload: List[Dict[str, Any]] = []
+    for rank, section in enumerate(sections, start=1):
+        metadata_payload.append(
+            {
+                "rank": rank,
+                "document": section.get("doc_name"),
+                "section_title": section.get("title"),
+                "start_page": section.get("start_page"),
+                "end_page": section.get("end_page"),
+                "node_id": section.get("node_id"),
+            }
+        )
+    return metadata_payload
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +156,7 @@ class PageIndexRAGEngine:
         user_id: Optional[int] = None,
         context_document_ids: Optional[List[str]] = None,
         conversation_history: Optional[str] = None,
+        trace=None,
     ) -> Dict[str, Any]:
         """
         Execute a think-mode query using PageIndex tree reasoning.
@@ -159,6 +178,20 @@ class PageIndexRAGEngine:
             user_id=user_id,
         )
 
+        if session_id:
+            trace_session_id = session_id
+        else:
+            trace_session_id = None
+        set_llamaindex_trace_params(
+            name="pageindex.query",
+            metadata={
+                "has_context_document_ids": bool(context_document_ids),
+                "context_document_count": len(context_document_ids or []),
+            },
+            session_id=trace_session_id,
+            user_id=str(user_id) if user_id is not None else None,
+        )
+
         # Step 1: Get documents that have tree structures
         if context_document_ids:
             # Get ALL user docs in the context list
@@ -166,6 +199,7 @@ class PageIndexRAGEngine:
         else:
             # Get all user documents
             from app.db.models import Document
+
             user_docs = (
                 db.query(Document.id)
                 .filter(Document.user_id == user_id)
@@ -197,11 +231,7 @@ class PageIndexRAGEngine:
         ]
 
         if docs_needing_trees:
-            from app.db.models import Document as DocModel
-
-            newly_generated = await self._auto_generate_trees(
-                db, docs_needing_trees
-            )
+            newly_generated = await self._auto_generate_trees(db, docs_needing_trees)
             if newly_generated:
                 doc_ids_with_trees.extend(newly_generated)
                 logger.log_operation(
@@ -251,7 +281,10 @@ class PageIndexRAGEngine:
             )
 
             try:
-                search_response = await groq_llm_call(search_prompt, self.groq_service)
+                search_response = await groq_llm_call(
+                    search_prompt,
+                    self.groq_service,
+                )
                 search_result = extract_json_from_response(search_response)
             except Exception as e:
                 logger.log_error("Tree search failed", e, doc_id=doc_id)
@@ -262,15 +295,14 @@ class PageIndexRAGEngine:
             search_confidence = search_result.get("confidence", "medium")
 
             if reasoning:
-                all_reasoning_parts.append(
-                    f"**{doc_name}**: {reasoning}"
-                )
+                all_reasoning_parts.append(f"**{doc_name}**: {reasoning}")
 
             if not selected_ids:
                 continue
 
             # Step 3: Retrieve full text of selected nodes
             node_map = build_node_map(structure)
+            selected_sections: List[Dict[str, Any]] = []
             for nid in selected_ids:
                 node = node_map.get(nid)
                 if node:
@@ -279,26 +311,41 @@ class PageIndexRAGEngine:
                     start_page = node.get("start_index")
                     end_page = node.get("end_index")
 
-                    all_context_sections.append({
+                    section_data = {
                         "doc_name": doc_name,
                         "title": section_title,
                         "text": section_text,
                         "start_page": start_page,
                         "end_page": end_page,
                         "node_id": nid,
-                    })
+                    }
+                    selected_sections.append(section_data)
+                    all_context_sections.append(section_data)
 
                     all_sources.append(
                         SourceReference(
                             document=doc_name,
                             page=start_page,
                             chunk_id=f"node_{nid}",
-                            relevance_score=1.0 if search_confidence == "high" else 0.8 if search_confidence == "medium" else 0.5,
-                            text_snippet=(node.get("summary", "") or section_text[:200]) + "..."
+                            relevance_score=1.0
+                            if search_confidence == "high"
+                            else 0.8
+                            if search_confidence == "medium"
+                            else 0.5,
+                            text_snippet=(node.get("summary", "") or section_text[:200])
+                            + "..."
                             if len(node.get("summary", "") or section_text) > 200
                             else (node.get("summary", "") or section_text[:200]),
                         )
                     )
+
+            if selected_sections:
+                logger.debug(
+                    "pageindex_selected_sections",
+                    document_id=doc_id,
+                    document=doc_name,
+                    selected_sections=_build_think_section_metadata(selected_sections),
+                )
 
         # Step 4: Generate answer from gathered context
         combined_reasoning = "\n\n".join(all_reasoning_parts) if all_reasoning_parts else "No specific reasoning available."
@@ -314,7 +361,10 @@ class PageIndexRAGEngine:
                     "Answer concisely with clear structure."
                 )
                 try:
-                    history_answer = await groq_llm_call(history_fallback_prompt, self.groq_service)
+                    history_answer = await groq_llm_call(
+                        history_fallback_prompt,
+                        self.groq_service,
+                    )
                     if history_answer:
                         history_conf = self._extract_confidence(history_answer)
                         history_answer = self._clean_confidence_line(history_answer)
@@ -364,7 +414,10 @@ class PageIndexRAGEngine:
         )
 
         try:
-            response = await groq_llm_call(answer_prompt, self.groq_service)
+            response = await groq_llm_call(
+                answer_prompt,
+                self.groq_service,
+            )
         except Exception as e:
             logger.log_error("Think mode answer generation failed", e)
             processing_time = (time.time() - start_time) * 1000

@@ -58,11 +58,17 @@ def get_password_hash(password):
     """Hash a password using argon2."""
     return pwd_context.hash(password)
 
+
+def _validate_password_strength(password: str) -> None:
+    if len(password) < 12:
+        raise HTTPException(status_code=400, detail="Password must be at least 12 characters long")
+
 @router.post("/register", response_model=AuthResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    _validate_password_strength(user.password)
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Unable to register with provided credentials")
     
     hashed_password = get_password_hash(user.password)
     db_user = User(email=user.email, hashed_password=hashed_password, full_name=user.full_name)
@@ -79,10 +85,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=AuthResponse)
 def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
-    if not db_user:
-        raise HTTPException(status_code=400, detail="User not found")
-    if not verify_password(user.password, db_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect password")
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     user_response = UserResponse.from_orm(db_user)
     return AuthResponse(
         access_token=create_access_token(db_user.id),

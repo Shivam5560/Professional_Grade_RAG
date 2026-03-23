@@ -4,6 +4,7 @@ Middleware for API: CORS, logging, error handling.
 
 import time
 import traceback
+from collections import defaultdict, deque
 from typing import Callable
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -80,17 +81,56 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
             )
 
 
+class AuthRateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple in-memory rate limiting for sensitive auth endpoints."""
+
+    def __init__(self, app, max_requests: int = 10, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.buckets = defaultdict(deque)
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        auth_paths = {
+            "/api/v1/auth/login",
+            "/api/v1/auth/register",
+            "/api/v1/auth/refresh",
+        }
+        if request.method != "OPTIONS" and request.url.path in auth_paths:
+            client_ip = request.client.host if request.client else "unknown"
+            key = f"{client_ip}:{request.url.path}"
+            now = time.time()
+            bucket = self.buckets[key]
+
+            while bucket and now - bucket[0] > self.window_seconds:
+                bucket.popleft()
+
+            if len(bucket) >= self.max_requests:
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={
+                        "error": "rate_limited",
+                        "message": "Too many authentication attempts. Please try again shortly.",
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    },
+                )
+
+            bucket.append(now)
+
+        return await call_next(request)
+
+
 def setup_cors(app):
     """Configure CORS middleware."""
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.normalized_cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
     )
     
-    logger.log_operation("cors_configured", origins=settings.cors_origins)
+    logger.log_operation("cors_configured", origins=settings.normalized_cors_origins)
 
 
 def setup_middleware(app):
@@ -98,6 +138,7 @@ def setup_middleware(app):
     # Add custom middleware
     app.add_middleware(ErrorHandlingMiddleware)
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(AuthRateLimitMiddleware)
     
     # Add CORS
     setup_cors(app)

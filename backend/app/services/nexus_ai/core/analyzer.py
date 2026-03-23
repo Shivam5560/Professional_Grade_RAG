@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 async def analyze_resume_v2(
     resume_text: str,
     job_description: str,
-    max_retries: int = 3
+    max_retries: int = 3,
+    trace: Any = None,
 ) -> Dict[str, Any]:
     """
     Complete resume analysis with LLM extraction + hybrid algorithmic scoring.
@@ -47,7 +48,10 @@ async def analyze_resume_v2(
     
     # Step 1: Get LLM analysis (extraction + recommendations)
     llm_result = await _call_llm_for_analysis(
-        resume_text, job_description, max_retries
+        resume_text,
+        job_description,
+        max_retries,
+        trace=trace,
     )
     
     if not llm_result:
@@ -266,7 +270,8 @@ def _extract_experience_years(resume_data: Dict[str, Any]) -> float:
 async def _call_llm_for_analysis(
     resume_text: str,
     job_description: str,
-    max_retries: int
+    max_retries: int,
+    trace: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Make single LLM call and parse JSON response.

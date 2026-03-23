@@ -70,8 +70,18 @@ class Settings(BaseSettings):
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
-    api_reload: bool = Field(default=True, alias="API_RELOAD")
+    api_reload: bool = Field(default=False, alias="API_RELOAD")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    # Langfuse Observability Configuration
+    langfuse_enabled: bool = Field(default=False, alias="LANGFUSE_ENABLED")
+    langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
+    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
+    langfuse_env: str = Field(default="dev", alias="LANGFUSE_ENV")
+    langfuse_sample_rate_dev: float = Field(default=1.0, alias="LANGFUSE_SAMPLE_RATE_DEV")
+    langfuse_sample_rate_staging: float = Field(default=1.0, alias="LANGFUSE_SAMPLE_RATE_STAGING")
+    langfuse_sample_rate_prod: float = Field(default=0.2, alias="LANGFUSE_SAMPLE_RATE_PROD")
     
     # File Upload Configuration
     max_upload_size_mb: int = Field(default=50, alias="MAX_UPLOAD_SIZE_MB")  # 50 MB default
@@ -130,6 +140,32 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+
+    @property
+    def normalized_cors_origins(self) -> List[str]:
+        origins: List[str] = []
+        for origin in self.cors_origins:
+            cleaned = (origin or "").strip().rstrip("/")
+            if cleaned:
+                origins.append(cleaned)
+        return origins
+
+    def validate_security_posture(self) -> None:
+        insecure_defaults = {
+            "JWT_SECRET": self.jwt_secret == "dev-secret",
+            "JWT_REFRESH_SECRET": self.jwt_refresh_secret == "dev-refresh-secret",
+            "POSTGRES_PASSWORD": self.postgres_password == "postgres",
+        }
+
+        if self.api_reload:
+            return
+
+        bad_keys = [key for key, is_bad in insecure_defaults.items() if is_bad]
+        if bad_keys:
+            raise ValueError(
+                f"Insecure production configuration detected for: {', '.join(bad_keys)}. "
+                "Set strong secrets before starting the API."
+            )
 
 
 # Global settings instance

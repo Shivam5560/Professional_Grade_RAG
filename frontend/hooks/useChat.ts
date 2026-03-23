@@ -5,7 +5,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '@/lib/api';
-import { Message, ChatResponse, RAGMode, AskFileContent, TokenUsage } from '@/lib/types';
+import { Message, ChatResponse, RAGMode, AskFileContent, TokenUsage, ChatMessage } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 
 export function useChat(initialSessionId?: string) {
@@ -17,6 +17,22 @@ export function useChat(initialSessionId?: string) {
   const { user } = useAuthStore();
   const tokenBufferRef = useRef<Record<string, string>>({});
   const flushTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+
+  const mapChatMessagesToUiMessages = useCallback((targetSessionId: string, historyMessages: ChatMessage[]): Message[] => {
+    return historyMessages.map((msg, idx) => ({
+      id: `${targetSessionId}-${idx}`,
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.created_at || new Date().toISOString(),
+      confidence_score: typeof msg.confidence_score === 'number' ? msg.confidence_score : msg.confidence_score?.score,
+      confidence_level: typeof msg.confidence_score === 'object' ? msg.confidence_score?.level : undefined,
+      sources: msg.sources,
+      reasoning: msg.reasoning,
+      mode: msg.mode,
+      contextFiles: msg.context_files,
+      diagramXml: msg.diagram_xml,
+    }));
+  }, []);
 
   const flushBufferedTokens = useCallback((assistantMessageId: string) => {
     const buffered = tokenBufferRef.current[assistantMessageId];
@@ -141,6 +157,13 @@ export function useChat(initialSessionId?: string) {
   }, [sessionId, user]);
 
   const clearChat = useCallback(async () => {
+    const resetLocalState = (newSessionId: string) => {
+      setMessages(() => []);
+      setError(() => null);
+      setLatestTokenUsage(() => undefined);
+      setSessionId(() => newSessionId);
+    };
+
     try {
       // Generate a new session ID FIRST
       const newSessionId = uuidv4();
@@ -149,54 +172,30 @@ export function useChat(initialSessionId?: string) {
       await apiClient.clearHistory(sessionId);
       
       // Force state reset - use functional updates to ensure fresh state
-      setMessages(() => []);
-      setError(() => null);
-      setLatestTokenUsage(() => undefined);
-      setSessionId(() => newSessionId);
+      resetLocalState(newSessionId);
       
       return newSessionId;
     } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('Session not found') || message.includes('HTTP 404')) {
+        const newSessionId = uuidv4();
+        resetLocalState(newSessionId);
+        return newSessionId;
+      }
+
       console.error('[useChat] Failed to clear chat:', err);
       // Even if backend clear fails, still reset the UI
       const newSessionId = uuidv4();
-      setMessages(() => []);
-      setError(() => null);
-      setLatestTokenUsage(() => undefined);
-      setSessionId(() => newSessionId);
+      resetLocalState(newSessionId);
       throw err;
     }
   }, [sessionId]);
 
-  const loadHistory = useCallback(async (sessionIdToLoad?: string) => {
-    try {
-      const targetSessionId = sessionIdToLoad || sessionId;
-      const history = await apiClient.getHistory(targetSessionId);
-      
-      // If loading a different session, update the session ID
-      if (sessionIdToLoad && sessionIdToLoad !== sessionId) {
-        setSessionId(sessionIdToLoad);
-      }
-      
-      // Convert ChatMessage to Message format - use stable IDs based on index + sessionId
-      const convertedMessages: Message[] = history.messages.map((msg, idx) => ({
-        id: `${targetSessionId}-${idx}`,
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp || (msg as { created_at?: string }).created_at || new Date().toISOString(),
-        confidence_score: msg.confidence_score,
-        confidence_level: msg.confidence_level,
-        sources: msg.sources,
-        reasoning: msg.reasoning,
-        mode: msg.mode,
-        contextFiles: msg.context_files,
-        diagramXml: msg.diagram_xml,
-      }));
-      
-      setMessages(convertedMessages);
-    } catch (err) {
-      console.error('Failed to load history:', err);
-    }
-  }, [sessionId]);
+  const hydrateConversation = useCallback((targetSessionId: string, historyMessages: ChatMessage[]) => {
+    setSessionId(targetSessionId);
+    setMessages(mapChatMessagesToUiMessages(targetSessionId, historyMessages));
+    setError(null);
+  }, [mapChatMessagesToUiMessages]);
 
   return {
     sessionId,
@@ -205,7 +204,7 @@ export function useChat(initialSessionId?: string) {
     error,
     sendMessage,
     clearChat,
-    loadHistory,
+    hydrateConversation,
     latestTokenUsage,
   };
 }

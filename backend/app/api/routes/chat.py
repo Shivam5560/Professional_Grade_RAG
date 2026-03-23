@@ -13,7 +13,7 @@ from app.core.rag_engine import get_rag_engine
 from app.core.context_manager import get_context_manager
 from app.utils.logger import get_logger
 from app.db.database import get_db
-from app.db.models import ChatSession, ChatMessage
+from app.db.models import ChatSession, ChatMessage, User
 import json
 from app.utils.diagram_utils import extract_drawio_xml, is_diagram_request
 from app.models.prompts import DRAWIO_XML_PROMPT
@@ -22,7 +22,9 @@ import httpx
 from app.services.llm_service import get_llm_service
 from app.services.document_processor import get_document_processor
 from app.utils.validators import validate_file_extension, validate_file_size
+from app.observability import set_llamaindex_trace_params
 import asyncio
+from app.api.deps import get_current_user
 
 logger = get_logger(__name__)
 
@@ -186,7 +188,10 @@ async def _emit_text_tokens(text: str, chunk_size: int = 18):
         await asyncio.sleep(0)
 
 
-async def _iter_llm_tokens(llm, prompt: str):
+async def _iter_llm_tokens(
+    llm,
+    prompt: str,
+):
     """Yield tokens robustly for wrappers returning async iterator OR awaitable."""
     def _suffix_delta(previous: str, current: str) -> str:
         if not current:
@@ -396,7 +401,11 @@ def _sanitize_ask_markdown(text: str) -> str:
     return "\n".join(sanitized_lines)
 
 
-async def _query_ask_mode(query: str, ask_files, conversation_history: Optional[str] = None) -> dict:
+async def _query_ask_mode(
+    query: str,
+    ask_files,
+    conversation_history: Optional[str] = None,
+) -> dict:
     """Direct LLM response without retrieval/vector lookup."""
     llm = get_llm_service().get_llm()
     prompt = _build_ask_prompt(query=query, ask_files=ask_files, conversation_history=conversation_history)
@@ -420,7 +429,11 @@ async def _query_ask_mode(query: str, ask_files, conversation_history: Optional[
 
 
 @router.post("/query", response_model=ChatResponse, status_code=status.HTTP_200_OK)
-async def query(request: ChatRequest, db: Session = Depends(get_db)):
+async def query(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Query the RAG system with a question.
     Supports three modes:
@@ -435,33 +448,52 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         ChatResponse with answer, confidence, sources, and optional reasoning
     """
     try:
+        effective_user_id = current_user.id
+        if request.user_id is not None and request.user_id != effective_user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
         # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
         mode = request.mode or await _determine_default_mode()
-        
+
+        set_llamaindex_trace_params(
+            name="chat.query",
+            metadata={
+                "mode": mode,
+                "has_context_docs": bool(request.context_document_ids),
+                "context_doc_count": len(request.context_document_ids or []),
+                "has_ask_files": bool(request.ask_files),
+                "session_id": session_id,
+            },
+            session_id=session_id,
+            user_id=str(effective_user_id),
+        )
+
         # Save session if it doesn't exist
         db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if not db_session:
             title = request.query[:50] + "..." if len(request.query) > 50 else request.query
-            
+
             db_session = ChatSession(
                 id=session_id,
-                user_id=request.user_id,
-                title=title
+                user_id=effective_user_id,
+                title=title,
             )
             db.add(db_session)
             db.commit()
             logger.log_operation(
                 "💬 New chat session created",
                 session_id=session_id[:8] + "...",
-                user_id=request.user_id,
-                title=title
+                user_id=effective_user_id,
+                title=title,
             )
+        elif db_session.user_id != effective_user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
         recent_history = _load_recent_session_messages(db, session_id=session_id)
         conversation_history = _format_history_for_prompt(recent_history)
         _sync_context_manager_from_db(session_id, recent_history)
-        
+
         # Save user message
         user_msg = ChatMessage(
             session_id=session_id,
@@ -471,19 +503,19 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
         )
         db.add(user_msg)
         db.commit()
-        
+
         # Log query with mode info
         context_info = {"mode": mode}
         if request.context_document_ids:
-            context_info['context_docs'] = len(request.context_document_ids)
-        
+            context_info["context_docs"] = len(request.context_document_ids)
+
         logger.log_query(
             query=request.query,
             session_id=session_id[:8] + "...",
-            user_id=request.user_id,
-            **context_info
+            user_id=effective_user_id,
+            **context_info,
         )
-        
+
         # Route to the appropriate engine based on mode
         if mode == "ask":
             result = await _query_ask_mode(
@@ -494,26 +526,27 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             result["session_id"] = session_id
         elif mode == "think":
             from app.core.pageindex_rag_engine import get_pageindex_rag_engine
+
             think_engine = get_pageindex_rag_engine()
             result = await think_engine.query(
                 query=request.query,
                 db=db,
                 session_id=session_id,
-                user_id=request.user_id,
+                user_id=effective_user_id,
                 context_document_ids=request.context_document_ids,
                 conversation_history=conversation_history,
             )
         else:
-            # Fast mode — existing hybrid RAG
+            # Fast mode - existing hybrid RAG
             rag_engine = get_rag_engine()
             result = await rag_engine.query(
                 query=request.query,
                 session_id=session_id,
                 use_context=True,
-                user_id=request.user_id,
+                user_id=effective_user_id,
                 context_document_ids=request.context_document_ids,
             )
-        
+
         # Extract draw.io XML if present
         cleaned_answer, diagram_xml = extract_drawio_xml(result["answer"])
         result["answer"] = cleaned_answer
@@ -561,13 +594,14 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             diagram_xml=diagram_xml,
         )
         db.add(assistant_msg)
-        
+
         # Update session's updated_at timestamp
         from datetime import datetime
+
         db_session.updated_at = datetime.utcnow()
-        
+
         db.commit()
-        
+
         # Convert to response model
         response = ChatResponse(
             answer=result["answer"],
@@ -581,7 +615,7 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             diagram_xml=diagram_xml,
             token_usage=result.get("token_usage"),
         )
-        
+
         logger.info(
             "chat_query_completed",
             session_id=session_id,
@@ -589,22 +623,32 @@ async def query(request: ChatRequest, db: Session = Depends(get_db)):
             confidence_score=response.confidence_score,
             num_sources=len(response.sources),
         )
-        
+
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("chat_query_failed", error=str(e), query=request.query)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process query: {str(e)}"
+            detail="Failed to process query"
         )
 
 
 @router.post("/stream", status_code=status.HTTP_200_OK)
-async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
+async def stream_query(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Stream a chat response using Server-Sent Events (SSE).
     """
+    effective_user_id = current_user.id
+    if request.user_id is not None and request.user_id != effective_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
     session_id = request.session_id or str(uuid.uuid4())
     mode = request.mode or await _determine_default_mode()
 
@@ -614,11 +658,13 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
         title = request.query[:50] + "..." if len(request.query) > 50 else request.query
         db_session = ChatSession(
             id=session_id,
-            user_id=request.user_id,
+            user_id=effective_user_id,
             title=title,
         )
         db.add(db_session)
         db.commit()
+    elif db_session.user_id != effective_user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     recent_history = _load_recent_session_messages(db, session_id=session_id)
     conversation_history = _format_history_for_prompt(recent_history)
@@ -636,6 +682,18 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
     async def event_generator():
         try:
+            set_llamaindex_trace_params(
+                name="chat.stream",
+                metadata={
+                    "mode": mode,
+                    "context_doc_count": len(request.context_document_ids or []),
+                    "has_ask_files": bool(request.ask_files),
+                    "session_id": session_id,
+                },
+                session_id=session_id,
+                user_id=str(effective_user_id),
+            )
+
             yield _sse_event("session", {"session_id": session_id, "mode": mode})
 
             if mode == "ask":
@@ -702,6 +760,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                 )
                 db.add(assistant_msg)
                 from datetime import datetime
+
                 db_session.updated_at = datetime.utcnow()
                 db.commit()
 
@@ -710,12 +769,13 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
             if mode == "think":
                 from app.core.pageindex_rag_engine import get_pageindex_rag_engine
+
                 think_engine = get_pageindex_rag_engine()
                 result = await think_engine.query(
                     query=request.query,
                     db=db,
                     session_id=session_id,
-                    user_id=request.user_id,
+                    user_id=effective_user_id,
                     context_document_ids=request.context_document_ids,
                     conversation_history=conversation_history,
                 )
@@ -780,6 +840,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                 )
                 db.add(assistant_msg)
                 from datetime import datetime
+
                 db_session.updated_at = datetime.utcnow()
                 db.commit()
 
@@ -791,7 +852,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                 query=request.query,
                 session_id=session_id,
                 use_context=True,
-                user_id=request.user_id,
+                user_id=effective_user_id,
                 context_document_ids=request.context_document_ids,
             ):
                 if event.get("type") == "token":
@@ -850,6 +911,7 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
                     )
                     db.add(assistant_msg)
                     from datetime import datetime
+
                     db_session.updated_at = datetime.utcnow()
                     db.commit()
 
@@ -862,7 +924,10 @@ async def stream_query(request: ChatRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/extract-file", response_model=AskFileExtractResponse, status_code=status.HTTP_200_OK)
-async def extract_file_for_ask_mode(file: UploadFile = File(...)):
+async def extract_file_for_ask_mode(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
     """Extract plain text from a file for ask mode without persisting or indexing it."""
     try:
         if not validate_file_extension(file.filename, settings.allowed_file_extensions):
@@ -889,16 +954,22 @@ async def extract_file_for_ask_mode(file: UploadFile = File(...)):
         )
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("ask_file_extract_failed", filename=file.filename, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract file text: {str(e)}",
+            detail="Failed to extract file text",
         )
 
 
 @router.get("/history/{session_id}", response_model=ChatHistory, status_code=status.HTTP_200_OK)
-async def get_history(session_id: str, db: Session = Depends(get_db)):
+async def get_history(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Get conversation history for a session from database.
     Also syncs the messages to in-memory context manager for RAG use.
@@ -911,6 +982,10 @@ async def get_history(session_id: str, db: Session = Depends(get_db)):
         ChatHistory with all messages
     """
     try:
+        db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not db_session or db_session.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
         # Load messages from database (audit trail)
         db_messages = db.query(ChatMessage).filter(
             ChatMessage.session_id == session_id
@@ -959,16 +1034,22 @@ async def get_history(session_id: str, db: Session = Depends(get_db)):
             messages=messages
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("failed_to_get_chat_history", error=str(e), session_id=session_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve chat history: {str(e)}"
+            detail="Failed to retrieve chat history"
         )
 
 
 @router.delete("/history/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_history(session_id: str):
+async def clear_history(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Clear conversation history for a session from in-memory context.
     This clears the RAG context but keeps database audit trail intact.
@@ -977,6 +1058,10 @@ async def clear_history(session_id: str):
         session_id: Session identifier
     """
     try:
+        db_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+        if not db_session or db_session.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
         # Clear only in-memory context (for RAG engine)
         # Database messages are preserved for audit purposes
         context_manager = get_context_manager()
@@ -984,9 +1069,11 @@ async def clear_history(session_id: str):
         
         logger.info("chat_history_cleared", session_id=session_id)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("failed_to_clear_chat_history", error=str(e), session_id=session_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear chat history: {str(e)}"
+            detail="Failed to clear chat history"
         )

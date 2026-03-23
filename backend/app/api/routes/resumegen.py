@@ -7,7 +7,7 @@ import os
 import tempfile
 from typing import Dict, Any, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices, model_validator
 
@@ -17,6 +17,8 @@ from app.services.resume_generator import (
     check_latex_available,
 )
 from app.utils.logger import get_logger
+from app.api.deps import get_current_user
+from app.db.models import User
 
 logger = get_logger(__name__)
 
@@ -84,7 +86,7 @@ async def resumegen_health():
 
 
 @router.post("/generate")
-async def generate_resume(req: GenerateRequest):
+async def generate_resume(req: GenerateRequest, current_user: User = Depends(get_current_user)):
     """Generate a resume PDF or LaTeX source."""
     resume_data = req.data.dict()
     logger.log_operation("resumegen_generate", format=req.format)

@@ -27,11 +27,11 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
     if (user) {
       setIsRefreshing(true);
       try {
-        const sessions = await apiClient.getChatHistory(user.id);
-        setHistory(sessions);
+        const bootstrap = await apiClient.getChatBootstrap(undefined, { includeMessages: false });
+        setHistory(bootstrap.sessions);
         // Cache in sessionStorage for instant load on navigation
         try {
-          sessionStorage.setItem(`chat_history_${user.id}`, JSON.stringify(sessions));
+          sessionStorage.setItem(`chat_history_${user.id}`, JSON.stringify(bootstrap.sessions));
           sessionStorage.setItem(`chat_history_ts_${user.id}`, Date.now().toString());
         } catch { /* quota exceeded — ignore */ }
       } catch (error) {

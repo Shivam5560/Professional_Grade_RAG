@@ -13,7 +13,6 @@ from typing import List, Tuple, Dict, Any, Optional
 from io import BytesIO
 
 import PyPDF2
-
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -131,6 +130,8 @@ async def groq_llm_call(
     temperature: float = 0.0,
     max_retries: int = 3,
     use_reasoning: bool = True,
+    trace=None,
+    span_name: Optional[str] = None,
 ) -> str:
     """
     Call Groq LLM (via LlamaIndex Groq wrapper) with rate-limit awareness.

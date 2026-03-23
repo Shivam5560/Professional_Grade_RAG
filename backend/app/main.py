@@ -17,6 +17,10 @@ from app.api.routes import aurasql
 from app.api.routes import resumegen
 from app import __version__
 from app.db.database import engine, Base
+from app.observability import (
+    flush_langfuse,
+    log_langfuse_startup_status,
+)
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -31,6 +35,8 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
     # Startup
+    settings.validate_security_posture()
+    log_langfuse_startup_status()
     logger.log_operation(
         "🚀 Application starting",
         version=__version__,
@@ -81,7 +87,9 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.log_operation("Application shutting down")
-    
+
+    flush_langfuse()
+
     # Cleanup if needed
     logger.log_operation("✅ Application shutdown complete")
 

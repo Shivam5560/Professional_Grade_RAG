@@ -16,9 +16,29 @@ from app.services.llm_service import get_llm_service
 from app.models.prompts import PROFESSIONAL_SYSTEM_PROMPT
 from app.models.schemas import SourceReference
 from app.config import settings
+from app.observability import set_llamaindex_trace_params
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_retrieval_chunk_metadata(nodes: List[NodeWithScore], retriever: str) -> List[Dict[str, Any]]:
+    """Build metadata-only retrieval payload safe for tracing."""
+    metadata_payload: List[Dict[str, Any]] = []
+    for rank, node in enumerate(nodes, start=1):
+        node_metadata = (node.node.metadata or {}) if getattr(node, "node", None) is not None else {}
+        metadata_payload.append(
+            {
+                "retriever": retriever,
+                "rank": rank,
+                "document_id": node_metadata.get("document_id"),
+                "filename": node_metadata.get("filename"),
+                "page": node_metadata.get("page"),
+                "chunk_id": node_metadata.get("chunk_id"),
+                "score": node.score,
+            }
+        )
+    return metadata_payload
 
 
 class RAGEngine:
@@ -147,6 +167,7 @@ Provide a comprehensive answer based on the context above."""
         query: str,
         context_str: str,
         threshold: float = 0.85,
+        trace: Any = None,
     ) -> tuple[str, bool, dict]:
         context_max = max(1, settings.llm_context_window)
         projected = self._estimate_tokens(context_str) + self._estimate_tokens(history_str) + self._estimate_tokens(query)
@@ -204,7 +225,7 @@ User Question: {query}
 
 Provide the most helpful answer possible based on conversation context and general knowledge."""
 
-    async def _iter_llm_tokens(self, prompt: str) -> AsyncGenerator[str, None]:
+    async def _iter_llm_tokens(self, prompt: str, trace: Any = None) -> AsyncGenerator[str, None]:
         """Yield tokens robustly across LLM wrappers that differ in stream return shape."""
         def _suffix_delta(previous: str, current: str) -> str:
             if not current:
@@ -272,7 +293,8 @@ Provide the most helpful answer possible based on conversation context and gener
         session_id: Optional[str] = None,
         use_context: bool = True,
         user_id: Optional[int] = None,
-        context_document_ids: Optional[List[str]] = None
+        context_document_ids: Optional[List[str]] = None,
+        trace: Any = None,
     ) -> Dict[str, Any]:
         """
         Execute a RAG query.
@@ -293,6 +315,17 @@ Provide the most helpful answer possible based on conversation context and gener
             # Generate session ID if not provided
             if session_id is None:
                 session_id = str(uuid.uuid4())
+
+            set_llamaindex_trace_params(
+                name="rag.fast.query",
+                metadata={
+                    "use_context": use_context,
+                    "has_doc_filter": bool(context_document_ids),
+                    "doc_filter_count": len(context_document_ids or []),
+                },
+                session_id=session_id,
+                user_id=str(user_id) if user_id is not None else None,
+            )
             
             # Add user message to context
             self.context_manager.add_message(session_id, "user", query)
@@ -329,14 +362,14 @@ Provide the most helpful answer possible based on conversation context and gener
                 top_k=settings.top_k_retrieval,
                 similarity_threshold=settings.similarity_threshold,
                 user_id=user_id,
-                document_ids=context_document_ids
+                document_ids=context_document_ids,
             )
-            
+
             bm25_nodes = bm25_service.search(
                 query=reformulated_query,
                 top_k=settings.top_k_retrieval,
                 user_id=user_id,
-                document_ids=context_document_ids
+                document_ids=context_document_ids,
             )
             
             logger.log_operation(
@@ -386,6 +419,7 @@ Provide the most helpful answer possible based on conversation context and gener
                     history_str=history_str,
                     query=query,
                     context_str="",
+                    trace=trace,
                 )
                 if history_str:
                     fallback_prompt = self._build_history_only_prompt(history_str, query)
@@ -424,10 +458,10 @@ Provide the most helpful answer possible based on conversation context and gener
                     nodes=len(retrieved_nodes),
                     target=settings.top_k_rerank
                 )
-                
+
                 reranked_nodes = self.reranker.postprocess_nodes(
                     retrieved_nodes,
-                    QueryBundle(query_str=reformulated_query)
+                    QueryBundle(query_str=reformulated_query),
                 )
                 
                 logger.log_operation(
@@ -447,12 +481,13 @@ Provide the most helpful answer possible based on conversation context and gener
                     history_str=history_str,
                     query=query,
                     context_str=context_str,
+                    trace=trace,
                 )
                 prompt = self._build_prompt(context_str, history_str, query)
                 
                 # Generate answer
                 response = await self.llm.acomplete(prompt)
-                answer = response.text.strip()
+                answer = (getattr(response, "text", None) or str(response)).strip()
                 token_usage = self._merge_token_usage_with_response(token_usage, response)
                 
                 # Extract LLM's self-assessment confidence from the answer
@@ -512,6 +547,7 @@ Provide the most helpful answer possible based on conversation context and gener
         use_context: bool = True,
         user_id: Optional[int] = None,
         context_document_ids: Optional[List[str]] = None,
+        trace: Any = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Stream a RAG query response token-by-token.
@@ -524,6 +560,17 @@ Provide the most helpful answer possible based on conversation context and gener
         # Generate session ID if not provided
         if session_id is None:
             session_id = str(uuid.uuid4())
+
+        set_llamaindex_trace_params(
+            name="rag.fast.stream",
+            metadata={
+                "use_context": use_context,
+                "has_doc_filter": bool(context_document_ids),
+                "doc_filter_count": len(context_document_ids or []),
+            },
+            session_id=session_id,
+            user_id=str(user_id) if user_id is not None else None,
+        )
 
         # Add user message to context
         self.context_manager.add_message(session_id, "user", query)
@@ -586,11 +633,12 @@ Provide the most helpful answer possible based on conversation context and gener
                 history_str=history_str,
                 query=query,
                 context_str="",
+                trace=trace,
             )
             if history_str:
                 fallback_prompt = self._build_history_only_prompt(history_str, query)
                 answer_parts: List[str] = []
-                async for token in self._iter_llm_tokens(fallback_prompt):
+                async for token in self._iter_llm_tokens(fallback_prompt, trace=trace):
                     answer_parts.append(token)
                     yield {"type": "token", "data": token}
                 answer = "".join(answer_parts).strip()
@@ -641,11 +689,12 @@ Provide the most helpful answer possible based on conversation context and gener
                 history_str=history_str,
                 query=query,
                 context_str=context_str,
+                trace=trace,
             )
             prompt = self._build_prompt(context_str, history_str, query)
 
             answer_parts: List[str] = []
-            async for token in self._iter_llm_tokens(prompt):
+            async for token in self._iter_llm_tokens(prompt, trace=trace):
                 answer_parts.append(token)
                 yield {"type": "token", "data": token}
 

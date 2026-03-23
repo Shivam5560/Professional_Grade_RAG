@@ -116,6 +116,12 @@ export interface ChatHistory {
   }>;
 }
 
+export interface ChatBootstrapResponse {
+  sessions: ChatSession[];
+  active_session_id?: string;
+  messages: ChatMessage[];
+}
+
 export interface ApiError {
   error: string;
   message: string;

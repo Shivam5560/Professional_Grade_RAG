@@ -17,6 +17,7 @@ from app.config import settings
 from app.db.models import User, NexusResumeFile, NexusResumeAnalysis
 from app.utils.validators import validate_file_extension, validate_file_size
 from app.utils.logger import get_logger
+from app.observability import set_llamaindex_trace_params
 
 logger = get_logger(__name__)
 
@@ -122,7 +123,17 @@ async def analyze_resume(
     """
     from app.services.nexus_ai.simple_extractor import extract_text_from_file
     from app.services.nexus_ai.core.analyzer import analyze_resume_v2
-    
+
+    set_llamaindex_trace_params(
+        name="nexus.resume.analyze",
+        metadata={
+            "user_id": user_id,
+            "resume_id": resume_id,
+        },
+        session_id=resume_id,
+        user_id=user_id,
+    )
+
     resume = (
         db.query(NexusResumeFile)
         .filter(
@@ -150,36 +161,39 @@ async def analyze_resume(
         else:
             resume.extracted_data = {"_raw_text": resume_text[:50000]}
         db.commit()
-    
+
     if not resume_text.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Resume text is empty")
-    
+
     # Single LLM call + algorithmic scoring
     logger.info(f"Running analysis for {resume_id} (1 LLM call + scoring)")
-    analysis_result = await analyze_resume_v2(resume_text, job_description)
-    
+    analysis_result = await analyze_resume_v2(
+        resume_text,
+        job_description,
+    )
+
     if not analysis_result.get("success"):
         logger.error(f"Analysis failed: {analysis_result.get('error')}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=analysis_result.get("error", "Analysis failed")
         )
-    
+
     overall_score = analysis_result["scores"]["overall"]
-    
+
     # Build analysis payload for database
     analysis_payload = {
         "overall_score": overall_score,
         "fit_category": analysis_result["scores"]["fit_category"],
         "score_breakdown": analysis_result["scores"]["breakdown"],
-        
+
         # Technical/Skills analysis
         "technical_score": {
             "similarity_score": analysis_result["skills_analysis"]["technical_score"],
             "matched_skills": analysis_result["skills_analysis"]["matched_skills"],
             "missing_skills": analysis_result["skills_analysis"]["missing_skills"],
         },
-        
+
         # Grammar/Writing analysis
         "grammar_analysis": (lambda wa: {
             "score": wa.get("score"),
@@ -189,17 +203,17 @@ async def analyze_resume(
             "recommendations": wa.get("suggestions", []),
             "section_scores": {},
         })(analysis_result.get("writing_analysis", {})),
-        
+
         # ATS analysis
         "ats_analysis": analysis_result["ats_analysis"],
-        
+
         # Section analysis
         "section_analysis": analysis_result["section_analysis"],
-        
+
         # Recommendations
         "refined_recommendations": analysis_result.get("recommendations", []),
         "refined_justifications": [],  # Populated from match_analysis
-        
+
         # Resume/JD data
         "resume_data": {
             "name": analysis_result["candidate"].get("name"),
@@ -213,7 +227,7 @@ async def analyze_resume(
         "jd_data": analysis_result.get("job_analysis", {}),
         "match_analysis": analysis_result.get("match_analysis", {}),
     }
-    
+
     # Build justifications from match analysis
     match_analysis = analysis_result.get("match_analysis", {})
     justifications = []
@@ -224,9 +238,9 @@ async def analyze_resume(
     if match_analysis.get("overall_fit"):
         justifications.append(f"Overall: {match_analysis['overall_fit']}")
     analysis_payload["refined_justifications"] = justifications
-    
+
     logger.info(f"Analysis complete. Overall score: {overall_score}")
-    
+
     # Save to database
     analysis = NexusResumeAnalysis(
         id=str(uuid.uuid4()),

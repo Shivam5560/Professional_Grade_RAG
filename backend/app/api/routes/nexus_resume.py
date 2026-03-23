@@ -5,7 +5,8 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, status, HTTPExce
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import NexusResumeFile, NexusResumeAnalysis
+from app.db.models import NexusResumeFile, NexusResumeAnalysis, User
+from app.api.deps import get_current_user
 from app.models.schemas import (
     ResumeUploadResponse,
     ResumeFileInfo,
@@ -58,13 +59,22 @@ async def upload_resume_endpoint(
     file: UploadFile = File(...),
     user_id: int = Form(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     record = await upload_resume(db, user_id, file)
     return ResumeUploadResponse(resume=_serialize_resume(record))
 
 
 @router.get("/resumes/{user_id}", response_model=ResumeListResponse, status_code=status.HTTP_200_OK)
-async def list_resumes_endpoint(user_id: int, db: Session = Depends(get_db)):
+async def list_resumes_endpoint(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     resumes = list_resumes(db, user_id)
     return ResumeListResponse(
         list=[_serialize_resume(resume) for resume in resumes],
@@ -73,7 +83,13 @@ async def list_resumes_endpoint(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/resumes/analyze", response_model=ResumeAnalyzeResponse, status_code=status.HTTP_200_OK)
-async def analyze_resume_endpoint(request: ResumeAnalyzeRequest, db: Session = Depends(get_db)):
+async def analyze_resume_endpoint(
+    request: ResumeAnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if request.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if not request.job_description.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description is required")
     analysis = await analyze_resume(db, request.user_id, request.resume_id, request.job_description)
@@ -81,7 +97,13 @@ async def analyze_resume_endpoint(request: ResumeAnalyzeRequest, db: Session = D
 
 
 @router.get("/resumes/history/{user_id}", response_model=ResumeHistoryResponse, status_code=status.HTTP_200_OK)
-async def resume_history_endpoint(user_id: int, db: Session = Depends(get_db)):
+async def resume_history_endpoint(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     history = list_history(db, user_id)
     return ResumeHistoryResponse(
         list=[_serialize_analysis(item) for item in history],
@@ -90,7 +112,13 @@ async def resume_history_endpoint(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/dashboard/{user_id}", response_model=ResumeDashboardResponse, status_code=status.HTTP_200_OK)
-async def resume_dashboard_endpoint(user_id: int, db: Session = Depends(get_db)):
+async def resume_dashboard_endpoint(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     dashboard = build_dashboard(db, user_id)
     latest = dashboard.get("latest_analysis")
     return ResumeDashboardResponse(
@@ -101,7 +129,12 @@ async def resume_dashboard_endpoint(user_id: int, db: Session = Depends(get_db))
 
 
 @router.delete("/resumes/{user_id}/{resume_id}", status_code=status.HTTP_200_OK)
-async def delete_resume_endpoint(user_id: int, resume_id: str, db: Session = Depends(get_db)):
+async def delete_resume_endpoint(
+    user_id: int,
+    resume_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Delete a resume and all associated data.
     
@@ -110,5 +143,7 @@ async def delete_resume_endpoint(user_id: int, resume_id: str, db: Session = Dep
     - All analysis records for this resume
     - All vector embeddings for this resume
     """
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     delete_resume(db, user_id, resume_id)
     return {"message": "Resume deleted successfully", "resume_id": resume_id}
