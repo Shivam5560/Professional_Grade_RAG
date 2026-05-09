@@ -26,7 +26,7 @@ export function HistoryTable({ jobs }: Props) {
         {jobs.map((job) => (
           <TableRow key={job.job_id}>
             <TableCell className="max-w-xs truncate" title={job.query}>{job.query}</TableCell>
-            <TableCell>{job.progress_events[0]?.payload?.source_type || 'unknown'}</TableCell>
+            <TableCell>{(job.progress_events[0]?.payload?.source_type as string) || 'unknown'}</TableCell>
             <TableCell>
               <Badge variant={job.status === 'completed' ? 'default' : 'secondary'}>{job.status}</Badge>
             </TableCell>

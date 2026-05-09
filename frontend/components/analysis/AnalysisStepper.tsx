@@ -17,7 +17,7 @@ interface Props {
   status: string;
 }
 
-export function AnalysisStepper({ currentStep, status }: Props) {
+export function AnalysisStepper({ currentStep, status: _status }: Props) {
   return (
     <div className="space-y-4">
       {STEPS.map((step, idx) => (

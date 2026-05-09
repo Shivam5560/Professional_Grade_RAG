@@ -642,6 +642,62 @@ class ApiClient {
     return this.request<PingResponse>('/health/ping');
   }
 
+  // ── Analysis Methods ────────────────────────────────────
+  async uploadAnalysisFile(file: File): Promise<{ source_id: string; filename: string; rows: number; columns: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const doUpload = async () => {
+      const response = await fetch(`${BASE_PATH}/analysis/upload`, {
+        method: 'POST',
+        headers: {
+          ...this.getAuthHeaders(),
+        },
+        body: formData,
+      });
+      return response;
+    };
+
+    let response = await doUpload();
+
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        response = await doUpload();
+      }
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(error.message || error.detail || 'Upload failed');
+    }
+
+    return response.json();
+  }
+
+  async startAnalysisFromUpload(payload: {
+    source_id: string;
+    query: string;
+    config: Record<string, unknown>;
+  }): Promise<{ job_id: string; status: string }> {
+    return this.request<{ job_id: string; status: string }>('/analysis/from-upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listAnalysisJobs(): Promise<{ jobs: Array<Record<string, unknown>>; total: number }> {
+    return this.request<{ jobs: Array<Record<string, unknown>>; total: number }>('/analysis');
+  }
+
+  async cancelAnalysisJob(jobId: string): Promise<void> {
+    await this.request<void>(`/analysis/${jobId}/cancel`, { method: 'POST' });
+  }
+
+  async getAnalysisReport(jobId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/analysis/${jobId}/report`);
+  }
+
   // ── ResumeGen Methods ────────────────────────────────────
   async checkResumeGenHealth(): Promise<ResumeGenHealthResponse> {
     return this.request<ResumeGenHealthResponse>('/resumegen/health');

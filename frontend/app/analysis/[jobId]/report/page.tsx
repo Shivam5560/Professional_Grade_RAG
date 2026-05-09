@@ -1,9 +1,11 @@
 'use client';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Header } from '@/components/layout/Header';
 import { Report } from '@/lib/analysis/types';
 import { ReportToolbar } from '@/components/analysis/ReportToolbar';
 import { InsightCard } from '@/components/analysis/InsightCard';
+import { apiClient } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ReportViewerPage() {
@@ -12,31 +14,40 @@ export default function ReportViewerPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/v1/analysis/${jobId}/report`)
-      .then((res) => res.json())
+    apiClient.getAnalysisReport(jobId)
       .then((data) => {
-        setReport(data);
+        setReport(data as unknown as Report);
         setLoading(false);
       });
   }, [jobId]);
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto py-8 px-4 space-y-6">
+      <div className="min-h-screen bg-background text-foreground">
+        <Header />
+        <div className="max-w-5xl mx-auto py-8 px-4 space-y-6">
         <Skeleton className="h-8 w-1/3" />
         <Skeleton className="h-32 w-full" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
         </div>
+        </div>
       </div>
     );
   }
 
-  if (!report) return <p>Report not found.</p>;
+  if (!report) return (
+    <div className="min-h-screen bg-background text-foreground">
+      <Header />
+      <p className="max-w-5xl mx-auto py-8 px-4">Report not found.</p>
+    </div>
+  );
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4">
+    <div className="min-h-screen bg-background text-foreground">
+      <Header />
+      <div className="max-w-5xl mx-auto py-8 px-4">
       <ReportToolbar jobId={jobId} />
       <div className="mt-6 space-y-8">
         <div className="bg-card rounded-lg p-6 shadow-sm">
@@ -49,6 +60,7 @@ export default function ReportViewerPage() {
             <InsightCard key={insight.insight_id} insight={insight} />
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

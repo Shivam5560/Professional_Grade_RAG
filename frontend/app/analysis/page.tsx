@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Header } from '@/components/layout/Header';
 import { FileDropzone } from '@/components/analysis/FileDropzone';
 import { AnalysisConfigAccordion } from '@/components/analysis/AnalysisConfigAccordion';
 import { AnalysisConfig } from '@/lib/analysis/types';
+import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -23,25 +25,19 @@ export default function AnalysisHubPage() {
     setLoading(true);
 
     try {
-      // Step 1: Upload file
-      const uploadForm = new FormData();
-      uploadForm.append('file', file);
-
-      const uploadRes = await fetch('/api/v1/analysis/upload', {
-        method: 'POST',
-        body: uploadForm,
-      });
-      const uploadData = await uploadRes.json();
+      // Step 1: Upload file via ApiClient (backend at port 8000)
+      const uploadData = await apiClient.uploadAnalysisFile(file);
 
       if (!uploadData.source_id) {
-        throw new Error(uploadData.detail || 'Upload failed');
+        throw new Error('Upload failed');
       }
 
       // Step 2: Start analysis from uploaded file
-      const startRes = await fetch(`/api/v1/analysis/from-upload?source_id=${encodeURIComponent(uploadData.source_id)}&query=${encodeURIComponent(query)}&config=${encodeURIComponent(JSON.stringify(config))}`, {
-        method: 'POST',
+      const startData = await apiClient.startAnalysisFromUpload({
+        source_id: uploadData.source_id,
+        query: query,
+        config: config as unknown as Record<string, unknown>,
       });
-      const startData = await startRes.json();
 
       setLoading(false);
       if (startData.job_id) {
@@ -54,7 +50,9 @@ export default function AnalysisHubPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto py-12 px-4">
+    <div className="min-h-screen bg-background text-foreground">
+      <Header />
+      <div className="max-w-3xl mx-auto py-12 px-4">
       <h1 className="text-3xl font-bold mb-2">Data Analysis</h1>
       <p className="text-muted-foreground mb-8">Upload data, ask questions, get insights.</p>
 
@@ -74,6 +72,7 @@ export default function AnalysisHubPage() {
         <Button onClick={handleSubmit} disabled={!file || !query.trim() || loading} className="w-full">
           {loading ? 'Starting...' : 'Start Analysis'}
         </Button>
+      </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Badge } from '@/components/ui/badge';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
-import { MessageSquare, Database, Sparkles, ArrowRight, Loader2, FileText } from 'lucide-react';
+import { MessageSquare, Database, Sparkles, ArrowRight, Loader2, FileText, BarChart3 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 
@@ -24,6 +24,7 @@ export default function DashboardPage() {
     router.prefetch('/chat');
     router.prefetch('/aurasql');
     router.prefetch('/nexus');
+    router.prefetch('/analysis');
   }, [isMounted, isAuthenticated, router]);
 
   const handleNavigate = (path: string, label: string) => {
@@ -106,7 +107,7 @@ export default function DashboardPage() {
             <article className="lux-card sheen-border rounded-[30px] p-6 md:p-8 overflow-hidden min-h-[560px] md:min-h-[600px] lg:min-h-[620px]">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <Badge variant="outline" className="border-border/60">Tools</Badge>
-                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">4 Launchers</p>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">5 Launchers</p>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -154,6 +155,15 @@ export default function DashboardPage() {
                     tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
                     badge: 'PDF',
                     badge2: 'LaTeX',
+                  },
+                  {
+                    title: 'Data Analysis',
+                    description: 'Multi-agent analysis with statistical modeling and visual reports.',
+                    icon: BarChart3,
+                    path: '/analysis',
+                    tone: 'bg-[hsl(var(--chart-3)/0.12)] border-[hsl(var(--chart-3)/0.28)] text-[hsl(var(--chart-3))]',
+                    badge: 'ML',
+                    badge2: 'Insights',
                   },
                 ].map((tool) => (
                   <article

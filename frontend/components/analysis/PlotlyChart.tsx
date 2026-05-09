@@ -11,12 +11,12 @@ export function PlotlyChart({ chartJsonUrl }: Props) {
   useEffect(() => {
     let isMounted = true;
     async function render() {
-      const Plotly = await import('react-plotly.js');
+      const _Plotly = await import('react-plotly.js');
       if (!isMounted || !containerRef.current) return;
       try {
         const res = await fetch(chartJsonUrl);
-        const chartJson = await res.json();
-        // Plotly.newPlot(containerRef.current, chartJson.data, chartJson.layout);
+        const _chartJson = await res.json();
+        // _Plotly.newPlot(containerRef.current, _chartJson.data, _chartJson.layout);
       } catch {
         // fallback
       }

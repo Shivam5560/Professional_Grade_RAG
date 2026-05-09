@@ -2,10 +2,12 @@
 'use client';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Header } from '@/components/layout/Header';
 import { useAnalysisStore } from '@/lib/analysis/store';
 import { useAnalysisSocket } from '@/lib/analysis/useAnalysisSocket';
 import { AnalysisStepper } from '@/components/analysis/AnalysisStepper';
 import { LivePreview } from '@/components/analysis/LivePreview';
+import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
 export default function AnalysisProgressPage() {
@@ -28,12 +30,14 @@ export default function AnalysisProgressPage() {
   }, [progressEvents, currentStep]);
 
   const handleCancel = async () => {
-    await fetch(`/api/v1/analysis/${jobId}/cancel`, { method: 'POST' });
+    await apiClient.cancelAnalysisJob(jobId);
     reset();
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="min-h-screen bg-background text-foreground">
+      <Header />
+      <div className="max-w-6xl mx-auto py-8 px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
       <div className="md:col-span-1 space-y-6">
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${jobStatus === 'running' ? 'bg-blue-100 text-blue-800' : jobStatus === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
@@ -45,6 +49,7 @@ export default function AnalysisProgressPage() {
       </div>
       <div className="md:col-span-2">
         <LivePreview events={progressEvents} />
+      </div>
       </div>
     </div>
   );
