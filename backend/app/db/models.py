@@ -236,3 +236,77 @@ class NexusResumeAnalysis(Base):
 
     resume = relationship("NexusResumeFile", back_populates="analyses")
     user = relationship("User")
+
+
+class AnalysisJob(Base):
+    """Data analysis jobs for the Analysis module."""
+    __tablename__ = "analysis_jobs_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued")
+    source_type = Column(String(20), nullable=False)
+    source_id = Column(String(255), nullable=False)
+    query = Column(Text, nullable=False)
+    config = Column(JSON, nullable=False, default=dict)
+    progress_events = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    user = relationship("User")
+    reports = relationship("AnalysisReport", back_populates="job", cascade="all, delete-orphan")
+    chart_assets = relationship("AnalysisChartAsset", back_populates="job", cascade="all, delete-orphan")
+    workflow_states = relationship("AnalysisWorkflowState", back_populates="job", cascade="all, delete-orphan")
+
+
+class AnalysisReport(Base):
+    """Generated reports for analysis jobs."""
+    __tablename__ = "analysis_reports_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("analysis_jobs_nexus_rag.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    narrative = Column(Text, nullable=True)
+    sections = Column(JSON, default=list)
+    insights = Column(JSON, default=list)
+    design_spec = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    job = relationship("AnalysisJob", back_populates="reports")
+    user = relationship("User")
+
+
+class AnalysisChartAsset(Base):
+    """Chart assets generated during analysis."""
+    __tablename__ = "analysis_chart_assets_nexus_rag"
+
+    id = Column(String, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("analysis_jobs_nexus_rag.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    chart_type = Column(String(50), nullable=True)
+    mime_type = Column(String(50), nullable=False, default="image/png")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    job = relationship("AnalysisJob", back_populates="chart_assets")
+    user = relationship("User")
+
+
+class AnalysisWorkflowState(Base):
+    """Checkpointed workflow states for analysis jobs."""
+    __tablename__ = "analysis_workflow_states_nexus_rag"
+
+    workflow_id = Column(String, primary_key=True, index=True)
+    job_id = Column(String, ForeignKey("analysis_jobs_nexus_rag.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users_nexus_rag.id"), nullable=False, index=True)
+    step_name = Column(String(50), nullable=False)
+    state_json = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    job = relationship("AnalysisJob", back_populates="workflow_states")
+    user = relationship("User")

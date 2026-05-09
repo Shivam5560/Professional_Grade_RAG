@@ -122,7 +122,25 @@ class Settings(BaseSettings):
     # PageIndex / Think Mode Configuration
     pageindex_max_pages_per_chunk: int = Field(default=15, alias="PAGEINDEX_MAX_PAGES_PER_CHUNK")
     pageindex_auto_generate: bool = Field(default=False, alias="PAGEINDEX_AUTO_GENERATE")  # Auto-generate trees on PDF upload
-    
+
+    # Data Analysis Configuration
+    analysis_max_rows: int = Field(default=50000, alias="ANALYSIS_MAX_ROWS")
+    analysis_max_file_size_mb: int = Field(default=50, alias="ANALYSIS_MAX_FILE_SIZE_MB")
+    analysis_workflow_timeout: int = Field(default=900, alias="ANALYSIS_WORKFLOW_TIMEOUT")
+    analysis_subworkflow_timeout: int = Field(default=300, alias="ANALYSIS_SUBWORKFLOW_TIMEOUT")
+    analysis_upload_dir: str = Field(default="./data/analysis_uploads", alias="ANALYSIS_UPLOAD_DIR")
+    analysis_chart_dir: str = Field(default="./data/analysis_charts", alias="ANALYSIS_CHART_DIR")
+    analysis_slide_dir: str = Field(default="./data/analysis_slides", alias="ANALYSIS_SLIDE_DIR")
+    analysis_allowed_extensions: List[str] = Field(
+        default=[".csv", ".xlsx", ".parquet", ".json"],
+        alias="ANALYSIS_ALLOWED_EXTENSIONS",
+    )
+    analysis_llm_token_budget: int = Field(default=8000, alias="ANALYSIS_LLM_TOKEN_BUDGET")
+    analysis_llm_max_retries: int = Field(default=3, alias="ANALYSIS_LLM_MAX_RETRIES")
+    analysis_circuit_breaker_threshold: int = Field(default=5, alias="ANALYSIS_CIRCUIT_BREAKER_THRESHOLD")
+    analysis_rate_limit_per_minute: int = Field(default=10, alias="ANALYSIS_RATE_LIMIT_PER_MINUTE")
+    analysis_storage_backend: str = Field(default="local", alias="ANALYSIS_STORAGE_BACKEND")
+
     # Confidence Scoring Weights
     # Increased retrieval weight since it's the most reliable signal
     weight_retrieval: float = Field(default=0.55, alias="WEIGHT_RETRIEVAL")
