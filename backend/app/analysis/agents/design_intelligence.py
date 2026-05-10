@@ -7,6 +7,7 @@ slide generator engine.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List
 
 from app.analysis.base import BaseAnalysisAgent
@@ -47,6 +48,56 @@ TYPE_TOKENS = {
     "Arial Black":      "Heavy impact sans-serif — good for hero titles and stat callouts.",
 }
 
+TEMPLATE_STYLES: Dict[str, str] = {
+    "aurora": "Dark, cinematic gradients with geometric depth. Best for tech/innovation.",
+    "editorial": "Light, magazine-like layout with serif headings and strong hierarchy.",
+    "minimal": "Whitespace-forward, thin rules, restrained palette. Great for executive briefings.",
+    "bold": "High-contrast color blocks, energetic emphasis, big stat moments.",
+}
+
+THEME_TEMPLATE_DEFAULT: Dict[str, str] = {
+    "finance": "editorial",
+    "healthcare": "minimal",
+    "sales": "bold",
+    "tech": "aurora",
+    "executive": "minimal",
+    "generic": "editorial",
+}
+
+THEME_TEMPLATE_OPTIONS: Dict[str, List[str]] = {
+    "finance": ["editorial", "minimal", "aurora"],
+    "healthcare": ["minimal", "editorial"],
+    "sales": ["bold", "aurora", "editorial"],
+    "tech": ["aurora", "bold", "minimal"],
+    "executive": ["minimal", "editorial"],
+    "generic": ["editorial", "minimal", "aurora", "bold"],
+}
+
+THEME_MOTIF_DEFAULT: Dict[str, str] = {
+    "finance": "grid",
+    "healthcare": "rings",
+    "sales": "diagonal",
+    "tech": "dots",
+    "executive": "line",
+    "generic": "grid",
+}
+
+THEME_MOTIF_OPTIONS: Dict[str, List[str]] = {
+    "finance": ["grid", "line", "rings"],
+    "healthcare": ["rings", "line", "dots"],
+    "sales": ["diagonal", "dots", "grid"],
+    "tech": ["dots", "grid", "diagonal"],
+    "executive": ["line", "grid", "rings"],
+    "generic": ["grid", "rings", "diagonal", "dots", "line"],
+}
+
+STYLE_TYPOGRAPHY: Dict[str, Dict[str, str]] = {
+    "aurora": {"title_font": "Trebuchet MS", "body_font": "Calibri", "stat_font": "Arial Black"},
+    "editorial": {"title_font": "Georgia", "body_font": "Calibri", "stat_font": "Arial Black"},
+    "minimal": {"title_font": "Calibri Light", "body_font": "Calibri", "stat_font": "Calibri"},
+    "bold": {"title_font": "Arial Black", "body_font": "Arial", "stat_font": "Arial Black"},
+}
+
 
 SYSTEM_PROMPT = """You are a senior creative director and presentation designer. Given a dataset profile and analytical insights, produce a comprehensive design brief for a data storytelling presentation.
 
@@ -58,6 +109,8 @@ Design a visual narrative that guides the audience through the data story. Consi
 3. **Hierarchy**: Which insights deserve hero treatment? Which are supporting evidence?
 4. **Rhythm**: Alternate between dense information slides and visual breathers.
 5. **Typography**: Font choices affect perceived credibility. Match to the domain.
+6. **Template variety**: Do not always choose the safest default. Pick a template family that gives the deck a distinct visual point of view.
+7. **Theme-prone visuals**: Chart specs must carry the same palette, typography, and mood as the slide deck so exported chart images feel native to the presentation.
 
 ## Available Design Tokens
 
@@ -80,13 +133,22 @@ Chart types mapped to analytical intent:
 - area: volume / cumulative trends
 - violin: distribution shape comparison
 
-Slide structure options (ordered list):
+Slide structure options (ordered list; this is a recommendation, not a fixed slide count):
 - title: hero/cover slide
 - summary: executive summary with key numbers
 - insights: one big insight per slide with evidence
 - charts: embedded visualizations
 - recommendations: action-oriented next steps
 - closing: thank you / call to action
+
+Template style families (choose one):
+- aurora: dark cinematic gradients with geometric depth
+- editorial: light magazine-like layouts with serif titles
+- minimal: whitespace-forward with subtle accents
+- bold: high-contrast color blocks and strong emphasis
+
+Visual motifs (choose one):
+- grid, rings, diagonal, dots, line
 
 ## Response Format
 
@@ -97,15 +159,18 @@ Respond ONLY with a valid JSON object — no markdown, no backticks:
   "color_palette": ["#1f4e79", "#2e75b5", "#70ad47", "#ffc000"],
   "layout": "slides",
   "slide_structure": ["title", "summary", "insights", "charts", "recommendations", "closing"],
-  "mood_description": "A confident, data-rich narrative that builds from macro context to specific recommendations. The palette conveys institutional trust with energy accents.",
   "typography": {
-    "title_font": "Calibri",
+    "title_font": "Georgia",
     "body_font": "Calibri",
     "stat_font": "Arial Black"
   },
+  "template_style": "editorial",
+  "visual_motif": "grid",
   "slide_density": "medium",
   "animation_hint": "minimal",
   "storytelling_arc": "Context → Discovery → Evidence → Action",
+  "design_principle": "Less is more — let data breathe. Use white space as a design element. One message per slide.",
+  "mood_description": "Confident, structured, and executive-ready with quiet authority.",
   "chart_specs": [
     {
       "chart_id": "c1",
@@ -114,19 +179,26 @@ Respond ONLY with a valid JSON object — no markdown, no backticks:
       "y_column": "revenue",
       "title": "Revenue by Region",
       "highlight_insight": true,
-      "narrative_role": "Establishes geographic performance baseline"
+      "narrative_role": "Establishes geographic performance baseline",
+      "colors": ["#1f4e79", "#2e75b5", "#70ad47", "#ffc000"],
+      "template_style": "editorial",
+      "visual_motif": "grid",
+      "theme": "finance"
     }
-  ],
-  "design_principle": "Less is more — let data breathe. Use white space as a design element. One message per slide."
+  ]
 }
 
 Rules:
 - color_palette must have exactly 4 hex colors with # prefix
-- slide_structure must be ordered and use only: title, summary, insights, charts, recommendations, closing
+- slide_structure must be ordered and use only: title, summary, insights, charts, recommendations, closing; the PPTX generator will still decide final slide count from content depth
 - slide_density must be: minimal, medium, or rich
 - animation_hint must be: none, minimal, or moderate
-- storytelling_arc should be a 3-5 word narrative framing
+- storytelling_arc should be 3-5 short phases separated by →, for example: Context → Discovery → Evidence → Action
+- template_style must be one of: aurora, editorial, minimal, bold
+- visual_motif must be one of: grid, rings, diagonal, dots, line
+- Choose different template_style/visual_motif combinations when the domain, query, or dataset shape calls for a different deck personality
 - Each chart_spec must include narrative_role explaining its purpose in the story
+- Each chart_spec should include colors, template_style, visual_motif, and theme so chart images match the deck
 - Limit to top 8 most impactful insights (for chart specs)
 """
 
@@ -174,16 +246,37 @@ Assign chart types to insights based on their analytical intent."""
         try:
             data = await self._call_llm(prompt, SYSTEM_PROMPT)
 
-            theme = data.get("theme", "generic")
-            palette = data.get("color_palette") or DEFAULT_PALETTES.get(theme, DEFAULT_PALETTES["generic"])
+            theme = _normalize_theme(str(data.get("theme", "generic")))
+            palette = _normalize_palette(data.get("color_palette"), theme)
             layout = data.get("layout", "slides")
             chart_specs = data.get("chart_specs", [])
             slide_structure = data.get("slide_structure", ["title", "summary", "insights", "charts", "recommendations", "closing"])
             typography = data.get("typography", {})
             slide_density = data.get("slide_density", "medium")
+            if _query_requests_depth(query):
+                slide_density = "rich"
             animation_hint = data.get("animation_hint", "minimal")
             storytelling_arc = data.get("storytelling_arc", "")
             design_principle = data.get("design_principle", "")
+            mood_description = data.get("mood_description", "")
+            context_key = _context_key(query, profile, insight_texts)
+            template_style = (data.get("template_style") or "").lower()
+            if template_style not in TEMPLATE_STYLES:
+                template_style = _choose_varied(THEME_TEMPLATE_OPTIONS, THEME_TEMPLATE_DEFAULT, theme, context_key)
+
+            visual_motif = (data.get("visual_motif") or "").lower()
+            if visual_motif not in {"grid", "rings", "diagonal", "dots", "line"}:
+                visual_motif = _choose_varied(THEME_MOTIF_OPTIONS, THEME_MOTIF_DEFAULT, theme, context_key, salt="motif")
+
+            typography = _normalize_typography(typography, template_style)
+
+            for spec in chart_specs:
+                if isinstance(spec, dict):
+                    spec.setdefault("colors", palette)
+                    spec.setdefault("template_style", template_style)
+                    spec.setdefault("visual_motif", visual_motif)
+                    spec.setdefault("theme", theme)
+                    spec.setdefault("typography", typography)
 
             logger.log_operation(
                 "Design spec generated",
@@ -201,6 +294,11 @@ Assign chart types to insights based on their analytical intent."""
                 typography=typography,
                 slide_density=slide_density,
                 animation_hint=animation_hint,
+                storytelling_arc=storytelling_arc,
+                design_principle=design_principle,
+                mood_description=mood_description,
+                template_style=template_style,
+                visual_motif=visual_motif,
             )
         except Exception as exc:
             logger.log_error("Design generation failed", exc)
@@ -234,11 +332,60 @@ def _infer_domain(columns: List[Any]) -> str:
     return f"generic ({THEME_DOMAIN_HINTS['generic']})"
 
 
+def _context_key(query: str, profile: Dict[str, Any], insight_texts: str) -> str:
+    columns = profile.get("columns", [])
+    raw = f"{query}|{profile.get('row_count')}|{columns}|{insight_texts[:500]}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def _normalize_theme(theme: str) -> str:
+    theme = theme.lower().strip()
+    return theme if theme in THEME_DOMAIN_HINTS else "generic"
+
+
+def _normalize_palette(palette: Any, theme: str) -> List[str]:
+    default = DEFAULT_PALETTES.get(theme, DEFAULT_PALETTES["generic"])
+    if not isinstance(palette, list):
+        return default
+    cleaned = [str(c) for c in palette if isinstance(c, str) and c.startswith("#") and len(c) == 7]
+    return (cleaned + default)[:4]
+
+
+def _choose_varied(
+    options_by_theme: Dict[str, List[str]],
+    defaults_by_theme: Dict[str, str],
+    theme: str,
+    context_key: str,
+    salt: str = "style",
+) -> str:
+    options = options_by_theme.get(theme) or [defaults_by_theme.get(theme, defaults_by_theme["generic"])]
+    idx = int(hashlib.sha1(f"{salt}:{context_key}".encode("utf-8")).hexdigest()[:8], 16) % len(options)
+    return options[idx]
+
+
+def _normalize_typography(typography: Dict[str, Any], template_style: str) -> Dict[str, str]:
+    defaults = STYLE_TYPOGRAPHY.get(template_style, STYLE_TYPOGRAPHY["editorial"])
+    return {
+        "title_font": str(typography.get("title_font") or defaults["title_font"]),
+        "body_font": str(typography.get("body_font") or defaults["body_font"]),
+        "stat_font": str(typography.get("stat_font") or defaults["stat_font"]),
+    }
+
+
+def _query_requests_depth(query: str) -> bool:
+    q = query.lower()
+    return any(token in q for token in ("detailed", "comprehensive", "deep", "storytelling", "slides", "ppt", "presentation"))
+
+
 def _fallback_design(numeric: List[str], categorical: List[str], profile: Dict[str, Any]) -> DesignSpec:
     """Generate a sensible design fallback from the dataset profile."""
     domain = _infer_domain(profile.get("columns", []))
-    theme = domain.split(" ")[0] if domain else "generic"
+    theme = _normalize_theme(domain.split(" ")[0] if domain else "generic")
     palette = DEFAULT_PALETTES.get(theme, DEFAULT_PALETTES["generic"])
+    context_key = _context_key("", profile, "")
+    template_style = _choose_varied(THEME_TEMPLATE_OPTIONS, THEME_TEMPLATE_DEFAULT, theme, context_key)
+    visual_motif = _choose_varied(THEME_MOTIF_OPTIONS, THEME_MOTIF_DEFAULT, theme, context_key, salt="motif")
+    typography = _normalize_typography({}, template_style)
 
     specs = []
     if numeric and categorical:
@@ -248,6 +395,11 @@ def _fallback_design(numeric: List[str], categorical: List[str], profile: Dict[s
             "title": f"{numeric[0]} by {categorical[0]}",
             "highlight_insight": True,
             "narrative_role": "Baseline comparison across categories",
+            "colors": palette,
+            "template_style": template_style,
+            "visual_motif": visual_motif,
+            "theme": theme,
+            "typography": typography,
         })
     if len(numeric) >= 2:
         specs.append({
@@ -255,6 +407,11 @@ def _fallback_design(numeric: List[str], categorical: List[str], profile: Dict[s
             "title": "Correlation Matrix",
             "highlight_insight": False,
             "narrative_role": "Relationship overview between numeric variables",
+            "colors": palette,
+            "template_style": template_style,
+            "visual_motif": visual_motif,
+            "theme": theme,
+            "typography": typography,
         })
     if len(numeric) >= 1:
         specs.append({
@@ -262,6 +419,11 @@ def _fallback_design(numeric: List[str], categorical: List[str], profile: Dict[s
             "x_column": numeric[0], "title": f"Distribution of {numeric[0]}",
             "highlight_insight": False,
             "narrative_role": "Data distribution and outlier visibility",
+            "colors": palette,
+            "template_style": template_style,
+            "visual_motif": visual_motif,
+            "theme": theme,
+            "typography": typography,
         })
 
     return DesignSpec(
@@ -270,7 +432,12 @@ def _fallback_design(numeric: List[str], categorical: List[str], profile: Dict[s
         layout="slides",
         chart_specs=specs,
         slide_structure=["title", "summary", "insights", "charts", "recommendations", "closing"],
-        typography={"title_font": "Calibri", "body_font": "Calibri", "stat_font": "Arial Black"},
+        typography=typography,
         slide_density="medium",
         animation_hint="minimal",
+        storytelling_arc="Context → Discovery → Evidence → Action",
+        design_principle="One insight per slide with breathing room.",
+        mood_description="Clear, structured, and professional.",
+        template_style=template_style,
+        visual_motif=visual_motif,
     )

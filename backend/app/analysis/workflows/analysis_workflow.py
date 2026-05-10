@@ -245,6 +245,15 @@ class AnalysisWorkflow:
                 "theme": design_state.get("theme", "generic"),
                 "color_palette": design_state.get("color_palette", []),
                 "layout": design_state.get("layout", "grid"),
+                "slide_structure": design_state.get("slide_structure", []),
+                "typography": design_state.get("typography", {}),
+                "slide_density": design_state.get("slide_density", "medium"),
+                "animation_hint": design_state.get("animation_hint", "minimal"),
+                "storytelling_arc": design_state.get("storytelling_arc", ""),
+                "design_principle": design_state.get("design_principle", ""),
+                "mood_description": design_state.get("mood_description", ""),
+                "template_style": design_state.get("template_style", ""),
+                "visual_motif": design_state.get("visual_motif", ""),
             },
         )
 
@@ -381,6 +390,11 @@ class AnalysisWorkflow:
             "typography": design.typography,
             "slide_density": design.slide_density,
             "animation_hint": design.animation_hint,
+            "storytelling_arc": design.storytelling_arc,
+            "design_principle": design.design_principle,
+            "mood_description": design.mood_description,
+            "template_style": design.template_style,
+            "visual_motif": design.visual_motif,
         })
 
     async def _step_compose(self, source_id: str, max_rows: int) -> None:
@@ -391,19 +405,36 @@ class AnalysisWorkflow:
 
         df = DatasetCache.get_or_load(source_id, str(self.user_id), max_rows=max_rows)
         chart_specs = design_data.get("chart_specs", [])
+        for spec in chart_specs:
+            if isinstance(spec, dict):
+                spec.setdefault("colors", design_data.get("color_palette", []))
+                spec.setdefault("theme", design_data.get("theme", "generic"))
+                spec.setdefault("template_style", design_data.get("template_style", "editorial"))
+                spec.setdefault("visual_motif", design_data.get("visual_motif", "grid"))
+                spec.setdefault("typography", design_data.get("typography", {}))
         chart_paths = generate_charts(chart_specs, df, self.job_id)
 
         summary = narr_data.get("summary", "Untitled Analysis")
-        title = summary[:80] + "..." if len(summary) > 80 else summary
+        ctx_data = self.checkpoint_store.get_step_state(self.job_id, "build_context") or {}
+        profile = ctx_data.get("profile", {})
+        job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
+        title = _derive_report_title(job.query if job else "", summary, profile)
 
         design_spec = {
             "theme": design_data.get("theme", "generic"),
             "color_palette": design_data.get("color_palette", []),
             "layout": design_data.get("layout", "grid"),
+            "chart_specs": chart_specs,
             "slide_structure": design_data.get("slide_structure", []),
             "typography": design_data.get("typography", {}),
             "slide_density": design_data.get("slide_density", "medium"),
             "animation_hint": design_data.get("animation_hint", "minimal"),
+            "storytelling_arc": design_data.get("storytelling_arc", ""),
+            "design_principle": design_data.get("design_principle", ""),
+            "mood_description": design_data.get("mood_description", ""),
+            "subtitle": _derive_report_subtitle(summary),
+            "template_style": design_data.get("template_style", ""),
+            "visual_motif": design_data.get("visual_motif", ""),
         }
 
         report = build_and_save_report(
@@ -466,6 +497,33 @@ class AnalysisWorkflow:
 # ------------------------------------------------------------------
 # Entry point (background-thread-safe)
 # ------------------------------------------------------------------
+
+def _derive_report_title(query: str, summary: str, profile: Dict[str, Any]) -> str:
+    """Create a concise deck title instead of using the full executive summary."""
+    columns = " ".join(str(c) for c in profile.get("columns", [])).lower()
+    q = query.lower()
+    if "default.payment.next.month" in columns or ("credit" in q and "default" in q):
+        return "Credit Card Default Risk Analysis"
+    if any(token in columns or token in q for token in ("revenue", "profit", "cost", "roi", "financial")):
+        return "Financial Performance Analysis"
+    if any(token in columns or token in q for token in ("patient", "clinical", "diagnosis", "treatment")):
+        return "Healthcare Data Analysis"
+    if any(token in columns or token in q for token in ("sales", "customer", "conversion", "churn")):
+        return "Customer and Sales Analysis"
+
+    first_sentence = (summary or "").strip().split(". ")[0].strip()
+    if first_sentence and len(first_sentence) <= 70:
+        return first_sentence
+    return "Data Analysis Report"
+
+
+def _derive_report_subtitle(summary: str) -> str:
+    first_sentence = (summary or "").strip().split(". ")[0].strip()
+    if not first_sentence:
+        return "Patterns, evidence, and recommendations from the dataset."
+    if len(first_sentence) > 155:
+        first_sentence = first_sentence[:152].rstrip() + "..."
+    return first_sentence if first_sentence.endswith(".") else f"{first_sentence}."
 
 def run_analysis_workflow(
     db: Session,

@@ -5,9 +5,10 @@ Saves, restores, and queries workflow step states for crash recovery.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.db.models import AnalysisWorkflowState
 from app.utils.logger import get_logger
@@ -17,6 +18,17 @@ logger = get_logger(__name__)
 
 class WorkflowCheckpointStore:
     """Serializes workflow context to PostgreSQL after every step."""
+
+    STEP_ORDER = [
+        "build_context",
+        "decompose",
+        "plan_strategy",
+        "dispatch_execution",
+        "prioritize_insights",
+        "generate_narrative",
+        "design",
+        "compose",
+    ]
 
     def __init__(self, db: Session):
         self.db = db
@@ -30,9 +42,10 @@ class WorkflowCheckpointStore:
         state_dict: dict,
     ) -> None:
         """Save or update a workflow checkpoint."""
+        checkpoint_id = self._checkpoint_id(workflow_id, step_name)
         existing = (
             self.db.query(AnalysisWorkflowState)
-            .filter(AnalysisWorkflowState.workflow_id == workflow_id)
+            .filter(AnalysisWorkflowState.workflow_id == checkpoint_id)
             .first()
         )
         if existing:
@@ -40,7 +53,7 @@ class WorkflowCheckpointStore:
             existing.state_json = state_dict
         else:
             state = AnalysisWorkflowState(
-                workflow_id=workflow_id,
+                workflow_id=checkpoint_id,
                 job_id=job_id,
                 user_id=user_id,
                 step_name=step_name,
@@ -52,75 +65,72 @@ class WorkflowCheckpointStore:
 
     def load_latest_checkpoint(self, workflow_id: str) -> Optional[Dict[str, Any]]:
         """Load the latest checkpoint for a workflow."""
-        row = (
-            self.db.query(AnalysisWorkflowState)
-            .filter(AnalysisWorkflowState.workflow_id == workflow_id)
-            .first()
-        )
+        rows = self._rows_for_workflow(workflow_id)
+        row = self._latest_row(rows)
         return row.state_json if row else None
 
     def get_completed_steps(self, workflow_id: str) -> Set[str]:
         """Return set of step names already completed."""
-        row = (
-            self.db.query(AnalysisWorkflowState)
-            .filter(AnalysisWorkflowState.workflow_id == workflow_id)
-            .first()
-        )
-        if not row or not row.state_json:
+        rows = self._rows_for_workflow(workflow_id)
+        if not rows:
             return set()
 
-        step_name = row.step_name
-        if not step_name:
-            return set()
-
-        # The state_json stores the LAST completed step.
-        # We return all steps up to and including it.
-        STEP_ORDER = [
-            "build_context",
-            "decompose",
-            "plan_strategy",
-            "dispatch_execution",
-            "prioritize_insights",
-            "generate_narrative",
-            "design",
-            "compose",
-        ]
-        try:
-            idx = STEP_ORDER.index(step_name)
-            return set(STEP_ORDER[:idx + 1])
-        except ValueError:
-            return {step_name}
+        completed = {row.step_name for row in rows if row.step_name and row.state_json}
+        # Backward compatibility for old single-row checkpoints that only stored
+        # the latest step: those cannot recover older state payloads, but they can
+        # still report progress up to that step.
+        if len(rows) == 1 and rows[0].workflow_id == workflow_id and rows[0].step_name in self.STEP_ORDER:
+            idx = self.STEP_ORDER.index(rows[0].step_name)
+            return set(self.STEP_ORDER[:idx + 1])
+        return completed
 
     def get_step_state(self, workflow_id: str, step_name: str) -> Optional[Dict[str, Any]]:
         """Return saved state for a specific step. Returns None if not completed."""
-        completed = self.get_completed_steps(workflow_id)
-        if step_name not in completed:
-            return None
         row = (
             self.db.query(AnalysisWorkflowState)
-            .filter(AnalysisWorkflowState.workflow_id == workflow_id)
-            .first()
-        )
-        if not row:
-            return None
-
-        # The current model only stores the latest step's state.
-        # For recovery, we return the full state_json if the step matches.
-        if row.step_name == step_name:
-            return row.state_json
-
-        # For earlier steps, we'd need multi-row storage. For now,
-        # return None and let caller use fallback — the multi-row
-        # upgrade is tracked as a follow-up enhancement.
-        return None if step_name != row.step_name else row.state_json
-
-    def delete_checkpoint(self, workflow_id: str) -> None:
-        """Delete a workflow checkpoint."""
-        row = (
-            self.db.query(AnalysisWorkflowState)
-            .filter(AnalysisWorkflowState.workflow_id == workflow_id)
+            .filter(AnalysisWorkflowState.workflow_id == self._checkpoint_id(workflow_id, step_name))
             .first()
         )
         if row:
+            return row.state_json
+
+        # Backward compatibility for old single-row checkpoints.
+        legacy = (
+            self.db.query(AnalysisWorkflowState)
+            .filter(
+                AnalysisWorkflowState.workflow_id == workflow_id,
+                AnalysisWorkflowState.step_name == step_name,
+            )
+            .first()
+        )
+        return legacy.state_json if legacy else None
+
+    def delete_checkpoint(self, workflow_id: str) -> None:
+        """Delete a workflow checkpoint."""
+        rows = self._rows_for_workflow(workflow_id)
+        for row in rows:
             self.db.delete(row)
+        if rows:
             self.db.commit()
+
+    @staticmethod
+    def _checkpoint_id(workflow_id: str, step_name: str) -> str:
+        return f"{workflow_id}:{step_name}"
+
+    def _rows_for_workflow(self, workflow_id: str) -> List[AnalysisWorkflowState]:
+        return (
+            self.db.query(AnalysisWorkflowState)
+            .filter(
+                or_(
+                    AnalysisWorkflowState.workflow_id == workflow_id,
+                    AnalysisWorkflowState.workflow_id.like(f"{workflow_id}:%"),
+                )
+            )
+            .all()
+        )
+
+    def _latest_row(self, rows: List[AnalysisWorkflowState]) -> Optional[AnalysisWorkflowState]:
+        if not rows:
+            return None
+        order = {step: idx for idx, step in enumerate(self.STEP_ORDER)}
+        return max(rows, key=lambda row: order.get(row.step_name, -1))

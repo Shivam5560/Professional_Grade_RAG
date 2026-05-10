@@ -98,6 +98,11 @@ class DesignSpec:
     typography: Dict[str, Any] = field(default_factory=dict)
     slide_density: str = "medium"
     animation_hint: str = "minimal"
+    mood_description: str = ""
+    storytelling_arc: str = ""
+    design_principle: str = ""
+    template_style: str = ""
+    visual_motif: str = ""
 
 
 @dataclass

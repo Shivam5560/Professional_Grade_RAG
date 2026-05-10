@@ -47,6 +47,15 @@ class DesignSpec(BaseModel):
     color_palette: List[str]
     layout: Literal["grid", "list", "slides"]
     chart_specs: List[Dict[str, Any]]
+    slide_structure: List[str] = Field(default_factory=list)
+    typography: Dict[str, Any] = Field(default_factory=dict)
+    slide_density: Literal["minimal", "medium", "rich"] = "medium"
+    animation_hint: Literal["none", "minimal", "moderate"] = "minimal"
+    mood_description: Optional[str] = None
+    storytelling_arc: Optional[str] = None
+    design_principle: Optional[str] = None
+    template_style: Optional[str] = None
+    visual_motif: Optional[str] = None
 
 
 class AnalysisConfig(BaseModel):
@@ -107,7 +116,7 @@ class AnalysisListResponse(BaseModel):
 
 
 class ChartSpec(BaseModel):
-    chart_type: Literal["bar", "line", "scatter", "histogram", "heatmap", "box", "pie"]
+    chart_type: Literal["bar", "line", "scatter", "histogram", "heatmap", "box", "pie", "area", "violin"]
     x_column: Optional[str] = None
     y_column: Optional[str] = None
     color_column: Optional[str] = None

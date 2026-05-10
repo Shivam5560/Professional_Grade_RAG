@@ -172,5 +172,6 @@ if __name__ == "__main__":
         host=settings.api_host,
         port=settings.api_port,
         reload=settings.api_reload,
+        reload_excludes=["data", "data/*", "data/**/*", "*.pptx", "*.png", "*.json"],
         log_level=settings.log_level.lower(),
     )

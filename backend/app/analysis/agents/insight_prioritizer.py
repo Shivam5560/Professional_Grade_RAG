@@ -61,6 +61,8 @@ Prioritize these insights."""
                 )
                 for idx, i in enumerate(data.get("insights", []))
             ]
+            if not insights:
+                insights = _fallback_insights(execution_result.results)
             logger.log_operation("Insights prioritized", count=len(insights))
             return InsightsPrioritizedResult(insights=insights)
         except Exception as exc:
