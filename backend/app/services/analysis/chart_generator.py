@@ -70,17 +70,19 @@ def create_chart(
 
     storage = get_chart_storage()
 
-    # Save JSON (always works)
+    # Save JSON (always works — for interactive rendering)
     json_path = storage.save_json(job_id, chart_id, json.loads(json.dumps(fig, cls=PlotlyJSONEncoder)))
 
-    # Save PNG (best-effort)
+    # Save PNG (for embedding in slides / reports)
+    png_path = None
     try:
         png_bytes = fig.to_image(format="png", width=1200, height=700, scale=2)
-        storage.save_png(job_id, chart_id, png_bytes)
+        png_path = storage.save_png(job_id, chart_id, png_bytes)
     except Exception as exc:
         logger.log_error("Chart PNG export failed", exc, chart_id=chart_id, job_id=job_id)
 
-    return json_path
+    # Return PNG path for embedding; fall back to JSON for interactive use
+    return png_path or json_path
 
 
 def _build_heatmap(df: pd.DataFrame, x_col: str | None, y_col: str | None, title: str) -> go.Figure:

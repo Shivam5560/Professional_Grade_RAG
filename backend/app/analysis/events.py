@@ -94,6 +94,10 @@ class DesignSpec:
     color_palette: List[str]
     layout: str
     chart_specs: List[Dict[str, Any]] = field(default_factory=list)
+    slide_structure: List[str] = field(default_factory=list)
+    typography: Dict[str, Any] = field(default_factory=dict)
+    slide_density: str = "medium"
+    animation_hint: str = "minimal"
 
 
 @dataclass

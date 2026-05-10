@@ -13,13 +13,28 @@ interface AnalysisState {
   reset: () => void;
 }
 
+// Track seen event keys to prevent duplicates
+const seenEventKeys = new Set<string>();
+
 export const useAnalysisStore = create<AnalysisState>((set) => ({
   activeJobId: null,
   jobStatus: 'idle',
   progressEvents: [],
   reportData: null,
-  startAnalysis: (jobId) => set({ activeJobId: jobId, jobStatus: 'queued', progressEvents: [], reportData: null }),
-  appendEvent: (event) => set((state) => ({ progressEvents: [...state.progressEvents, event] })),
+  startAnalysis: (jobId) => {
+    seenEventKeys.clear();
+    set({ activeJobId: jobId, jobStatus: 'queued', progressEvents: [], reportData: null });
+  },
+  appendEvent: (event) => {
+    // Deduplicate by step_name + timestamp (unique per emission)
+    const key = `${event.step_name}::${event.timestamp}`;
+    if (seenEventKeys.has(key)) return;
+    seenEventKeys.add(key);
+    set((state) => ({ progressEvents: [...state.progressEvents, event] }));
+  },
   setReportData: (report) => set({ reportData: report, jobStatus: 'completed' }),
-  reset: () => set({ activeJobId: null, jobStatus: 'idle', progressEvents: [], reportData: null }),
+  reset: () => {
+    seenEventKeys.clear();
+    set({ activeJobId: null, jobStatus: 'idle', progressEvents: [], reportData: null });
+  },
 }));

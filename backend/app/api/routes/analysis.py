@@ -27,6 +27,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -247,7 +248,7 @@ def get_analysis_report(
     )
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != "completed":
+    if job.status in ("queued", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Job is {job.status}. Report not available yet.")
 
     report = (
@@ -271,9 +272,49 @@ def get_analysis_report(
         narrative=report.narrative,
         sections=report.sections or [],
         insights=report.insights or [],
-        chart_urls=[c.file_path for c in charts],
+        chart_urls=[f"/api/v1/analysis/charts/{job_id}/{c.filename}" for c in charts],
         slide_deck_url=None,
         created_at=report.created_at,
+    )
+
+
+@router.get("/charts/{job_id}/{filename}")
+def serve_chart_image(job_id: str, filename: str) -> FileResponse:
+    """Serve a chart image file."""
+    chart_path = os.path.join(settings.analysis_chart_dir, job_id, filename)
+    if not os.path.exists(chart_path):
+        raise HTTPException(status_code=404, detail="Chart image not found")
+    media_type = "image/png" if filename.endswith(".png") else "application/json"
+    return FileResponse(path=chart_path, media_type=media_type)
+
+
+@router.get("/{job_id}/report/download")
+def download_analysis_report(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download the analysis report as a PPTX slide deck."""
+    job = (
+        db.query(AnalysisJob)
+        .filter(AnalysisJob.id == job_id, AnalysisJob.user_id == current_user.id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in ("queued", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Job is {job.status}. Report not available yet.")
+
+    # Build the slides path from known convention
+    slides_path = os.path.join("data", "slides", f"{job_id}.pptx")
+    if not os.path.exists(slides_path):
+        raise HTTPException(status_code=404, detail="Slide deck not found. It may still be generating.")
+
+    filename = f"analysis-report-{job_id[:8]}.pptx"
+    return FileResponse(
+        path=slides_path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=filename,
     )
 
 

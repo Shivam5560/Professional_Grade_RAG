@@ -5,6 +5,7 @@ Uses Groq for LLM inference and PostgreSQL for vector storage.
 """
 
 import logging
+import asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from llama_index.core import Settings
@@ -23,10 +24,57 @@ from app.observability import (
     log_langfuse_startup_status,
 )
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-
 logger = get_logger(__name__)
+
+# Create tables at import time (non-blocking — will fail fast if DB unreachable)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logger.warning(f"Table creation skipped (DB may not be available): {e}")
+
+
+async def _warmup_services() -> None:
+    """Warm up services in background with a hard timeout of 30 seconds."""
+    try:
+        async with asyncio.timeout(30):
+            from app.services.llm_service import get_llm_service
+            from app.services.vector_store import get_vector_store_service
+            from app.services.bm25_service import get_bm25_service
+
+            llm_svc = get_llm_service()
+            vector_store = get_vector_store_service()
+            bm25_service = get_bm25_service()
+
+            embed_model = vector_store.embed_model
+
+            Settings.llm = llm_svc.get_llm()
+            Settings.embed_model = embed_model
+            Settings.chunk_size = settings.chunk_size
+            Settings.chunk_overlap = settings.chunk_overlap
+
+            logger.log_operation(
+                "LlamaIndex settings configured",
+                llm_provider=settings.llm_provider,
+                llm_model=llm_svc.model,
+                embed_provider=settings.embedding_provider,
+                chunk_size=settings.chunk_size,
+            )
+
+            # LLM health check is best-effort, not blocking
+            try:
+                async with asyncio.timeout(10):
+                    await llm_svc.check_health()
+            except asyncio.TimeoutError:
+                logger.warning("LLM health check timed out — continuing anyway")
+            except Exception as e:
+                logger.warning(f"LLM health check failed: {e}")
+
+            logger.log_operation("Services warmed up")
+
+    except asyncio.TimeoutError:
+        logger.warning("Service warmup timed out after 30s — services will lazy-load on first request")
+    except Exception as e:
+        logger.log_error("Service warmup", e)
 
 
 @asynccontextmanager
@@ -34,65 +82,34 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
     Handles startup and shutdown events.
+    Warmup runs in background — the API is ready immediately.
     """
     # Startup
     settings.validate_security_posture()
     log_langfuse_startup_status()
     logger.log_operation(
-        "🚀 Application starting",
+        "Application starting",
         version=__version__,
         environment=settings.log_level,
     )
-    
-    # Initialize services (lazy loading will occur on first use)
-    from app.services.llm_service import get_llm_service
-    from app.services.vector_store import get_vector_store_service
-    from app.services.bm25_service import get_bm25_service
-    
-    try:
-        # Warm up services
-        llm_svc = get_llm_service()
-        vector_store = get_vector_store_service()
-        bm25_service = get_bm25_service()
-        
-        # Get embedding model from vector store (already initialized)
-        embed_model = vector_store.embed_model
-        
-        # Configure LlamaIndex global Settings to prevent OpenAI defaults
-        Settings.llm = llm_svc.get_llm()
-        Settings.embed_model = embed_model
-        Settings.chunk_size = settings.chunk_size
-        Settings.chunk_overlap = settings.chunk_overlap
-        
-        logger.log_operation(
-            "LlamaIndex settings configured",
-            llm_provider=settings.llm_provider,
-            llm_model=llm_svc.model,
-            embed_provider=settings.embedding_provider,
-            chunk_size=settings.chunk_size,
-            remote_embeddings=settings.use_remote_embedding_service
-        )
-        
-        llm_healthy = await llm_svc.check_health()
-        if not llm_healthy:
-            logger.log_operation("⚠️  LLM not available", level="WARNING")
-        
-        logger.log_operation("✅ All services initialized successfully")
-        
-    except Exception as e:
-        logger.log_error("Service initialization", e)
-    
-    logger.log_operation("✅ Application ready")
-    
+
+    # Fire-and-forget warmup — don't block API readiness
+    warmup_task = asyncio.create_task(_warmup_services())
+
+    logger.log_operation("API ready")
+
     yield
-    
+
     # Shutdown
+    warmup_task.cancel()
+    try:
+        await warmup_task
+    except asyncio.CancelledError:
+        pass
+
     logger.log_operation("Application shutting down")
-
     flush_langfuse()
-
-    # Cleanup if needed
-    logger.log_operation("✅ Application shutdown complete")
+    logger.log_operation("Application shutdown complete")
 
 
 # Create FastAPI application

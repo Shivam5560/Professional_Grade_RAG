@@ -351,10 +351,11 @@ class AnalysisWorkflow:
         self._emit("prioritize_insights", {"status": "completed", "insights": insight_dicts})
         self._checkpoint("prioritize_insights", {"insights": insight_dicts})
 
-    async def _step_generate_narrative(self, pri_data: Dict, query: str, profile: Dict[str, Any]) -> None:
+    async def _step_generate_narrative(self, pri_data: Optional[Dict], query: str, profile: Dict[str, Any]) -> None:
         self._emit("generate_narrative", {"status": "started"})
         from app.analysis.events import Insight, InsightsPrioritizedResult
 
+        pri_data = pri_data or {}
         insights = [Insight(**i) for i in pri_data.get("insights", [])]
         narrator = NarrativeGenerator()
         narrative = await narrator.run(InsightsPrioritizedResult(insights=insights), query, profile)
@@ -362,15 +363,25 @@ class AnalysisWorkflow:
         self._emit("generate_narrative", {"status": "completed", "summary": narrative.executive_summary[:200]})
         self._checkpoint("generate_narrative", {"summary": narrative.executive_summary, "sections": sections_dicts})
 
-    async def _step_design(self, pri_data: Dict, profile: Dict[str, Any], query: str) -> None:
+    async def _step_design(self, pri_data: Optional[Dict], profile: Dict[str, Any], query: str) -> None:
         self._emit("design", {"status": "started"})
         from app.analysis.events import Insight, InsightsPrioritizedResult
 
+        pri_data = pri_data or {}
         insights = [Insight(**i) for i in pri_data.get("insights", [])]
         designer = DesignIntelligence()
         design = await designer.run(InsightsPrioritizedResult(insights=insights), profile, query)
         self._emit("design", {"status": "completed", "theme": design.theme, "charts": len(design.chart_specs)})
-        self._checkpoint("design", {"theme": design.theme, "color_palette": design.color_palette, "layout": design.layout, "chart_specs": design.chart_specs})
+        self._checkpoint("design", {
+            "theme": design.theme,
+            "color_palette": design.color_palette,
+            "layout": design.layout,
+            "chart_specs": design.chart_specs,
+            "slide_structure": design.slide_structure,
+            "typography": design.typography,
+            "slide_density": design.slide_density,
+            "animation_hint": design.animation_hint,
+        })
 
     async def _step_compose(self, source_id: str, max_rows: int) -> None:
         self._emit("compose", {"status": "started"})
@@ -385,6 +396,16 @@ class AnalysisWorkflow:
         summary = narr_data.get("summary", "Untitled Analysis")
         title = summary[:80] + "..." if len(summary) > 80 else summary
 
+        design_spec = {
+            "theme": design_data.get("theme", "generic"),
+            "color_palette": design_data.get("color_palette", []),
+            "layout": design_data.get("layout", "grid"),
+            "slide_structure": design_data.get("slide_structure", []),
+            "typography": design_data.get("typography", {}),
+            "slide_density": design_data.get("slide_density", "medium"),
+            "animation_hint": design_data.get("animation_hint", "minimal"),
+        }
+
         report = build_and_save_report(
             db=self.db,
             job_id=self.job_id,
@@ -393,16 +414,25 @@ class AnalysisWorkflow:
             narrative=summary,
             sections=narr_data.get("sections", []),
             insights=insight_data.get("insights", []),
-            design_spec={
-                "theme": design_data.get("theme", "generic"),
-                "color_palette": design_data.get("color_palette", []),
-                "layout": design_data.get("layout", "grid"),
-            },
+            design_spec=design_spec,
             chart_paths=chart_paths,
         )
 
+        # Generate PPTX slides with design intelligence theming
+        from app.services.analysis.slide_generator import generate_slides
+
+        slides_path = generate_slides(
+            title=title,
+            narrative=summary,
+            sections=narr_data.get("sections", []),
+            insights=insight_data.get("insights", []),
+            design_spec=design_spec,
+            chart_paths=chart_paths,
+            job_id=self.job_id,
+        )
+
         self._emit("compose", {"status": "completed", "report_id": report.id})
-        self._checkpoint("compose", {"report_id": report.id, "chart_count": len(chart_paths)})
+        self._checkpoint("compose", {"report_id": report.id, "chart_count": len(chart_paths), "slides_path": slides_path})
         self._send_ws("complete", {"report_id": report.id, "status": "completed"})
 
     # ------------------------------------------------------------------

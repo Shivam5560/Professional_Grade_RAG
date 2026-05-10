@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 import random
 import time
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import httpx
 from pydantic import BaseModel
+from llama_index.core.llms import ChatMessage, MessageRole
 
 from app.analysis.tracing import trace_agent_call
 from app.config import settings
@@ -115,26 +116,19 @@ class BaseAnalysisAgent:
         max_retries: int = 3,
         token_budget: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Call LLM with proper system/user role separation.
-
-        - Uses system role (not text concatenation)
-        - Structured output via function calling when schema provided
-        - Exponential backoff retry with jitter
-        - Token budget truncation
-        - Langfuse tracing
-        """
+        """Call LLM with proper system/user role separation via achat()."""
         llm = self._get_llm()
 
         async def _call():
-            kwargs = self._build_llm_kwargs(prompt, system_prompt, output_schema, token_budget)
-            response = await llm.acomplete(**kwargs)
-            text = getattr(response, "text", None) or str(response)
+            messages, extra_kwargs = self._build_llm_kwargs(prompt, system_prompt, output_schema, token_budget)
+            response = await llm.achat(messages=messages, **extra_kwargs)
+            # ChatResponse has .message.content, NOT .text (that's CompletionResponse only)
+            msg = response.message
+            text = msg.content if hasattr(msg, "content") and msg.content else str(response)
 
             if output_schema is not None:
-                # Parse structured output from JSON
                 return _extract_json(text)
 
-            # For unstructured calls, try JSON extraction, fall back to raw text
             try:
                 parsed = _extract_json(text)
                 return parsed
@@ -153,37 +147,30 @@ class BaseAnalysisAgent:
         system_prompt: str,
         output_schema: Optional[Type[BaseModel]] = None,
         token_budget: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Build kwargs for llm.acomplete() with proper role separation."""
+    ) -> Tuple[List[ChatMessage], Dict[str, Any]]:
+        """Build ChatMessage list for llm.achat() with proper role separation."""
         budget = token_budget or settings.analysis_llm_token_budget
 
-        # Truncate prompt to fit budget (system prompt is usually small)
-        max_prompt_chars = budget * 3  # rough estimate: ~3 chars per token
+        # Truncate prompt to fit budget (~3 chars per token)
+        max_prompt_chars = budget * 3
         if len(prompt) > max_prompt_chars:
             prompt = prompt[:max_prompt_chars] + "\n... [truncated]"
 
-        kwargs: Dict[str, Any] = {
-            "prompt": prompt,
-        }
-
-        # Attach system prompt. LlamaIndex LLM interface varies by provider —
-        # Groq's wrapper supports `system_prompt` kwarg, OpenRouter-like uses
-        # `additional_kwargs`. We try the standard kwarg first.
-        if hasattr(llm := self._get_llm(), "complete"):
-            # Check if the underlying client supports system messages
-            pass
-
-        # Most LlamaIndex LLM wrappers accept system_prompt directly
-        kwargs["system_prompt"] = system_prompt
-
+        # Inject output schema into system prompt if provided
+        effective_system = system_prompt
         if output_schema is not None:
             schema_json = output_schema.model_json_schema()
             schema_str = json.dumps(schema_json, indent=2)
-            kwargs["prompt"] = (
-                f"{prompt}\n\nRespond ONLY with valid JSON conforming to this schema:\n{schema_str}"
+            effective_system = (
+                f"{system_prompt}\n\nRespond ONLY with valid JSON conforming to this schema:\n{schema_str}"
             )
 
-        return kwargs
+        messages = [
+            ChatMessage(role=MessageRole.SYSTEM, content=effective_system),
+            ChatMessage(role=MessageRole.USER, content=prompt),
+        ]
+
+        return messages, {}
 
     @staticmethod
     def compute_confidence(

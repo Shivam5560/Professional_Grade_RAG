@@ -48,7 +48,7 @@ export default function AnalysisProgressPage() {
         <Button variant="outline" className="w-full text-destructive" onClick={handleCancel}>Cancel Analysis</Button>
       </div>
       <div className="md:col-span-2">
-        <LivePreview events={progressEvents} />
+        <LivePreview events={progressEvents} jobId={jobId} />
       </div>
       </div>
     </div>

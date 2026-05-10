@@ -698,6 +698,29 @@ class ApiClient {
     return this.request<Record<string, unknown>>(`/analysis/${jobId}/report`);
   }
 
+  getAnalysisDownloadUrl(jobId: string): string {
+    return `${BASE_PATH}/analysis/${jobId}/report/download`;
+  }
+
+  async downloadAnalysisReport(jobId: string): Promise<void> {
+    const url = this.getAnalysisDownloadUrl(jobId);
+    const response = await fetch(url, { headers: { ...this.getAuthHeaders() } });
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        return this.downloadAnalysisReport(jobId);
+      }
+    }
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `analysis-report-${jobId.slice(0, 8)}.pptx`;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  }
+
   // ── ResumeGen Methods ────────────────────────────────────
   async checkResumeGenHealth(): Promise<ResumeGenHealthResponse> {
     return this.request<ResumeGenHealthResponse>('/resumegen/health');
