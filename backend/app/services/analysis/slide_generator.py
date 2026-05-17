@@ -1113,23 +1113,33 @@ def _resolve_png_path(path: str) -> str | None:
 
 
 def _clean_markdown_text(text: Any) -> str:
-    """Remove lightweight Markdown artifacts before placing text in PPTX boxes."""
+    """Remove lightweight Markdown artifacts and boilerplates before placing text in PPTX boxes."""
     cleaned = str(text or "").replace("\r", " ").replace("\n", " ")
+    
+    # Strip common LLM placeholders
+    placeholders = [r"\[Insert text here\]", r"\[Insert.*?\]", r"\bTBD\b", r"Feature block", r"\[.*?\]"]
+    for p in placeholders:
+        cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
+        
     cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
     cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
     cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
-    cleaned = re.sub(r"\[(.*?)\]\([^)]*\)", r"\1", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" -*•▸")
 
 
 def _extract_bullets(md_text: str) -> List[str]:
-    """Extract bullet points from markdown text."""
+    """Extract bullet points from markdown text, dropping empty or filler points."""
     bullets: List[str] = []
     for line in md_text.split("\n"):
         stripped = line.strip()
+        bullet_text = ""
         if stripped.startswith(("- ", "* ", "• ", "▸ ")):
-            bullets.append(_clean_markdown_text(stripped[2:].strip()))
+            bullet_text = _clean_markdown_text(stripped[2:].strip())
         elif stripped.startswith(tuple("0123456789")) and ". " in stripped[:4]:
-            bullets.append(_clean_markdown_text(stripped.split(". ", 1)[1].strip()))
+            bullet_text = _clean_markdown_text(stripped.split(". ", 1)[1].strip())
+            
+        if bullet_text and len(bullet_text) > 3: # Skip empty or tiny filler
+            bullets.append(bullet_text)
+            
     return bullets[:8]
