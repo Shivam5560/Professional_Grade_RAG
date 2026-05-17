@@ -1116,8 +1116,10 @@ def _clean_markdown_text(text: Any) -> str:
     """Remove lightweight Markdown artifacts and boilerplates before placing text in PPTX boxes."""
     cleaned = str(text or "").replace("\r", " ").replace("\n", " ")
     
+    cleaned = re.sub(r"\[(.*?)\]\([^)]*\)", r"\1", cleaned)
+
     # Strip common LLM placeholders
-    placeholders = [r"\[Insert text here\]", r"\[Insert.*?\]", r"\bTBD\b", r"Feature block", r"\[.*?\]"]
+    placeholders = [r"\[Insert text here\]", r"\[Insert.*?\]", r"\bTBD\b", r"Feature block"]
     for p in placeholders:
         cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
         
