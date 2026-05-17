@@ -592,6 +592,30 @@ def _story_arc_slide(prs, design_spec: dict, theme: ThemeEngine, style: str, typ
     _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
 
 
+
+def _chunk_text(text: str, max_chars: int = 350) -> List[str]:
+    """Split long text into readable chunks without breaking words."""
+    if not text:
+        return []
+    words = text.split()
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for word in words:
+        if current_length + len(word) + 1 > max_chars and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [word]
+            current_length = len(word)
+        else:
+            current_chunk.append(word)
+            current_length += len(word) + 1
+            
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+        
+    return chunks
+
 def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, palette: list,
                     design_spec: dict, style: str, typography: Dict[str, str],
                     insight_limit: int | None = None):
@@ -604,88 +628,82 @@ def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, 
 
     selected_insights = insights[:insight_limit] if insight_limit else insights
     for idx, ins in enumerate(selected_insights):
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
-        _set_bg(slide, theme.bg)
-        if style in ("editorial", "minimal"):
-            _light_geometric_background(slide, theme)
-        else:
-            _geometric_background(slide, theme)
-        _apply_motif(slide, theme, motif)
-
-        # Compact slide number marker. Keep it away from the main copy.
-        num = f"{idx + 1:02d}"
-        txb = slide.shapes.add_textbox(Inches(11.05), Inches(0.35), Inches(1.4), Inches(0.7))
-        tf = txb.text_frame
-        p = tf.paragraphs[0]
-        p.text = num
-        p.font.size = Pt(36)
-        p.font.bold = True
-        p.font.color.rgb = _blend_on_bg(theme.accent(idx % 4), theme.bg, 0.35)
-        p.font.name = stat_font
-        p.alignment = PP_ALIGN.RIGHT
-
-        # Section label with storytelling phase
-        _section_label(slide, f"INSIGHT {idx + 1}  •  {arc}", theme, body_font)
-
-        # LEFT COLUMN: Text content
         content = _clean_markdown_text(ins.get("content", ""))
-        score = ins.get("significance_score", 0)
-        sources = ins.get("source_agents", [])
+        chunks = _chunk_text(content, max_chars=350)
+        
+        for chunk_idx, chunk in enumerate(chunks):
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            _set_bg(slide, theme.bg)
+            if style in ("editorial", "minimal"):
+                _light_geometric_background(slide, theme)
+            else:
+                _geometric_background(slide, theme)
+            _apply_motif(slide, theme, motif)
 
-        # Main insight statement
-        _add_text_box(slide, MARGIN, Inches(1.2), Inches(6.8), Inches(1.8),
-                  content, 22, theme.white, bold=True, font=title_font, spacing=34)
+            # Compact slide number marker
+            num = f"{idx + 1:02d}" + (f".{chunk_idx+1}" if len(chunks) > 1 else "")
+            txb = slide.shapes.add_textbox(Inches(11.05), Inches(0.35), Inches(1.4), Inches(0.7))
+            tf = txb.text_frame
+            p = tf.paragraphs[0]
+            p.text = num
+            p.font.size = Pt(36)
+            p.font.bold = True
+            p.font.color.rgb = _blend_on_bg(theme.accent(idx % 4), theme.bg, 0.35)
+            p.font.name = stat_font
+            p.alignment = PP_ALIGN.RIGHT
 
-        _accent_divider(slide, Inches(3.0), theme, width_ratio=0.12)
+            # Section label
+            label = f"INSIGHT {idx + 1}" + (" (CONTINUED)" if chunk_idx > 0 else "") + f"  •  {arc}"
+            _section_label(slide, label, theme, body_font)
 
-        # Storytelling context
-        story_context = _story_context_for_insight(idx, content, arc)
-        _add_text_box(slide, MARGIN, Inches(3.3), Inches(6.8), Inches(0.8),
-                  story_context, 12, theme.muted, italic=True, font=body_font, spacing=18)
+            # Main insight statement (using chunk instead of full content)
+            _add_text_box(slide, MARGIN, Inches(1.2), Inches(6.8), Inches(1.8),
+                      chunk, 22, theme.white, bold=True, font=title_font, spacing=34)
 
-        # Significance score bar
-        bar_y = Inches(4.3)
-        _add_rect(slide, MARGIN, bar_y, Inches(3.5), Inches(0.05), theme.dark_muted)
-        _add_rect(slide, MARGIN, bar_y, Inches(3.5 * score), Inches(0.05), theme.accent(idx % 4))
-        _add_text_box(slide, Inches(4.5), Inches(4.2), Inches(1.2), Inches(0.3),
-                  f"{score:.0%}", 12, theme.accent(idx % 4), bold=True, font=stat_font)
-        _add_text_box(slide, MARGIN, Inches(4.5), Inches(4), Inches(0.3),
-                  f"Confidence  •  {', '.join(sources[:2]) if sources else 'Multiple agents'}",
-                  9, theme.dark_muted, font=body_font)
+            # Only show story context and score bar on the first chunk slide
+            if chunk_idx == 0:
+                _accent_divider(slide, Inches(3.0), theme, width_ratio=0.12)
+                
+                story_context = _story_context_for_insight(idx, chunk, arc)
+                _add_text_box(slide, MARGIN, Inches(3.3), Inches(6.8), Inches(0.8),
+                          story_context, 12, theme.muted, italic=True, font=body_font, spacing=18)
+                
+                score = ins.get("significance_score", 0)
+                sources = ins.get("source_agents", [])
+                
+                bar_y = Inches(4.3)
+                _add_rect(slide, MARGIN, bar_y, Inches(3.5), Inches(0.05), theme.dark_muted)
+                _add_rect(slide, MARGIN, bar_y, Inches(3.5 * score), Inches(0.05), theme.accent(idx % 4))
+                _add_text_box(slide, Inches(4.5), Inches(4.2), Inches(1.2), Inches(0.3),
+                          f"{score:.0%}", 12, theme.accent(idx % 4), bold=True, font=stat_font)
+                _add_text_box(slide, MARGIN, Inches(4.5), Inches(4), Inches(0.3),
+                          f"Confidence  •  {', '.join(sources[:2]) if sources else 'Multiple agents'}",
+                          9, theme.dark_muted, font=body_font)
 
-        # Evidence data points
-        evidence = ins.get("data_evidence", {})
-        if evidence:
-            ev_items = []
-            for k, v in list(evidence.items())[:4]:
-                ev_items.append(f"▸  {k}: {v}")
-            _add_text_box(slide, MARGIN, Inches(5.0), Inches(6.8), Inches(2.0),
-                          "\n".join(ev_items), 10, theme.off_white, font=body_font, spacing=16)
-
-        # RIGHT COLUMN: Visual chart reference
-        right_x = Inches(7.8)
-        # Chart image area
-        chart_img = _find_chart_for_insight(idx, chart_paths)
-        if chart_img:
-            try:
-                _add_rect(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(3.96), theme.surface)
-                slide.shapes.add_picture(chart_img, right_x, Inches(1.2), Inches(4.8), Inches(3.8))
-            except Exception:
+            # RIGHT COLUMN: Visual chart reference
+            right_x = Inches(7.8)
+            chart_img = _find_chart_for_insight(idx, chart_paths)
+            if chart_img:
+                try:
+                    _add_rect(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(3.96), theme.surface)
+                    slide.shapes.add_picture(chart_img, right_x, Inches(1.2), Inches(4.8), Inches(3.8))
+                except Exception:
+                    _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(3.8),
+                                       theme, idx, "Chart visualization", body_font)
+            else:
                 _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(3.8),
-                                   theme, idx, "Chart visualization", body_font)
-        else:
-            # Decorative placeholder with insight number
-            _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(3.8),
-                               theme, idx, f"Insight {idx + 1}", body_font)
+                                   theme, idx, f"Insight {idx + 1}", body_font)
 
-        # Right-side insight tag
-        tag_y = Inches(5.3)
-        _add_rect(slide, right_x, tag_y, Inches(4.8), Inches(0.04), theme.accent(idx % 4))
-        _add_text_box(slide, right_x, tag_y + Inches(0.15), Inches(4.8), Inches(0.5),
-                  f"Key Insight #{idx + 1}: {content[:100]}...",
-                  9, theme.muted, font=body_font, spacing=14)
+            # Right-side insight tag
+            if chunk_idx == 0:
+                tag_y = Inches(5.3)
+                _add_rect(slide, right_x, tag_y, Inches(4.8), Inches(0.04), theme.accent(idx % 4))
+                _add_text_box(slide, right_x, tag_y + Inches(0.15), Inches(4.8), Inches(0.5),
+                          f"Key Insight #{idx + 1}: {chunk[:100]}...",
+                          9, theme.muted, font=body_font, spacing=14)
 
-        _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
+            _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
+
 
 
 def _story_context_for_insight(idx: int, content: str, arc: str) -> str:
