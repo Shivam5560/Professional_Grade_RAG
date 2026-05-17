@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
-import numpy as np
 
 from sqlalchemy.orm import Session
 
@@ -77,24 +75,6 @@ class AnalysisWorkflow:
     # Event emission
     # ------------------------------------------------------------------
 
-    def _sanitize_for_json(self, value: Any) -> Any:
-        """Replace non-JSON-safe values (NaN/inf, numpy scalars) before persisting."""
-        if isinstance(value, dict):
-            return {key: self._sanitize_for_json(val) for key, val in value.items()}
-        if isinstance(value, list):
-            return [self._sanitize_for_json(item) for item in value]
-        if isinstance(value, tuple):
-            return [self._sanitize_for_json(item) for item in value]
-        if isinstance(value, (np.integer,)):
-            return int(value)
-        if isinstance(value, (np.bool_,)):
-            return bool(value)
-        if isinstance(value, (float, np.floating)):
-            if math.isnan(value) or math.isinf(value):
-                return None
-            return float(value)
-        return value
-
     def _emit(self, step_name: str, payload: Dict[str, Any]) -> None:
         """Emit progress event to WebSocket and persist to DB."""
         event = {
@@ -102,7 +82,6 @@ class AnalysisWorkflow:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": payload,
         }
-        event = self._sanitize_for_json(event)
         job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
         if job:
             events = list(job.progress_events or [])
@@ -132,13 +111,12 @@ class AnalysisWorkflow:
                 pass
 
     def _checkpoint(self, step_name: str, state: Dict[str, Any]) -> None:
-        clean_state = self._sanitize_for_json(state)
         self.checkpoint_store.save_checkpoint(
             workflow_id=self.job_id,
             job_id=self.job_id,
             user_id=self.user_id,
             step_name=step_name,
-            state_dict=clean_state,
+            state_dict=state,
         )
 
     # ------------------------------------------------------------------
