@@ -4,6 +4,7 @@ Unified LLM service with pluggable providers.
 Supported providers:
   - groq      → Groq Cloud (via llama-index-llms-groq)
   - openrouter → OpenRouter (OpenAI-compatible, via llama-index-llms-openai)
+  - ollama    → Ollama Cloud (OpenAI-compatible, via llama-index-llms-openai-like)
 
 The provider is selected via the LLM_PROVIDER env var (default: "groq").
 API key and model can be set with LLM_API_KEY / LLM_MODEL, or fall back
@@ -32,6 +33,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _DEFAULT_STRUCTURED_MODELS = {
     "groq": "llama-3.1-8b-instant",
     "openrouter": "meta-llama/llama-3.1-8b-instruct",
+    "ollama": "llama-3.1-8b-instant",
 }
 
 
@@ -85,9 +87,40 @@ def _create_openrouter_llm(
     )
 
 
+def _create_ollama_llm(
+    model: str,
+    api_key: str,
+    temperature: float = 0.5,
+    max_tokens: int = 8192,
+    context_window: int = 128_000,
+    **_extra,
+) -> LLM:
+    """Create an Ollama Cloud LLM using OpenAILike (OpenAI-compatible API).
+    
+    Ollama exposes an OpenAI-compatible API at /v1/chat/completions.
+    We derive the base URL by taking the user-configured OLLAMA_BASE_URL,
+    stripping any '/api' suffix, and appending '/v1'.
+    """
+    from llama_index.llms.openai_like import OpenAILike
+
+    raw_base = settings.ollama_base_url.rstrip("/")
+    ollama_v1_base = raw_base.replace("/api", "/v1") if raw_base.endswith("/api") else raw_base + "/v1"
+
+    return OpenAILike(
+        model=model,
+        api_key=api_key,
+        api_base=ollama_v1_base,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        context_window=context_window,
+        is_chat_model=True,
+    )
+
+
 _PROVIDER_FACTORIES = {
     "groq": _create_groq_llm,
     "openrouter": _create_openrouter_llm,
+    "ollama": _create_ollama_llm,
 }
 
 
@@ -102,9 +135,11 @@ def _resolve_provider() -> str:
 
 
 def _resolve_api_key(provider: str) -> str:
-    """Return the API key, falling back to GROQ_API_KEY for backward compat."""
+    """Return the API key, falling back to provider-specific keys for backward compat."""
     key = settings.llm_api_key or (
-        settings.groq_api_key if provider == "groq" else ""
+        settings.groq_api_key if provider == "groq" else
+        settings.ollama_api_key if provider == "ollama" else
+        ""
     )
     if not key:
         env_hint = "LLM_API_KEY" if provider != "groq" else "LLM_API_KEY or GROQ_API_KEY"
@@ -115,9 +150,11 @@ def _resolve_api_key(provider: str) -> str:
 
 
 def _resolve_model(provider: str) -> str:
-    """Return the model name, falling back to GROQ_MODEL for backward compat."""
+    """Return the model name, falling back to provider-specific vars for backward compat."""
     return settings.llm_model or (
-        settings.groq_model if provider == "groq" else ""
+        settings.groq_model if provider == "groq" else
+        settings.ollama_llm_model if provider == "ollama" else
+        ""
     ) or "llama-3.1-70b-versatile"
 
 

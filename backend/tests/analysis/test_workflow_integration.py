@@ -47,6 +47,35 @@ class TestWorkflowStructure:
         workflow = AnalysisWorkflow(db=db, user_id=1, job_id="test_job")
         assert workflow.checkpoint_store is not None
 
+    def test_json_safety_replaces_non_finite_numbers(self):
+        """Workflow JSON payloads must be strict JSON for PostgreSQL JSONB."""
+        from app.utils.json_safety import sanitize_json
+
+        payload = {
+            "mean": float("nan"),
+            "max": float("inf"),
+            "nested": [{"min": -float("inf"), "ok": 1.25}],
+        }
+
+        sanitized = sanitize_json(payload)
+
+        assert sanitized == {
+            "mean": None,
+            "max": None,
+            "nested": [{"min": None, "ok": 1.25}],
+        }
+
+    def test_profile_dataframe_sanitizes_nan_summary(self):
+        """All-null numeric summaries should not leak NaN into progress events."""
+        import pandas as pd
+
+        from app.services.analysis.data_ingestion import profile_dataframe
+
+        profile = profile_dataframe(pd.DataFrame({"ball": [float("nan"), float("nan")]}))
+
+        assert profile["numeric_summary"]["ball"]["mean"] is None
+        assert profile["numeric_summary"]["ball"]["std"] is None
+
 
 class TestWorkflowEdgeCases:
     """Edge cases for the workflow run_analysis_workflow entry point."""

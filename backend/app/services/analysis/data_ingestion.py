@@ -16,6 +16,7 @@ from fastapi import UploadFile
 
 from app.config import settings
 from app.utils.logger import get_logger
+from app.utils.json_safety import sanitize_json
 
 logger = get_logger(__name__)
 
@@ -137,4 +138,4 @@ def profile_dataframe(df: pd.DataFrame) -> Dict[str, Any]:
     if numeric_cols:
         profile["numeric_summary"] = df[numeric_cols].describe().to_dict()
 
-    return profile
+    return sanitize_json(profile)

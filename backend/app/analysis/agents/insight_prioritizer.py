@@ -90,9 +90,14 @@ def _fallback_insights(results: List[AgentResult]) -> List[Insight]:
     for r in results:
         for f in r.findings:
             idx += 1
+            desc = f.description
+            if desc.startswith(f"{f.metric}: "):
+                desc = desc[len(f.metric) + 2:]
+            elif isinstance(f.metric, str) and desc.startswith(f.metric):
+                desc = desc[len(f.metric):].lstrip(": ")
             insights.append(Insight(
                 insight_id=f"i{idx}",
-                content=f"{f.metric}: {f.description}",
+                content=desc,
                 significance_score=f.significance,
                 source_agents=[r.agent_name],
             ))

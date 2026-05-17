@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_CONNECTOR_TYPE
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt, Emu
 
@@ -159,20 +159,25 @@ def _blend_to_dark(color: RGBColor, alpha: float) -> RGBColor:
 
 def _add_text_box(slide, x, y, w, h, text: str, size: int, color: RGBColor,
                   bold: bool = False, align=PP_ALIGN.LEFT, font: str = "Calibri",
-                  italic: bool = False, spacing: int = 0) -> Any:
+                  italic: bool = False, spacing: int = 0, min_size: int = 7) -> Any:
     tb = slide.shapes.add_textbox(x, y, w, h)
     tf = tb.text_frame
     tf.word_wrap = True
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    tf.margin_left = Inches(0.02)
+    tf.margin_right = Inches(0.02)
+    tf.margin_top = Inches(0.02)
+    tf.margin_bottom = Inches(0.02)
     p = tf.paragraphs[0]
-    p.text = text
-    p.font.size = Pt(size)
+    p.text = _clean_markdown_text(text)
+    p.font.size = Pt(_adaptive_font_size(p.text, size, min_size, w, h, bold=bold))
     p.font.color.rgb = color
     p.font.bold = bold
     p.font.italic = italic
     p.font.name = font
     p.alignment = align
     if spacing:
-        p.line_spacing = Pt(spacing)
+        p.line_spacing = Pt(min(spacing, max(11, int(p.font.size.pt * 1.2))))
     return tb
 
 
@@ -192,6 +197,86 @@ def _add_multi_text(slide, x, y, w, h, lines: List[Tuple[str, int, RGBColor, boo
         p.alignment = align
         p.line_spacing = Pt(spacing)
     return tb
+
+
+def _adaptive_font_size(text: str, requested: int, minimum: int, w, h, bold: bool = False) -> int:
+    """Conservative font scaling to keep generated text inside PPTX boxes."""
+    width_in = max(float(w) / 914400, 0.5)
+    height_in = max(float(h) / 914400, 0.25)
+    chars = len(str(text or ""))
+    if chars <= 0:
+        return requested
+
+    lines_available = max(1, int(height_in / 0.22))
+    chars_per_line = max(8, int(width_in * (9.2 if not bold else 7.8) * (12 / max(requested, 8))))
+    capacity = chars_per_line * lines_available
+    if chars <= capacity:
+        return requested
+
+    scale = max(0.55, capacity / chars)
+    return max(minimum, min(requested, int(requested * scale)))
+
+
+def _shorten(text: Any, max_chars: int) -> str:
+    clean = _clean_markdown_text(text)
+    if len(clean) <= max_chars:
+        return clean
+    return clean[: max_chars - 1].rstrip(" .,;:") + "…"
+
+
+def _compact_title(text: Any, max_words: int = 5, max_chars: int = 42) -> str:
+    """Create a presentation title: short, readable, and not sentence-like."""
+    clean = _clean_markdown_text(text)
+    clean = re.sub(r"[_:]+", " ", clean)
+    clean = re.sub(r"\([^)]*\)", "", clean).strip()
+    words = [w for w in clean.split() if w.lower() not in {"the", "a", "an", "and", "of", "for"}]
+    title = " ".join(words[:max_words]) if words else clean
+    title = title[:max_chars].rstrip(" .,;:")
+    return title.title() if title.islower() or title.isupper() else title
+
+
+def _insight_title(insight: Dict[str, Any], idx: int) -> str:
+    configured = insight.get("title") or insight.get("headline")
+    if configured:
+        return _compact_title(configured, max_words=4, max_chars=34)
+    content = _clean_markdown_text(insight.get("content", ""))
+    lowered = content.lower()
+    if "repayment" in lowered or "pay_0" in lowered or "delinquency" in lowered:
+        return "Repayment Risk"
+    if "correlat" in lowered or "bill_amt" in lowered:
+        return "Redundant Signals"
+    if "skew" in lowered or "distribution" in lowered:
+        return "Skewed Payments"
+    if "credit limit" in lowered or "exposure" in lowered:
+        return "Exposure Context"
+    if "segment" in lowered or "education" in lowered:
+        return "Segment Overlay"
+    return f"Insight {idx + 1}"
+
+
+def _insight_subtitle(insight: Dict[str, Any]) -> str:
+    subtitle = insight.get("subtitle") or insight.get("subheader") or insight.get("narrative_role")
+    if subtitle:
+        return _shorten(subtitle, 115)
+    return _shorten(insight.get("content", ""), 115)
+
+
+def _insight_action(insight: Dict[str, Any], idx: int) -> str:
+    action = insight.get("action") or insight.get("recommendation")
+    if action:
+        return _shorten(action, 145)
+    defaults = [
+        "Monitor delinquency movement weekly and trigger early outreach before severe delay.",
+        "Compress bill histories into rolling balance, utilization, and month-over-month change features.",
+        "Transform or bucket payment amounts before modeling to reduce skew-driven distortion.",
+        "Read credit exposure together with recent repayment behavior, not as a standalone risk signal.",
+        "Use segment fields for calibration and fairness review, not as the primary decision lever.",
+    ]
+    return defaults[idx] if idx < len(defaults) else "Turn this finding into an owned metric and follow-up decision."
+
+
+def _chart_title(spec: Dict[str, Any], fallback: str) -> str:
+    return _compact_title(spec.get("display_title") or spec.get("title") or fallback, max_words=6, max_chars=48)
 
 
 # ── Decorative elements ──────────────────────────────────
@@ -369,8 +454,8 @@ def _title_slide(prs, title: str, subtitle: str, theme: ThemeEngine, palette: Li
     title_font = typography["title_font"]
     body_font = typography["body_font"]
     stat_font = typography["stat_font"]
-    mood = brief.get("mood_description", "")[:120] or "AI-Powered Insights & Recommendations"
-    subtitle = subtitle[:150] or mood
+    mood = _shorten(brief.get("mood_description", "") or "AI-Powered Insights & Recommendations", 110)
+    subtitle = _shorten(subtitle or mood, 135)
     motif = brief.get("visual_motif", "")
 
     if style in ("editorial", "minimal"):
@@ -380,15 +465,15 @@ def _title_slide(prs, title: str, subtitle: str, theme: ThemeEngine, palette: Li
 
         _add_text_box(slide, MARGIN + Inches(0.3), Inches(1.0), Inches(6), Inches(0.4),
                       "DATA ANALYSIS REPORT", 10, theme.accent(0), bold=True, font=body_font)
-        _add_text_box(slide, MARGIN + Inches(0.3), Inches(1.6), Inches(10.5), Inches(1.75),
-                      title[:110], 42, theme.white, bold=True, font=title_font, spacing=52)
-        _add_text_box(slide, MARGIN + Inches(0.3), Inches(3.72), Inches(8.5), Inches(0.55),
-                      subtitle, 15, theme.off_white, font=body_font, spacing=20)
-        _add_text_box(slide, MARGIN + Inches(0.3), Inches(4.32), Inches(8.5), Inches(0.35),
-                      mood, 10, theme.muted, italic=True, font=body_font)
+        _add_text_box(slide, MARGIN + Inches(0.3), Inches(1.55), Inches(10.5), Inches(1.35),
+                      _shorten(title, 90), 32, theme.white, bold=True, font=title_font, spacing=38, min_size=24)
+        _add_text_box(slide, MARGIN + Inches(0.3), Inches(3.25), Inches(8.8), Inches(0.65),
+                      subtitle, 13, theme.off_white, font=body_font, spacing=16)
+        _add_text_box(slide, MARGIN + Inches(0.3), Inches(4.0), Inches(8.8), Inches(0.4),
+                      mood, 9, theme.muted, italic=True, font=body_font)
 
-        _accent_divider(slide, Inches(4.72), theme, width_ratio=0.2)
-        _add_text_box(slide, MARGIN + Inches(0.3), Inches(5.02), Inches(6), Inches(0.3),
+        _accent_divider(slide, Inches(4.55), theme, width_ratio=0.2)
+        _add_text_box(slide, MARGIN + Inches(0.3), Inches(4.9), Inches(6), Inches(0.3),
                       f"Theme: {brief.get('theme', 'Professional')}  •  Template: {style}",
                       9, theme.dark_muted, font=body_font)
         return
@@ -401,10 +486,10 @@ def _title_slide(prs, title: str, subtitle: str, theme: ThemeEngine, palette: Li
 
         _add_text_box(slide, MARGIN, Inches(1.1), Inches(6), Inches(0.4),
                       "DATA ANALYSIS REPORT", 11, theme.accent(0), bold=True, font=body_font)
-        _add_text_box(slide, MARGIN, Inches(1.7), Inches(11.0), Inches(2.0),
-                      title[:100], 46, theme.white, bold=True, font=stat_font, spacing=56)
+        _add_text_box(slide, MARGIN, Inches(1.7), Inches(11.0), Inches(1.55),
+                      _shorten(title, 90), 34, theme.white, bold=True, font=stat_font, spacing=40, min_size=24)
         _add_text_box(slide, MARGIN, Inches(3.95), Inches(8.8), Inches(0.55),
-                      subtitle, 16, theme.off_white, font=body_font, spacing=22)
+                      subtitle, 13, theme.off_white, font=body_font, spacing=16)
         _add_text_box(slide, MARGIN, Inches(4.6), Inches(8), Inches(0.35),
                       mood, 10, theme.muted, italic=True, font=body_font)
         _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
@@ -426,13 +511,13 @@ def _title_slide(prs, title: str, subtitle: str, theme: ThemeEngine, palette: Li
                   font=body_font, spacing=0)
 
     # Main title
-    clean_title = title[:100]
-    _add_text_box(slide, MARGIN, Inches(1.7), Inches(11.5), Inches(2.0),
-                  clean_title, 44, theme.white, bold=True, font=title_font, spacing=56)
+    clean_title = _shorten(title, 90)
+    _add_text_box(slide, MARGIN, Inches(1.7), Inches(11.5), Inches(1.55),
+                  clean_title, 34, theme.white, bold=True, font=title_font, spacing=40, min_size=24)
 
     # Subtitle line
     _add_text_box(slide, MARGIN, Inches(3.85), Inches(8.8), Inches(0.55),
-                  subtitle, 16, theme.off_white, font=body_font, spacing=22)
+                  subtitle, 13, theme.off_white, font=body_font, spacing=16)
     _add_text_box(slide, MARGIN, Inches(4.45), Inches(8), Inches(0.35),
                   mood, 10, theme.muted, italic=True, font=body_font)
 
@@ -461,13 +546,13 @@ def _executive_summary_slide(prs, narrative: str, theme: ThemeEngine, sections: 
         _side_accent_bar(slide, theme)
 
         _section_label(slide, "EXECUTIVE SUMMARY", theme, body_font)
-        _add_text_box(slide, MARGIN, Inches(0.65), Inches(8.5), Inches(0.7),
-                      "Key Findings at a Glance", 26, theme.white, bold=True, font=title_font)
+        _add_text_box(slide, MARGIN, Inches(0.65), Inches(8.5), Inches(0.6),
+                      "Key Findings at a Glance", 22, theme.white, bold=True, font=title_font)
         _accent_divider(slide, Inches(1.4), theme, width_ratio=0.18)
 
-        para = narrative.strip()[:900] if narrative else "Analysis completed. See insights below."
-        _add_text_box(slide, MARGIN, Inches(1.8), Inches(7.8), Inches(1.2),
-                      para, 14, theme.off_white, font=body_font, spacing=24)
+        para = _shorten(narrative, 620) if narrative else "Analysis completed. See insights below."
+        _add_text_box(slide, MARGIN, Inches(1.75), Inches(7.8), Inches(1.55),
+                      para, 12, theme.off_white, font=body_font, spacing=16, min_size=9)
 
         if sections:
             _add_text_box(slide, MARGIN, Inches(3.4), Inches(4), Inches(0.4),
@@ -489,14 +574,14 @@ def _executive_summary_slide(prs, narrative: str, theme: ThemeEngine, sections: 
     _side_accent_bar(slide, theme)
 
     _section_label(slide, "EXECUTIVE SUMMARY", theme, body_font)
-    _add_text_box(slide, MARGIN, Inches(0.65), Inches(8), Inches(0.7),
-                  "Key Findings at a Glance", 28, theme.white, bold=True, font=title_font)
+    _add_text_box(slide, MARGIN, Inches(0.65), Inches(8), Inches(0.6),
+                  "Key Findings at a Glance", 22, theme.white, bold=True, font=title_font)
 
     _accent_divider(slide, Inches(1.5), theme)
 
-    para = narrative.strip()[:800] if narrative else "Analysis completed. See insights below."
-    _add_text_box(slide, MARGIN, Inches(1.8), Inches(7.5), Inches(1.2),
-                  para, 15, theme.off_white, font=body_font, spacing=24)
+    para = _shorten(narrative, 620) if narrative else "Analysis completed. See insights below."
+    _add_text_box(slide, MARGIN, Inches(1.75), Inches(7.5), Inches(1.55),
+                  para, 12, theme.off_white, font=body_font, spacing=16, min_size=9)
 
     if sections:
         _add_text_box(slide, MARGIN, Inches(3.3), Inches(4), Inches(0.4),
@@ -535,11 +620,11 @@ def _story_arc_slide(prs, design_spec: dict, theme: ThemeEngine, style: str, typ
     _side_accent_bar(slide, theme)
 
     _section_label(slide, "NARRATIVE JOURNEY", theme, body_font)
-    _add_text_box(slide, MARGIN, Inches(0.65), Inches(10), Inches(0.7),
-                  "The Data Story", 28, theme.white, bold=True, font=title_font)
+    _add_text_box(slide, MARGIN, Inches(0.65), Inches(10), Inches(0.6),
+                  "The Data Story", 22, theme.white, bold=True, font=title_font)
     _add_text_box(slide, MARGIN, Inches(1.48), Inches(9), Inches(0.4),
-                  principle[:150] if principle else "Building insight through systematic data exploration.",
-                  12, theme.muted, italic=True, font=body_font)
+                  _shorten(principle, 135) if principle else "Building insight through systematic data exploration.",
+                  10, theme.muted, italic=True, font=body_font)
 
     _accent_divider(slide, Inches(2.08), theme)
 
@@ -558,7 +643,7 @@ def _story_arc_slide(prs, design_spec: dict, theme: ThemeEngine, style: str, typ
     phase_icons = ["🔍", "📊", "📈", "🎯", "💡", "🚀"]
     phase_labels = [
         "UNDERSTAND\nWhat the data contains", "DISCOVER\nPatterns & relationships",
-        "ANALYZE\nDeep statistical tests", "VALIDATE\nSignificance & confidence",
+        "ANALYZE\nDeep statistical tests", "VALIDATE\nEvidence quality",
         "SYNTHESIZE\nKey findings & narrative", "ACT\nRecommendations & next steps"
     ]
 
@@ -573,7 +658,7 @@ def _story_arc_slide(prs, design_spec: dict, theme: ThemeEngine, style: str, typ
                   f"0{i + 1}", 14, theme.accent(i), bold=True, font=body_font)
         # Phase name
         _add_text_box(slide, cx + Inches(0.2), card_y + Inches(0.7), card_w - Inches(0.4), Inches(0.6),
-                  phase, 14, theme.white, bold=True, font=title_font)
+                  phase, 12, theme.white, bold=True, font=title_font)
         # Phase description
         label_text = phase_labels[i] if i < len(phase_labels) else phase
         _add_text_box(slide, cx + Inches(0.2), card_y + Inches(1.5), card_w - Inches(0.4), Inches(1.5),
@@ -629,7 +714,7 @@ def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, 
     selected_insights = insights[:insight_limit] if insight_limit else insights
     for idx, ins in enumerate(selected_insights):
         content = _clean_markdown_text(ins.get("content", ""))
-        chunks = _chunk_text(content, max_chars=350)
+        chunks = _chunk_text(content, max_chars=300)
         
         for chunk_idx, chunk in enumerate(chunks):
             slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -646,61 +731,65 @@ def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, 
             tf = txb.text_frame
             p = tf.paragraphs[0]
             p.text = num
-            p.font.size = Pt(36)
+            p.font.size = Pt(24)
             p.font.bold = True
             p.font.color.rgb = _blend_on_bg(theme.accent(idx % 4), theme.bg, 0.35)
             p.font.name = stat_font
             p.alignment = PP_ALIGN.RIGHT
 
             # Section label
-            label = f"INSIGHT {idx + 1}" + (" (CONTINUED)" if chunk_idx > 0 else "") + f"  •  {arc}"
+            label = f"INSIGHT {idx + 1}" + (" (CONTINUED)" if chunk_idx > 0 else "")
             _section_label(slide, label, theme, body_font)
 
-            # Main insight statement (using chunk instead of full content)
-            _add_text_box(slide, MARGIN, Inches(1.2), Inches(6.8), Inches(1.8),
-                      chunk, 22, theme.white, bold=True, font=title_font, spacing=34)
+            # Short title + supporting story, never the full finding as the title.
+            _add_text_box(slide, MARGIN, Inches(0.78), Inches(6.6), Inches(0.55),
+                      _insight_title(ins, idx), 24, theme.white, bold=True, font=title_font, spacing=28, min_size=18)
+            _add_text_box(slide, MARGIN, Inches(1.42), Inches(6.55), Inches(0.6),
+                      _insight_subtitle(ins), 10, theme.muted, italic=True, font=body_font, spacing=13)
 
-            # Only show story context and score bar on the first chunk slide
+            # Only show story context on the first chunk slide.
             if chunk_idx == 0:
-                _accent_divider(slide, Inches(3.0), theme, width_ratio=0.12)
-                
+                _accent_divider(slide, Inches(2.25), theme, width_ratio=0.12)
+
+                _add_rect(slide, MARGIN, Inches(2.62), Inches(3.15), Inches(1.35), theme.surface)
+                _add_rect(slide, MARGIN, Inches(2.62), Inches(0.06), Inches(1.35), theme.accent(idx))
+                _add_text_box(slide, MARGIN + Inches(0.22), Inches(2.82), Inches(2.68), Inches(0.25),
+                          "TAKEAWAY", 8, theme.accent(idx), bold=True, font=body_font)
+                _add_text_box(slide, MARGIN + Inches(0.22), Inches(3.12), Inches(2.68), Inches(0.68),
+                          _shorten(chunk, 135), 10, theme.off_white, font=body_font, spacing=13, min_size=8)
+
+                _add_rect(slide, MARGIN + Inches(3.45), Inches(2.62), Inches(3.15), Inches(1.35), theme.surface)
+                _add_rect(slide, MARGIN + Inches(3.45), Inches(2.62), Inches(0.06), Inches(1.35), theme.accent(idx + 1))
+                _add_text_box(slide, MARGIN + Inches(3.67), Inches(2.82), Inches(2.68), Inches(0.25),
+                          "ACTION", 8, theme.accent(idx + 1), bold=True, font=body_font)
+                _add_text_box(slide, MARGIN + Inches(3.67), Inches(3.12), Inches(2.68), Inches(0.68),
+                          _insight_action(ins, idx), 10, theme.off_white, font=body_font, spacing=13, min_size=8)
+
                 story_context = _story_context_for_insight(idx, chunk, arc)
-                _add_text_box(slide, MARGIN, Inches(3.3), Inches(6.8), Inches(0.8),
-                          story_context, 12, theme.muted, italic=True, font=body_font, spacing=18)
-                
-                score = ins.get("significance_score", 0)
-                sources = ins.get("source_agents", [])
-                
-                bar_y = Inches(4.3)
-                _add_rect(slide, MARGIN, bar_y, Inches(3.5), Inches(0.05), theme.dark_muted)
-                _add_rect(slide, MARGIN, bar_y, Inches(3.5 * score), Inches(0.05), theme.accent(idx % 4))
-                _add_text_box(slide, Inches(4.5), Inches(4.2), Inches(1.2), Inches(0.3),
-                          f"{score:.0%}", 12, theme.accent(idx % 4), bold=True, font=stat_font)
-                _add_text_box(slide, MARGIN, Inches(4.5), Inches(4), Inches(0.3),
-                          f"Confidence  •  {', '.join(sources[:2]) if sources else 'Multiple agents'}",
-                          9, theme.dark_muted, font=body_font)
+                _add_text_box(slide, MARGIN, Inches(4.22), Inches(6.65), Inches(0.48),
+                          _shorten(story_context, 125), 8, theme.dark_muted, italic=True, font=body_font, spacing=10)
 
             # RIGHT COLUMN: Visual chart reference
             right_x = Inches(7.8)
             chart_img = _find_chart_for_insight(idx, chart_paths)
             if chart_img:
                 try:
-                    _add_rect(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(3.96), theme.surface)
-                    slide.shapes.add_picture(chart_img, right_x, Inches(1.2), Inches(4.8), Inches(3.8))
+                    _add_rect(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(4.18), theme.surface)
+                    slide.shapes.add_picture(chart_img, right_x, Inches(1.2), Inches(4.8), Inches(4.02))
                 except Exception:
-                    _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(3.8),
+                    _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(4.02),
                                        theme, idx, "Chart visualization", body_font)
             else:
-                _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(3.8),
+                _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(4.02),
                                    theme, idx, f"Insight {idx + 1}", body_font)
 
             # Right-side insight tag
             if chunk_idx == 0:
-                tag_y = Inches(5.3)
+                tag_y = Inches(5.55)
                 _add_rect(slide, right_x, tag_y, Inches(4.8), Inches(0.04), theme.accent(idx % 4))
-                _add_text_box(slide, right_x, tag_y + Inches(0.15), Inches(4.8), Inches(0.5),
-                          f"Key Insight #{idx + 1}: {chunk[:100]}...",
-                          9, theme.muted, font=body_font, spacing=14)
+                _add_text_box(slide, right_x, tag_y + Inches(0.14), Inches(4.8), Inches(0.65),
+                          _shorten(_insight_action(ins, idx), 95),
+                          8, theme.muted, font=body_font, spacing=11)
 
             _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
 
@@ -761,7 +850,8 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
         related_insight = insights[idx] if idx < len(insights) and isinstance(insights[idx], dict) else {}
         narrative_role = _clean_markdown_text(spec.get("narrative_role") or _story_context_for_insight(idx, "", ""))
         takeaway = _clean_markdown_text(related_insight.get("content") or narrative_role)
-        chart_name = _clean_markdown_text(spec.get("title") or os.path.splitext(os.path.basename(png_path))[0].replace("_", " ").title())
+        chart_name = _chart_title(spec, os.path.splitext(os.path.basename(png_path))[0].replace("_", " ").title())
+        chart_subtitle = _shorten(spec.get("subtitle") or spec.get("narrative_role") or takeaway, 130)
         layout_variant = idx % 3
 
         slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -775,8 +865,10 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
         _section_label(slide, "DATA VISUALIZATION", theme, body_font)
 
         if layout_variant == 0:
-            _add_text_box(slide, MARGIN, Inches(0.65), Inches(7.1), Inches(0.7),
-                          chart_name[:92], 25, theme.white, bold=True, font=title_font)
+            _add_text_box(slide, MARGIN, Inches(0.65), Inches(7.1), Inches(0.55),
+                          _shorten(chart_name, 82), 20, theme.white, bold=True, font=title_font, min_size=14)
+            _add_text_box(slide, MARGIN, Inches(1.18), Inches(7.1), Inches(0.32),
+                          chart_subtitle, 8, theme.muted, italic=True, font=body_font)
             _accent_divider(slide, Inches(1.35), theme)
             _add_rect(slide, MARGIN - Inches(0.08), Inches(1.62), Inches(7.25), Inches(5.1), theme.surface)
             try:
@@ -789,17 +881,17 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
             _add_rect(slide, panel_x, Inches(1.45), Inches(4.0), Inches(5.25), theme.surface)
             _add_text_box(slide, panel_x + Inches(0.3), Inches(1.75), Inches(3.4), Inches(0.35),
                           "WHAT THIS PROVES", 9, theme.accent(idx), bold=True, font=body_font)
-            _add_text_box(slide, panel_x + Inches(0.3), Inches(2.25), Inches(3.35), Inches(1.8),
-                          takeaway[:230], 17, theme.white, bold=True, font=title_font, spacing=24)
-            _add_text_box(slide, panel_x + Inches(0.3), Inches(4.35), Inches(3.35), Inches(1.2),
-                          narrative_role[:210], 11, theme.muted, italic=True, font=body_font, spacing=17)
+            _add_text_box(slide, panel_x + Inches(0.3), Inches(2.22), Inches(3.35), Inches(1.65),
+                          _shorten(takeaway, 160), 13, theme.white, bold=True, font=title_font, spacing=16, min_size=9)
+            _add_text_box(slide, panel_x + Inches(0.3), Inches(4.1), Inches(3.35), Inches(1.35),
+                          _shorten(narrative_role, 165), 9, theme.muted, italic=True, font=body_font, spacing=12)
             _add_text_box(slide, panel_x + Inches(0.3), Inches(5.95), Inches(3.3), Inches(0.35),
                           f"Evidence view {idx + 1:02d}", 10, theme.dark_muted, font=stat_font)
         elif layout_variant == 1:
-            _add_text_box(slide, MARGIN, Inches(0.65), Inches(11.7), Inches(0.55),
-                          chart_name[:96], 23, theme.white, bold=True, font=title_font)
+            _add_text_box(slide, MARGIN, Inches(0.65), Inches(11.7), Inches(0.5),
+                          _shorten(chart_name, 90), 20, theme.white, bold=True, font=title_font, min_size=14)
             _add_text_box(slide, MARGIN, Inches(1.38), Inches(10.5), Inches(0.45),
-                          takeaway[:165], 12, theme.muted, italic=True, font=body_font)
+                          chart_subtitle, 10, theme.muted, italic=True, font=body_font)
             _add_rect(slide, MARGIN - Inches(0.08), Inches(2.02), Inches(11.66), Inches(4.35), theme.surface)
             try:
                 slide.shapes.add_picture(png_path, MARGIN, Inches(2.1), Inches(11.5), Inches(4.2))
@@ -808,18 +900,18 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
                 _chart_placeholder(slide, MARGIN, Inches(2.1), Inches(11.5), Inches(4.2), theme, idx, chart_name, body_font)
             _add_rect(slide, MARGIN, Inches(6.55), Inches(11.5), Inches(0.04), theme.accent(idx))
             _add_text_box(slide, MARGIN, Inches(6.67), Inches(9.8), Inches(0.35),
-                          narrative_role[:180], 9, theme.dark_muted, font=body_font)
+                          _shorten(narrative_role, 150), 8, theme.dark_muted, font=body_font)
         else:
             _add_rect(slide, MARGIN, Inches(0.78), Inches(3.2), Inches(5.9), theme.surface)
             _add_text_box(slide, MARGIN + Inches(0.25), Inches(1.05), Inches(2.65), Inches(0.5),
-                          f"{idx + 1:02d}", 30, theme.accent(idx), bold=True, font=stat_font)
+                          f"{idx + 1:02d}", 22, theme.accent(idx), bold=True, font=stat_font)
             _add_text_box(slide, MARGIN + Inches(0.25), Inches(1.75), Inches(2.6), Inches(1.25),
-                          chart_name[:70], 19, theme.white, bold=True, font=title_font, spacing=24)
+                          _shorten(chart_name, 62), 15, theme.white, bold=True, font=title_font, spacing=18, min_size=10)
             _add_text_box(slide, MARGIN + Inches(0.25), Inches(3.25), Inches(2.55), Inches(1.45),
-                          narrative_role[:190], 11, theme.muted, font=body_font, spacing=17)
+                          chart_subtitle, 9, theme.muted, font=body_font, spacing=12)
             _add_text_box(slide, MARGIN + Inches(0.25), Inches(5.45), Inches(2.55), Inches(0.65),
                           "Use this chart as the evidence anchor for the recommendation that follows.",
-                          9, theme.dark_muted, italic=True, font=body_font, spacing=14)
+                          8, theme.dark_muted, italic=True, font=body_font, spacing=11)
             chart_x = Inches(4.35)
             _add_rect(slide, chart_x - Inches(0.08), Inches(0.95), Inches(8.1), Inches(5.75), theme.surface)
             try:
@@ -832,7 +924,8 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
 
 
 def _recommendations_slide(prs, sections: list, theme: ThemeEngine, palette: list,
-                           style: str, typography: Dict[str, str], motif: str = ""):
+                           style: str, typography: Dict[str, str], motif: str = "",
+                           insights: list = None):
     """Action-oriented recommendations with icon cards."""
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     _set_bg(slide, theme.bg)
@@ -848,12 +941,11 @@ def _recommendations_slide(prs, sections: list, theme: ThemeEngine, palette: lis
     _side_accent_bar(slide, theme)
 
     _section_label(slide, "RECOMMENDATIONS", theme, body_font)
-    _add_text_box(slide, MARGIN, Inches(0.65), Inches(8), Inches(0.7),
-                  "Strategic Actions & Next Steps", 28, theme.white, bold=True, font=title_font)
+    _add_text_box(slide, MARGIN, Inches(0.65), Inches(8), Inches(0.55),
+                  "Strategic Actions & Next Steps", 22, theme.white, bold=True, font=title_font)
 
     _accent_divider(slide, Inches(1.5), theme)
 
-    # Try to find a recommendations section, otherwise use last section
     rec_section = next(
         (s for s in sections if "recommend" in s.get("title", "").lower()), None
     )
@@ -863,16 +955,15 @@ def _recommendations_slide(prs, sections: list, theme: ThemeEngine, palette: lis
     elif sections:
         content_text = sections[-1].get("content", "")
 
-    # Parse bullet points from markdown content
     bullets = _extract_bullets(content_text)
+    if not bullets and insights:
+        bullets = _insights_as_bullets(insights)
     if not bullets:
-        # Fallback: use insight content as bullets
         bullets = ["Review the full analysis for domain-specific actions",
-                   "Share findings with key stakeholders",
-                   "Set up periodic data reviews to track progress",
-                   "Integrate insights into decision-making workflows"]
+                    "Share findings with key stakeholders",
+                    "Set up periodic data reviews to track progress",
+                    "Integrate insights into decision-making workflows"]
 
-    # Display as action cards in a 2×2 grid
     card_w = Inches(5.5)
     card_h = Inches(2.2)
     positions = [
@@ -885,17 +976,13 @@ def _recommendations_slide(prs, sections: list, theme: ThemeEngine, palette: lis
     for i, (bx, by) in enumerate(positions):
         if i >= len(bullets):
             break
-        bullet = _clean_markdown_text(bullets[i])[:155]
-        # Card
+        bullet = _shorten(bullets[i], 220)
         _add_rect(slide, bx, by, card_w, card_h, theme.surface)
-        # Left color bar
         _add_rect(slide, bx, by, Inches(0.08), card_h, theme.accent(i))
-        # Number
         _add_text_box(slide, bx + Inches(0.35), by + Inches(0.2), Inches(0.5), Inches(0.5),
-                  f"{i + 1}", 28, theme.accent(i), bold=True, font=title_font)
-        # Bullet text
+                  f"{i + 1}", 22, theme.accent(i), bold=True, font=title_font)
         _add_text_box(slide, bx + Inches(0.35), by + Inches(0.82), card_w - Inches(0.7), card_h - Inches(0.95),
-                  bullet, 11, theme.off_white, font=body_font, spacing=16)
+                  bullet, 10, theme.off_white, font=body_font, spacing=13, min_size=8)
 
     _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
 
@@ -1011,6 +1098,16 @@ def _extract_recommendation_bullets(sections: List[Dict[str, Any]]) -> List[str]
     return []
 
 
+def _insights_as_bullets(insights: List[Dict[str, Any]]) -> List[str]:
+    """Convert top insights into recommendation-style bullet points."""
+    bullets = []
+    for ins in insights[:4]:
+        content = _clean_markdown_text(ins.get("content", ""))
+        if len(content) > 5:
+            bullets.append(content)
+    return bullets
+
+
 # ═══════════════════════════════════════════════════════════
 # Orchestrator
 # ═══════════════════════════════════════════════════════════
@@ -1063,7 +1160,7 @@ def generate_slides(
             ),
         ))
     if plan["include_recommendations"]:
-        slide_steps.append(("recommendations", lambda: _recommendations_slide(prs, sections, theme, palette, style_name, typography, motif)))
+        slide_steps.append(("recommendations", lambda: _recommendations_slide(prs, sections, theme, palette, style_name, typography, motif, insights=insights)))
     if plan["include_closing"]:
         slide_steps.append(("closing", lambda: _closing_slide(prs, theme, design_spec, style_name, typography)))
 
@@ -1114,8 +1211,8 @@ def _set_bg(slide, color: RGBColor):
 
 def _section_label(slide, text: str, theme: ThemeEngine, font: str):
     """Small uppercase section label at top of slide."""
-    _add_text_box(slide, MARGIN, Inches(0.25), Inches(6), Inches(0.3),
-                  text, 9, theme.accent(0), bold=True, font=font)
+    _add_text_box(slide, MARGIN, Inches(0.25), Inches(8.5), Inches(0.28),
+                  _shorten(text, 72), 8, theme.accent(0), bold=True, font=font)
 
 
 def _resolve_png_path(path: str) -> str | None:

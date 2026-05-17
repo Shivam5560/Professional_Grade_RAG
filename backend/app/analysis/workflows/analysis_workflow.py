@@ -34,6 +34,7 @@ from app.config import settings
 from app.db.models import AnalysisJob
 from app.services.analysis.chart_generator import generate_charts
 from app.services.analysis.report_builder import build_and_save_report
+from app.utils.json_safety import sanitize_json
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -77,19 +78,24 @@ class AnalysisWorkflow:
 
     def _emit(self, step_name: str, payload: Dict[str, Any]) -> None:
         """Emit progress event to WebSocket and persist to DB."""
+        payload = sanitize_json(payload)
         event = {
             "step_name": step_name,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": payload,
         }
-        job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
-        if job:
-            events = list(job.progress_events or [])
-            events.append(event)
-            job.progress_events = events
-            job.status = "running"
-            job.updated_at = datetime.now(timezone.utc)
-            self.db.commit()
+        try:
+            job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
+            if job:
+                events = sanitize_json(list(job.progress_events or []))
+                events.append(event)
+                job.progress_events = events
+                job.status = "running"
+                job.updated_at = datetime.now(timezone.utc)
+                self.db.commit()
+        except Exception as exc:
+            self.db.rollback()
+            logger.log_error("Failed to persist workflow event", exc, step=step_name, job_id=self.job_id)
 
         if self.manager:
             try:
@@ -116,7 +122,7 @@ class AnalysisWorkflow:
             job_id=self.job_id,
             user_id=self.user_id,
             step_name=step_name,
-            state_dict=state,
+            state_dict=sanitize_json(state),
         )
 
     # ------------------------------------------------------------------

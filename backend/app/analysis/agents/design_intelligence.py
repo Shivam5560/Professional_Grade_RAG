@@ -315,7 +315,11 @@ def _infer_domain(columns: List[Any]) -> str:
     else:
         col_names = [str(c) for c in columns]
     cols_lower = " ".join(col_names).lower()
-    financial_kw = ["revenue", "profit", "cost", "budget", "income", "expense", "financial", "roi", "revenue"]
+    financial_kw = [
+        "revenue", "profit", "cost", "budget", "income", "expense", "financial", "roi",
+        "credit", "default", "loan", "limit_bal", "bill_amt", "pay_amt", "payment",
+        "balance", "delinquency", "risk", "debt",
+    ]
     health_kw = ["patient", "diagnosis", "treatment", "clinical", "hospital", "medical", "drug", "health"]
     sales_kw = ["sales", "lead", "conversion", "pipeline", "campaign", "customer", "churn", "deal"]
     tech_kw = ["cpu", "memory", "latency", "uptime", "request", "error_rate", "user", "api", "server"]

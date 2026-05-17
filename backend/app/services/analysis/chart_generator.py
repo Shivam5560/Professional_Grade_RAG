@@ -129,7 +129,7 @@ def _build_heatmap(df: pd.DataFrame, x_col: str | None, y_col: str | None, title
     if x_col and y_col and y_col in df.select_dtypes(include="number").columns:
         pivot = df.pivot_table(index=x_col, values=y_col, aggfunc="mean")
         return px.imshow(pivot, title=title, color_continuous_scale="Blues")
-    numeric_df = df.select_dtypes(include="number")
+    numeric_df = df[[c for c in df.select_dtypes(include="number").columns if not _is_identifier_column(c, df)]]
     if numeric_df.shape[1] >= 2:
         return px.imshow(numeric_df.corr(numeric_only=True), title=title, color_continuous_scale="Blues")
     return go.Figure().update_layout(title=f"{title} (Insufficient data for heatmap)")
@@ -152,10 +152,10 @@ def _repair_chart_spec(spec: Dict[str, Any], df: pd.DataFrame) -> tuple[pd.DataF
     repaired["chart_type"] = chart_type
 
     columns = set(df.columns)
-    numeric_cols = list(df.select_dtypes(include="number").columns)
+    numeric_cols = [c for c in df.select_dtypes(include="number").columns if not _is_identifier_column(c, df)]
     categorical_cols = list(df.select_dtypes(exclude="number").columns)
     if not categorical_cols:
-        low_cardinality_numeric = [c for c in numeric_cols if df[c].nunique(dropna=True) <= 12]
+        low_cardinality_numeric = [c for c in numeric_cols if df[c].nunique(dropna=True) <= 20]
         categorical_cols = low_cardinality_numeric
 
     x_col = _valid_column(repaired.get("x_column"), columns)
@@ -166,7 +166,11 @@ def _repair_chart_spec(spec: Dict[str, Any], df: pd.DataFrame) -> tuple[pd.DataF
     requested_y = str(repaired.get("y_column") or "").lower()
     requested_x = str(repaired.get("x_column") or "").lower()
 
-    if chart_type in {"bar", "line", "area"} and y_col is None and target_col and any(token in requested_y for token in ("rate", "default", "churn", "conversion")):
+    if chart_type in {"bar", "line", "area"} and target_col and (
+        y_col == target_col or (
+            y_col is None and any(token in requested_y for token in ("rate", "default", "churn", "conversion"))
+        )
+    ):
         group_col = x_col or _choose_group_column(df, categorical_cols, exclude={target_col})
         if group_col:
             plot_df = (
@@ -230,9 +234,6 @@ def _valid_column(value: Any, columns: set[str]) -> str | None:
 def _choose_numeric(numeric_cols: List[str], exclude: set[str | None] | None = None) -> str | None:
     exclude = exclude or set()
     for col in numeric_cols:
-        if col not in exclude and col.upper() != "ID":
-            return col
-    for col in numeric_cols:
         if col not in exclude:
             return col
     return None
@@ -247,6 +248,29 @@ def _choose_group_column(df: pd.DataFrame, categorical_cols: List[str], exclude:
         if 2 <= unique_count <= 20:
             return col
     return categorical_cols[0] if categorical_cols else None
+
+
+def _is_identifier_column(col: str, df: pd.DataFrame) -> bool:
+    """Detect row identifiers so they don't become charts or analytical drivers."""
+    name = str(col).strip().lower()
+    if name in {"id", "row_id", "record_id", "index"} or name.endswith("_id"):
+        return True
+    if col not in df.columns:
+        return False
+    series = df[col].dropna()
+    if series.empty:
+        return False
+    unique_ratio = series.nunique(dropna=True) / max(len(series), 1)
+    return unique_ratio > 0.95 and pd.api.types.is_numeric_dtype(series)
+
+
+def _categorical_candidates(df: pd.DataFrame, numeric_cols: List[str]) -> List[str]:
+    categorical_cols = list(df.select_dtypes(exclude="number").columns)
+    low_cardinality_numeric = [
+        c for c in numeric_cols
+        if not _is_identifier_column(c, df) and 2 <= df[c].nunique(dropna=True) <= 20
+    ]
+    return categorical_cols + [c for c in low_cardinality_numeric if c not in categorical_cols]
 
 
 def _find_binary_target(df: pd.DataFrame) -> str | None:
@@ -320,6 +344,7 @@ def generate_charts(
     bg_hex: str | None = None,
 ) -> List[str]:
     """Generate multiple charts from specs."""
+    chart_specs = _augment_chart_specs(chart_specs, df)
     paths: List[str] = []
     for idx, spec in enumerate(chart_specs):
         chart_id = spec.get("chart_id") or f"chart_{idx}"
@@ -330,3 +355,88 @@ def generate_charts(
         except Exception as exc:
             logger.log_error("Chart generation skipped", exc, chart_id=chart_id, job_id=job_id)
     return paths
+
+
+def _augment_chart_specs(chart_specs: List[Dict[str, Any]], df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Add data-driven evidence charts when the design agent returns a thin or weak plan."""
+    specs = [dict(spec) for spec in chart_specs if isinstance(spec, dict)]
+    existing_titles = {str(spec.get("title", "")).lower() for spec in specs}
+    existing_ids = {str(spec.get("chart_id", "")).lower() for spec in specs}
+    target_col = _find_binary_target(df)
+    numeric_cols = [c for c in df.select_dtypes(include="number").columns if not _is_identifier_column(c, df)]
+    categorical_cols = _categorical_candidates(df, numeric_cols)
+
+    def add(spec: Dict[str, Any]) -> None:
+        title = str(spec.get("title", "")).lower()
+        chart_id = str(spec.get("chart_id", "")).lower()
+        if (title and title in existing_titles) or (chart_id and chart_id in existing_ids):
+            return
+        spec.setdefault("highlight_insight", True)
+        spec.setdefault("narrative_role", "Adds a concrete evidence view for the analytical story")
+        specs.append(spec)
+        existing_titles.add(title)
+        existing_ids.add(chart_id)
+
+    if target_col:
+        pay_status = next((c for c in ["PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"] if c in df.columns), None)
+        if pay_status:
+            add({
+                "chart_id": "risk_by_payment_status",
+                "chart_type": "bar",
+                "x_column": pay_status,
+                "y_column": target_col,
+                "title": f"Default Rate by {pay_status}",
+                "narrative_role": "Shows how recent repayment status separates low-risk and high-risk customers",
+            })
+        limit_col = next((c for c in numeric_cols if str(c).lower() in {"limit_bal", "credit_limit", "limit"}), None)
+        if limit_col:
+            add({
+                "chart_id": "limit_by_default",
+                "chart_type": "box",
+                "x_column": target_col,
+                "y_column": limit_col,
+                "title": f"{limit_col} by Default Outcome",
+                "narrative_role": "Compares credit exposure distributions between defaulted and non-defaulted accounts",
+            })
+        age_col = next((c for c in numeric_cols if str(c).lower() == "age"), None)
+        if age_col:
+            add({
+                "chart_id": "age_by_default",
+                "chart_type": "box",
+                "x_column": target_col,
+                "y_column": age_col,
+                "title": "Age by Default Outcome",
+                "narrative_role": "Tests whether customer age meaningfully differentiates repayment risk",
+            })
+        group_col = next((c for c in ["EDUCATION", "MARRIAGE", "SEX"] if c in df.columns), None)
+        if group_col:
+            add({
+                "chart_id": f"default_by_{str(group_col).lower()}",
+                "chart_type": "bar",
+                "x_column": group_col,
+                "y_column": target_col,
+                "title": f"Default Rate by {group_col}",
+                "narrative_role": "Adds a segment-level risk view for prioritizing interventions",
+            })
+
+    if len(numeric_cols) >= 2:
+        add({
+            "chart_id": "correlation_matrix",
+            "chart_type": "heatmap",
+            "title": "Correlation Matrix",
+            "narrative_role": "Reveals redundancy and relationships across numeric drivers",
+        })
+
+    distribution_col = _choose_numeric(numeric_cols, exclude={target_col})
+    if distribution_col:
+        add({
+            "chart_id": f"distribution_{str(distribution_col).lower()}",
+            "chart_type": "histogram",
+            "x_column": distribution_col,
+            "title": f"Distribution of {distribution_col}",
+            "narrative_role": "Shows spread, skew, and possible outliers in a material numeric field",
+        })
+
+    for idx, spec in enumerate(specs):
+        spec.setdefault("chart_id", f"chart_{idx + 1}")
+    return specs[:8]

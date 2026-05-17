@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.db.models import AnalysisWorkflowState
+from app.utils.json_safety import sanitize_json
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,6 +43,7 @@ class WorkflowCheckpointStore:
         state_dict: dict,
     ) -> None:
         """Save or update a workflow checkpoint."""
+        state_dict = sanitize_json(state_dict)
         checkpoint_id = self._checkpoint_id(workflow_id, step_name)
         existing = (
             self.db.query(AnalysisWorkflowState)
@@ -60,7 +62,11 @@ class WorkflowCheckpointStore:
                 state_json=state_dict,
             )
             self.db.add(state)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         logger.log_operation("Workflow checkpoint saved", workflow_id=workflow_id, step=step_name)
 
     def load_latest_checkpoint(self, workflow_id: str) -> Optional[Dict[str, Any]]:

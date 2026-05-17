@@ -22,8 +22,13 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-70b-versatile", alias="GROQ_MODEL")
     
-    # Legacy Ollama configuration (kept for backward compatibility only)
+    # Ollama LLM configuration (OpenAI-compatible API)
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_llm_model: str = Field(default="", alias="OLLAMA_LLM_MODEL")
+    ollama_llm_max_tokens: int = Field(default=4096, alias="OLLAMA_LLM_MAX_TOKENS")
+    ollama_api_key: str = Field(default="", alias="OLLAMA_API_KEY")
+
+    # Ollama Embedding/Reranker configuration
     ollama_embedding_model: str = Field(default="embeddinggemma", alias="OLLAMA_EMBEDDING_MODEL")
     ollama_reranker_model: str = Field(default="bge-reranker-v2-m3", alias="OLLAMA_RERANKER_MODEL")
 
