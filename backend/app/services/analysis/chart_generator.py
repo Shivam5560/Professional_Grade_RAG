@@ -55,9 +55,21 @@ def create_chart(
     df: pd.DataFrame,
     job_id: str,
     chart_id: str,
-) -> str:
-    """Create a chart from a spec and save via the configured storage backend."""
+    bg_hex: str | None = None,
+) -> str | None:
+    """Create a chart from a spec and save via the configured storage backend. Returns None if data is weak."""
+    if df is None or df.empty:
+        logger.warning(f"Skipping chart {chart_id} due to empty dataframe.")
+        return None
+        
     df, spec = _repair_chart_spec(spec, df)
+    
+    # Check for zero variance on numeric y columns
+    y_col = spec.get("y_column")
+    if y_col and y_col in df.select_dtypes(include="number").columns:
+        if df[y_col].nunique(dropna=True) <= 1:
+            logger.warning(f"Skipping chart {chart_id} due to zero variance in y_column {y_col}.")
+            return None
     chart_type = spec.get("chart_type", "bar")
     x_col = spec.get("x_column")
     y_col = spec.get("y_column")
@@ -94,7 +106,7 @@ def create_chart(
     else:
         fig = go.Figure().update_layout(title=f"{title} (Unknown type: {chart_type})")
 
-    _apply_chart_theme(fig, spec, theme, template_style, colors, typography)
+    _apply_chart_theme(fig, spec, theme, template_style, colors, typography, bg_hex=bg_hex)
 
     storage = get_chart_storage()
 
@@ -258,10 +270,11 @@ def _apply_chart_theme(
     template_style: str,
     colors: List[str] | None,
     typography: Dict[str, Any],
+    bg_hex: str | None = None,
 ) -> None:
     """Make exported chart images feel native to the chosen slide template."""
     dark = template_style in DARK_STYLES
-    paper_bg = DARK_CHART_BG.get(theme, DARK_CHART_BG["generic"]) if dark else LIGHT_CHART_BG.get(theme, LIGHT_CHART_BG["generic"])
+    paper_bg = bg_hex if bg_hex else (DARK_CHART_BG.get(theme, DARK_CHART_BG["generic"]) if dark else LIGHT_CHART_BG.get(theme, LIGHT_CHART_BG["generic"]))
     plot_bg = paper_bg
     text_color = "#f8fbff" if dark else "#1e2430"
     muted_grid = "rgba(255,255,255,0.14)" if dark else "rgba(30,36,48,0.12)"
@@ -304,14 +317,16 @@ def generate_charts(
     chart_specs: List[Dict[str, Any]],
     df: pd.DataFrame,
     job_id: str,
+    bg_hex: str | None = None,
 ) -> List[str]:
     """Generate multiple charts from specs."""
     paths: List[str] = []
     for idx, spec in enumerate(chart_specs):
         chart_id = spec.get("chart_id") or f"chart_{idx}"
         try:
-            path = create_chart(spec, df, job_id, chart_id)
-            paths.append(path)
+            path = create_chart(spec, df, job_id, chart_id, bg_hex=bg_hex)
+            if path:
+                paths.append(path)
         except Exception as exc:
             logger.log_error("Chart generation skipped", exc, chart_id=chart_id, job_id=job_id)
     return paths

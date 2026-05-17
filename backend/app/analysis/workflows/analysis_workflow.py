@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
+
+import numpy as np
 
 from sqlalchemy.orm import Session
 
@@ -74,6 +77,24 @@ class AnalysisWorkflow:
     # Event emission
     # ------------------------------------------------------------------
 
+    def _sanitize_for_json(self, value: Any) -> Any:
+        """Replace non-JSON-safe values (NaN/inf, numpy scalars) before persisting."""
+        if isinstance(value, dict):
+            return {key: self._sanitize_for_json(val) for key, val in value.items()}
+        if isinstance(value, list):
+            return [self._sanitize_for_json(item) for item in value]
+        if isinstance(value, tuple):
+            return [self._sanitize_for_json(item) for item in value]
+        if isinstance(value, (np.integer,)):
+            return int(value)
+        if isinstance(value, (np.bool_,)):
+            return bool(value)
+        if isinstance(value, (float, np.floating)):
+            if math.isnan(value) or math.isinf(value):
+                return None
+            return float(value)
+        return value
+
     def _emit(self, step_name: str, payload: Dict[str, Any]) -> None:
         """Emit progress event to WebSocket and persist to DB."""
         event = {
@@ -81,6 +102,7 @@ class AnalysisWorkflow:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": payload,
         }
+        event = self._sanitize_for_json(event)
         job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
         if job:
             events = list(job.progress_events or [])
@@ -110,12 +132,13 @@ class AnalysisWorkflow:
                 pass
 
     def _checkpoint(self, step_name: str, state: Dict[str, Any]) -> None:
+        clean_state = self._sanitize_for_json(state)
         self.checkpoint_store.save_checkpoint(
             workflow_id=self.job_id,
             job_id=self.job_id,
             user_id=self.user_id,
             step_name=step_name,
-            state_dict=state,
+            state_dict=clean_state,
         )
 
     # ------------------------------------------------------------------
@@ -412,7 +435,21 @@ class AnalysisWorkflow:
                 spec.setdefault("template_style", design_data.get("template_style", "editorial"))
                 spec.setdefault("visual_motif", design_data.get("visual_motif", "grid"))
                 spec.setdefault("typography", design_data.get("typography", {}))
-        chart_paths = generate_charts(chart_specs, df, self.job_id)
+        
+        # Extract bg_hex logic
+        from app.services.analysis.slide_generator import THEME_BG, LIGHT_BG
+        theme_name = design_data.get("theme", "generic")
+        style = design_data.get("template_style", "editorial").lower()
+        mode = "dark" if style in ["aurora", "bold"] else "light"
+        bg_hex_str = THEME_BG.get(theme_name, "1A1A2E") if mode == "dark" else LIGHT_BG.get(theme_name, "F7F8FB")
+        bg_hex = f"#{bg_hex_str}"
+
+        chart_paths = generate_charts(
+            chart_specs=chart_specs,
+            df=df,
+            job_id=self.job_id,
+            bg_hex=bg_hex
+        )
 
         summary = narr_data.get("summary", "Untitled Analysis")
         ctx_data = self.checkpoint_store.get_step_state(self.job_id, "build_context") or {}
