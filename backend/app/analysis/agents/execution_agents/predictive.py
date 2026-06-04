@@ -113,7 +113,10 @@ class PredictiveAgent(BaseAnalysisAgent):
                 model = LogisticRegression(max_iter=1000, random_state=42)
                 cv_scores = cross_val_score(model, X_scaled, y, cv=min(3, len(model_df) // 30), scoring="f1_weighted")
                 model.fit(X_scaled, y)
-                coefs = model.coef_[0] if len(model.classes_) == 2 else model.coef_
+                if len(model.classes_) == 2:
+                    coefs = model.coef_[0]
+                else:
+                    coefs = np.mean(np.abs(model.coef_), axis=0)
                 model_type = "LogisticRegression"
             else:
                 model = LinearRegression()

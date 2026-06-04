@@ -138,4 +138,66 @@ def profile_dataframe(df: pd.DataFrame) -> Dict[str, Any]:
     if numeric_cols:
         profile["numeric_summary"] = df[numeric_cols].describe().to_dict()
 
+    profile["analysis_brief"] = _build_analysis_brief(df, numeric_cols, categorical_cols, datetime_cols)
+
     return sanitize_json(profile)
+
+
+def _build_analysis_brief(
+    df: pd.DataFrame,
+    numeric_cols: list[str],
+    categorical_cols: list[str],
+    datetime_cols: list[str],
+) -> Dict[str, Any]:
+    """Create a compact analyst brief that helps LLM agents build a story from a raw CSV/XLSX."""
+    likely_targets = _infer_likely_targets(df)
+    high_missing = [
+        {"column": col, "missing_pct": round(float(df[col].isna().mean()), 4)}
+        for col in df.columns
+        if df[col].isna().mean() >= 0.1
+    ][:8]
+    segment_candidates = [
+        {"column": col, "unique_count": int(df[col].nunique(dropna=True))}
+        for col in categorical_cols
+        if 2 <= df[col].nunique(dropna=True) <= 30
+    ][:8]
+    measure_candidates = [
+        col for col in numeric_cols
+        if not _looks_like_identifier(col, df[col])
+    ][:12]
+    return {
+        "likely_targets": likely_targets,
+        "measure_candidates": measure_candidates,
+        "segment_candidates": segment_candidates,
+        "time_candidates": datetime_cols[:5],
+        "high_missing_columns": high_missing,
+        "dataset_shape": "wide" if len(df.columns) >= 30 else "tall" if len(df) >= 10000 else "standard",
+    }
+
+
+def _infer_likely_targets(df: pd.DataFrame) -> list[str]:
+    priority_tokens = (
+        "target", "label", "outcome", "default", "churn", "conversion", "revenue",
+        "profit", "sales", "risk", "score", "status", "retention",
+    )
+    matches = [
+        col for col in df.columns
+        if any(token in str(col).lower() for token in priority_tokens)
+    ]
+    if matches:
+        return matches[:6]
+    numeric_cols = [
+        col for col in df.select_dtypes(include="number").columns
+        if not _looks_like_identifier(col, df[col])
+    ]
+    return numeric_cols[:3]
+
+
+def _looks_like_identifier(col: str, series: pd.Series) -> bool:
+    name = str(col).lower()
+    if name in {"id", "row_id", "record_id", "index"} or name.endswith("_id"):
+        return True
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+    return pd.api.types.is_numeric_dtype(non_null) and non_null.nunique(dropna=True) / max(len(non_null), 1) > 0.95

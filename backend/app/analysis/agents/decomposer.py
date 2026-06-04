@@ -15,6 +15,11 @@ logger = get_logger(__name__)
 
 SYSTEM_PROMPT = """You are an expert data analyst. Given a user question and a dataset profile, break the request into 1-5 specific analytical sub-tasks.
 
+For broad CSV/XLSX requests, behave like a senior analyst preparing a presentation:
+- identify the likely business objective or target
+- cover data quality, drivers, segments, trends/time patterns, risk/opportunity, and recommended next decisions where applicable
+- choose only analytical domains that can produce meaningful evidence from the available columns
+
 Each task must have:
 - task_id: a short unique identifier (e.g., "t1", "t2")
 - description: what the task should accomplish
@@ -47,6 +52,7 @@ Dataset Profile:
 - Numeric columns: {profile.get('numeric_columns', [])}
 - Categorical columns: {profile.get('categorical_columns', [])}
 - Datetime columns: {profile.get('datetime_columns', [])}
+- Analyst brief: {profile.get('analysis_brief', {})}
 
 Break this into specific analytical tasks."""
 

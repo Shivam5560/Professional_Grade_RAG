@@ -8,7 +8,7 @@ export function useAnalysisSocket(jobId: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectCount = useRef(0);
   const maxReconnects = 5;
-  const { appendEvent, setReportData, reset } = useAnalysisStore();
+  const { appendEvent, setReportData, setSocketConnected, reset } = useAnalysisStore();
 
   const connect = useCallback(() => {
     if (!jobId) return;
@@ -18,6 +18,7 @@ export function useAnalysisSocket(jobId: string | null) {
 
     ws.onopen = () => {
       reconnectCount.current = 0;
+      setSocketConnected(true);
     };
 
     ws.onmessage = (event) => {
@@ -30,11 +31,12 @@ export function useAnalysisSocket(jobId: string | null) {
         ws.close();
       }
       if (data.type === 'error') {
-        reset();
+        setReportData(null);
       }
     };
 
     ws.onclose = () => {
+      setSocketConnected(false);
       if (reconnectCount.current < maxReconnects) {
         reconnectCount.current += 1;
         setTimeout(connect, 1000 * Math.min(reconnectCount.current, 10));
@@ -42,9 +44,10 @@ export function useAnalysisSocket(jobId: string | null) {
     };
 
     ws.onerror = () => {
+      setSocketConnected(false);
       ws.close();
     };
-  }, [jobId, appendEvent, setReportData, reset]);
+  }, [jobId, appendEvent, setReportData, setSocketConnected, reset]);
 
   useEffect(() => {
     connect();

@@ -13,14 +13,25 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-SYSTEM_PROMPT = """You are an insight prioritizer. Given a set of analytical findings, rank them by significance, relevance, and actionability. Eliminate redundancies.
+SYSTEM_PROMPT = """You are an insight prioritizer and consulting analyst. Given analytical findings from a CSV/XLSX dataset, rank them by significance, relevance, decision value, and actionability. Eliminate redundancies.
+
+Your output is raw material for an executive PPTX. Each insight must have:
+- a business-facing headline
+- a concise evidence statement
+- the implication / so-what
+- a recommended action
+- a narrative role showing where it belongs in the story
 
 Respond ONLY with a JSON object in this exact format:
 {
   "insights": [
     {
       "insight_id": "i1",
-      "content": "Revenue correlates strongly with marketing spend (r=0.82).",
+      "title": "Marketing Spend Drives Revenue Momentum",
+      "subtitle": "Revenue correlates strongly with marketing spend (r=0.82).",
+      "content": "Revenue correlates strongly with marketing spend (r=0.82), making marketing intensity a material growth driver rather than background context.",
+      "recommendation": "Test budget reallocation toward the highest-return segments before scaling spend broadly.",
+      "narrative_role": "Driver evidence",
       "significance_score": 0.92,
       "source_agents": ["correlation"]
     }
@@ -29,7 +40,10 @@ Respond ONLY with a JSON object in this exact format:
 
 Rules:
 - significance_score must be between 0.0 and 1.0
-- Each insight should be concise and actionable
+- Each insight should be specific, decision-oriented, and grounded in the finding
+- Do not include weak findings only because they are available
+- Avoid raw statistical wording as the headline; translate it into business meaning
+- narrative_role should be one of: context, driver, risk, opportunity, segment, trend, forecast, recommendation
 - Eliminate duplicate or near-duplicate findings
 - Limit to the top 10 most significant insights"""
 
@@ -58,6 +72,10 @@ Prioritize these insights."""
                     content=i["content"],
                     significance_score=max(0.0, min(1.0, i.get("significance_score", 0.5))),
                     source_agents=i.get("source_agents", []),
+                    title=str(i.get("title", "")).strip(),
+                    subtitle=str(i.get("subtitle", "")).strip(),
+                    recommendation=str(i.get("recommendation", "")).strip(),
+                    narrative_role=str(i.get("narrative_role", "")).strip(),
                 )
                 for idx, i in enumerate(data.get("insights", []))
             ]
@@ -100,6 +118,19 @@ def _fallback_insights(results: List[AgentResult]) -> List[Insight]:
                 content=desc,
                 significance_score=f.significance,
                 source_agents=[r.agent_name],
+                title=_fallback_headline(desc),
+                subtitle=desc[:140],
+                recommendation="Validate this signal with stakeholder context and convert it into a monitored decision metric.",
+                narrative_role="evidence",
             ))
     insights.sort(key=lambda x: x.significance_score, reverse=True)
     return insights[:10]
+
+
+def _fallback_headline(description: str) -> str:
+    cleaned = " ".join(str(description or "").split())
+    if not cleaned:
+        return "Material Data Signal"
+    words = cleaned.replace(":", " ").replace("(", " ").split()
+    words = [w.strip(".,;") for w in words if len(w.strip(".,;")) > 2]
+    return " ".join(words[:5]).title() or "Material Data Signal"

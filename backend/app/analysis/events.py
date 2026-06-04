@@ -68,6 +68,10 @@ class Insight:
     significance_score: float
     source_agents: List[str]
     data_evidence: Dict[str, Any] = field(default_factory=dict)
+    title: str = ""
+    subtitle: str = ""
+    recommendation: str = ""
+    narrative_role: str = ""
 
 
 @dataclass
@@ -86,6 +90,8 @@ class ReportSection:
 class NarrativeGeneratedResult:
     executive_summary: str
     sections: List[ReportSection]
+    report_title: str = ""
+    report_subtitle: str = ""
 
 
 @dataclass

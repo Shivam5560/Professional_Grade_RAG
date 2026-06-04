@@ -13,11 +13,14 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-SYSTEM_PROMPT = """You are a senior data storyteller. Write an executive-ready analytical report in Markdown.
+SYSTEM_PROMPT = """You are a senior data storyteller and presentation strategist. Write an executive-ready analytical report in Markdown.
+Name the work using business/story language, not technical/statistical labels. Good titles sound like an analysis theme or decision brief, for example "Customer Retention Outlook", "Revenue Momentum Review", or "Portfolio Risk Priorities". Do not hardcode those examples; infer the title from the query, dataset, and insights.
 Each insight must have a 'So What?' and an actionable recommendation. Make the content specific, structured, and presentation-ready.
 
 Respond ONLY with a JSON object in this exact format:
 {
+  "report_title": "A concise business-facing title, 3-7 words, not a raw metric name",
+  "report_subtitle": "One sentence explaining the decision story and audience value",
   "executive_summary": "A concise but substantive summary of the analytical story, key risks, and recommended direction.",
   "sections": [
     {"title": "Executive Overview", "content": "..."},
@@ -30,6 +33,8 @@ Respond ONLY with a JSON object in this exact format:
 
 Rules:
 - Produce 4-6 sections unless the input is genuinely tiny
+- Include at least one section that explains the story behind the evidence, not just the numbers
+- Include at least one forward-looking section such as future plans, recommended roadmap, watchouts, or next decisions when the data supports it
 - Use concrete numbers, column names, and evidence when available
 - Avoid generic filler; every paragraph should explain what changed, why it matters, or what to do next
 - Recommendations must be action-oriented bullets"""
@@ -56,6 +61,8 @@ class NarrativeGenerator(BaseAnalysisAgent):
         prompt = f"""User Query: {query}
 
 Dataset: {profile.get('row_count', 'unknown')} rows, {profile.get('column_count', 'unknown')} columns.
+Columns: {profile.get('columns', [])}
+Analyst brief: {profile.get('analysis_brief', {})}
 
 Insights:
 {insights_text}
@@ -73,6 +80,8 @@ Generate a narrative report."""
             return NarrativeGeneratedResult(
                 executive_summary=data.get("executive_summary", ""),
                 sections=sections,
+                report_title=_clean_title(data.get("report_title", "")),
+                report_subtitle=str(data.get("report_subtitle", "")).strip(),
             )
         except Exception as exc:
             logger.log_error("Narrative generation failed", exc)
@@ -82,7 +91,24 @@ Generate a narrative report."""
             return NarrativeGeneratedResult(
                 executive_summary=summary,
                 sections=_fallback_sections(insights.insights),
+                report_title=_fallback_title(query),
+                report_subtitle="Patterns, evidence, and recommended next decisions from the dataset.",
             )
+
+
+def _clean_title(title: Any) -> str:
+    title = str(title or "").strip().strip('"')
+    if len(title) > 80:
+        title = title[:77].rstrip(" .,;:") + "..."
+    return title
+
+
+def _fallback_title(query: str) -> str:
+    words = [w.strip(" ,.;:!?()[]{}") for w in str(query or "").split()]
+    words = [w for w in words if len(w) > 2 and w.lower() not in {"what", "are", "the", "and", "for", "with", "from", "data", "analysis"}]
+    if words:
+        return " ".join(words[:5]).title()
+    return "Analysis Overview"
 
 
 def _ensure_substantive_sections(sections: List[ReportSection], insights: List[Insight]) -> List[ReportSection]:

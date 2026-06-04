@@ -94,6 +94,12 @@ class ThemeEngine:
         self.surface = _blend_on_bg(self.p[0], self.bg, surface_alpha)
         self.surface_light = _blend_on_bg(self.p[1], self.bg, surface_light_alpha)
 
+        # Slide variation tokens
+        self.bg_alt = _blend_on_bg(self.p[1], self.bg, 0.03)
+        self.bg_header = _blend_on_bg(self.p[0], self.bg, 0.08)
+        self.chart_frame = _blend_on_bg(self.p[0], self.bg, 0.04)
+        self.footer_line = _blend_on_bg(self.p[0], self.bg, 0.25)
+
     def accent(self, i: int = 0) -> RGBColor:
         return self.p[i % 4]
 
@@ -297,15 +303,57 @@ def _geometric_background(slide, theme: ThemeEngine):
               theme.accent(2), alpha=0.15, bg=theme.bg)
 
 
+_bg_variant_idx = 0
+
+
+def _next_variant() -> int:
+    """Module-level counter for per-slide background variation."""
+    global _bg_variant_idx
+    _bg_variant_idx += 1
+    return _bg_variant_idx
+
+
 def _light_geometric_background(slide, theme: ThemeEngine):
-    """Subtle geometric accents for light slides."""
-    # Thin accent bar top
-    _add_rect(slide, Inches(0), Inches(0), SLIDE_W, Inches(0.04), theme.accent(0))
-    # Small corner accent
-    _add_rect(slide, Inches(0), Inches(0), Inches(0.4), Inches(0.04), theme.accent(1))
-    # Faint dot bottom-right
-    _add_oval(slide, Inches(12.5), Inches(7.0), Inches(0.3), Inches(0.3),
-              theme.accent(0), alpha=0.06, bg=theme.bg)
+    """Premium geometric accents for light slides with per-slide variation."""
+    v = _next_variant()
+    ai = v % 4  # accent index rotates
+
+    # ── Top accent bar — color rotates per slide ──
+    _add_rect(slide, Inches(0), Inches(0), SLIDE_W, Inches(0.045), theme.accent(ai))
+    corner_w = Inches(0.3 + (v % 3) * 0.15)
+    _add_rect(slide, Inches(0), Inches(0), corner_w, Inches(0.045), theme.accent((ai + 1) % 4))
+
+    # ── Per-slide tint overlay for visual diversity ──
+    if v % 4 == 0:
+        # Subtle top-right warm wash
+        _add_rect(slide, Inches(8.5), Inches(0.045), Inches(4.833), Inches(3.0),
+                  theme.accent(ai), alpha=0.025, bg=theme.bg)
+    elif v % 4 == 1:
+        # Left vertical accent band
+        _add_rect(slide, Inches(0), Inches(0.045), Inches(0.22), SLIDE_H - Inches(0.6),
+                  theme.accent((ai + 2) % 4), alpha=0.07, bg=theme.bg)
+        # Top-right corner glow
+        _add_oval(slide, Inches(10.5), Inches(-1.0), Inches(4.0), Inches(4.0),
+                  theme.accent(ai), alpha=0.02, bg=theme.bg)
+    elif v % 4 == 2:
+        # Bottom gradient tint
+        _add_rect(slide, Inches(0), Inches(5.0), SLIDE_W, Inches(2.5),
+                  theme.accent((ai + 1) % 4), alpha=0.018, bg=theme.bg)
+        # Small accent square top-right
+        _add_rect(slide, Inches(12.4), Inches(0.3), Inches(0.5), Inches(0.5),
+                  theme.accent(ai), alpha=0.05, bg=theme.bg)
+    else:
+        # Dual corner radials
+        _add_oval(slide, Inches(-1.5), Inches(-1.0), Inches(4.5), Inches(4.5),
+                  theme.accent((ai + 1) % 4), alpha=0.02, bg=theme.bg)
+        _add_oval(slide, Inches(10.0), Inches(4.5), Inches(5.0), Inches(5.0),
+                  theme.accent(ai), alpha=0.015, bg=theme.bg)
+
+    # ── Decorative dot — position varies ──
+    dot_x = Inches(11.6 + (v % 3) * 0.45)
+    dot_y = Inches(6.2 + (v % 2) * 0.55)
+    _add_oval(slide, dot_x, dot_y, Inches(0.22), Inches(0.22),
+              theme.accent(ai), alpha=0.08, bg=theme.bg)
 
 
 def _apply_motif(slide, theme: ThemeEngine, motif: str):
@@ -433,12 +481,8 @@ def _side_accent_bar(slide, theme: ThemeEngine):
 
 
 def _bottom_strip(slide, theme: ThemeEngine, alpha: float = 0.85):
-    """Subtle colored strip at the bottom."""
-    _add_rect(slide, Inches(0), Inches(7.2), SLIDE_W, Inches(0.3), theme.accent(0), alpha=alpha, bg=theme.bg)
-    # Small color blocks
-    for i in range(4):
-        _add_rect(slide, Inches(0.8 + i * 0.4), Inches(7.3), Inches(0.28), Inches(0.06),
-                  theme.accent(i))
+    """Clean thin accent line at the bottom of the slide."""
+    _add_rect(slide, Inches(0), Inches(7.22), SLIDE_W, Inches(0.025), theme.footer_line)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -564,11 +608,19 @@ def _executive_summary_slide(prs, narrative: str, theme: ThemeEngine, sections: 
                           sec_list, 12, theme.muted, font=body_font, spacing=22)
 
         _add_text_box(slide, Inches(8.2), Inches(3.2), Inches(4), Inches(0.4),
-                      "DESIGN PALETTE", 10, theme.accent(0), bold=True, font=body_font)
-        for i, c in enumerate(theme.p[:4]):
-            _add_rect(slide, Inches(8.2 + i * 0.7), Inches(3.7), Inches(0.5), Inches(0.5), c)
-            _add_text_box(slide, Inches(8.2 + i * 0.7), Inches(4.25), Inches(0.5), Inches(0.2),
-                          f"#{_to_hex(c)}", 7, theme.dark_muted, align=PP_ALIGN.CENTER, font=body_font)
+                      "AT A GLANCE", 10, theme.accent(0), bold=True, font=body_font)
+        glance_items = [
+            ("Sections", str(len(sections))),
+            ("Insights", str(len([s for s in sections if 'finding' in s.get('title', '').lower() or 'key' in s.get('title', '').lower()]) or len(sections))),
+        ]
+        for gi, (gl, gv) in enumerate(glance_items):
+            gy = Inches(3.7 + gi * 0.85)
+            _add_rect(slide, Inches(8.2), gy, Inches(3.6), Inches(0.7), theme.surface)
+            _add_rect(slide, Inches(8.2), gy, Inches(0.06), Inches(0.7), theme.accent(gi))
+            _add_text_box(slide, Inches(8.5), gy + Inches(0.1), Inches(1.2), Inches(0.5),
+                          gv, 24, theme.accent(gi), bold=True, font=typography.get('stat_font', body_font))
+            _add_text_box(slide, Inches(9.8), gy + Inches(0.18), Inches(1.8), Inches(0.35),
+                          gl, 11, theme.muted, font=body_font)
         return
 
     _side_accent_bar(slide, theme)
@@ -593,11 +645,19 @@ def _executive_summary_slide(prs, narrative: str, theme: ThemeEngine, sections: 
                       sec_list, 13, theme.muted, font=body_font, spacing=22)
 
     _add_text_box(slide, Inches(8.5), Inches(3.3), Inches(4), Inches(0.4),
-                  "DESIGN PALETTE", 10, theme.accent(0), bold=True, font=body_font)
-    for i, c in enumerate(theme.p[:4]):
-        _add_rect(slide, Inches(8.5 + i * 0.7), Inches(3.8), Inches(0.5), Inches(0.5), c)
-        _add_text_box(slide, Inches(8.5 + i * 0.7), Inches(4.35), Inches(0.5), Inches(0.2),
-                      f"#{_to_hex(c)}", 7, theme.dark_muted, align=PP_ALIGN.CENTER, font=body_font)
+                  "AT A GLANCE", 10, theme.accent(0), bold=True, font=body_font)
+    glance_items = [
+        ("Sections", str(len(sections))),
+        ("Insights", str(len([s for s in sections if 'finding' in s.get('title', '').lower() or 'key' in s.get('title', '').lower()]) or len(sections))),
+    ]
+    for gi, (gl, gv) in enumerate(glance_items):
+        gy = Inches(3.8 + gi * 0.85)
+        _add_rect(slide, Inches(8.5), gy, Inches(3.6), Inches(0.7), theme.surface)
+        _add_rect(slide, Inches(8.5), gy, Inches(0.06), Inches(0.7), theme.accent(gi))
+        _add_text_box(slide, Inches(8.8), gy + Inches(0.1), Inches(1.2), Inches(0.5),
+                      gv, 24, theme.accent(gi), bold=True, font=body_font)
+        _add_text_box(slide, Inches(10.1), gy + Inches(0.18), Inches(1.8), Inches(0.35),
+                      gl, 11, theme.muted, font=body_font)
 
     _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
 
@@ -640,7 +700,6 @@ def _story_arc_slide(prs, design_spec: dict, theme: ThemeEngine, style: str, typ
     start_x = (SLIDE_W - total_w) // 2
     card_y = Inches(2.65)
 
-    phase_icons = ["🔍", "📊", "📈", "🎯", "💡", "🚀"]
     phase_labels = [
         "UNDERSTAND\nWhat the data contains", "DISCOVER\nPatterns & relationships",
         "ANALYZE\nDeep statistical tests", "VALIDATE\nEvidence quality",
@@ -700,6 +759,79 @@ def _chunk_text(text: str, max_chars: int = 350) -> List[str]:
         chunks.append(" ".join(current_chunk))
         
     return chunks
+
+
+def _section_deep_dive_slides(prs, sections: list, theme: ThemeEngine, style: str,
+                              typography: Dict[str, str], section_limit: int = 3):
+    """Narrative section slides: useful for evidence, implications, plans, and watchouts."""
+    title_font = typography["title_font"]
+    body_font = typography["body_font"]
+    usable_sections = [
+        section for section in sections
+        if _clean_markdown_text(section.get("content", "")) and "recommend" not in str(section.get("title", "")).lower()
+    ][:section_limit]
+
+    for idx, section in enumerate(usable_sections):
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        _set_bg(slide, theme.bg)
+        if style in ("editorial", "minimal"):
+            _light_geometric_background(slide, theme)
+        else:
+            _geometric_background(slide, theme)
+        _apply_motif(slide, theme, "")
+        _side_accent_bar(slide, theme)
+
+        title = _compact_title(section.get("title") or f"Evidence View {idx + 1}", max_words=6, max_chars=52)
+        content = str(section.get("content", ""))
+        bullets = _extract_bullets(content)
+        if not bullets:
+            bullets = _chunk_text(_clean_markdown_text(content), max_chars=190)[:5]
+
+        _section_label(slide, "STORY DETAIL", theme, body_font)
+        _add_text_box(slide, MARGIN, Inches(0.65), Inches(9.2), Inches(0.62),
+                      title, 22, theme.white, bold=True, font=title_font)
+        _accent_divider(slide, Inches(1.42), theme, width_ratio=0.16)
+
+        lead = _shorten(content, 280)
+        _add_text_box(slide, MARGIN, Inches(1.72), Inches(6.6), Inches(1.05),
+                      lead, 11, theme.off_white, font=body_font, spacing=15, min_size=8)
+
+        card_w = Inches(3.55)
+        card_h = Inches(1.36)
+        start_x = MARGIN
+        start_y = Inches(3.15)
+        for bullet_idx, bullet in enumerate(bullets[:6]):
+            row = bullet_idx // 2
+            col = bullet_idx % 2
+            x = start_x + col * (card_w + Inches(0.35))
+            y = start_y + row * (card_h + Inches(0.28))
+            _add_rect(slide, x, y, card_w, card_h, theme.surface)
+            _add_rect(slide, x, y, Inches(0.06), card_h, theme.accent(bullet_idx))
+            _add_text_box(slide, x + Inches(0.22), y + Inches(0.18), card_w - Inches(0.42), card_h - Inches(0.25),
+                          _shorten(bullet, 155), 10, theme.off_white, font=body_font, spacing=13, min_size=7)
+
+        _add_rect(slide, Inches(8.55), Inches(1.72), Inches(3.9), Inches(4.95), theme.surface)
+        _add_text_box(slide, Inches(8.88), Inches(2.02), Inches(3.25), Inches(0.35),
+                      "WHY THIS MATTERS", 10, theme.accent(idx), bold=True, font=body_font)
+        implication = _infer_section_implication(section)
+        _add_text_box(slide, Inches(8.88), Inches(2.55), Inches(3.2), Inches(2.2),
+                      implication, 14, theme.white, bold=True, font=title_font, spacing=18, min_size=9)
+        _add_text_box(slide, Inches(8.88), Inches(5.35), Inches(3.15), Inches(0.9),
+                      "Use this slide as the interpretive bridge between the evidence and the next decision.",
+                      9, theme.muted, font=body_font, spacing=13, min_size=7)
+        _bottom_strip(slide, theme, alpha=0.45 if style in ("editorial", "minimal") else 0.85)
+
+
+def _infer_section_implication(section: Dict[str, Any]) -> str:
+    title = str(section.get("title", "")).lower()
+    content = _clean_markdown_text(section.get("content", ""))
+    if "risk" in title or "watch" in title:
+        return "Treat these signals as monitoring priorities before committing to a high-confidence decision."
+    if "future" in title or "plan" in title or "recommend" in title:
+        return "Turn the finding into an owned next step with a metric, timeline, and review cadence."
+    if "evidence" in title or "driver" in title:
+        return "The evidence explains which variables deserve attention and which are supporting context."
+    return _shorten(content, 180) or "This section explains what the evidence means for the decision."
 
 def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, palette: list,
                     design_spec: dict, style: str, typography: Dict[str, str],
@@ -774,7 +906,7 @@ def _insight_slides(prs, insights: list, chart_paths: list, theme: ThemeEngine, 
             chart_img = _find_chart_for_insight(idx, chart_paths)
             if chart_img:
                 try:
-                    _add_rect(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(4.18), theme.surface)
+                    _chart_frame(slide, right_x - Inches(0.08), Inches(1.12), Inches(4.96), Inches(4.18), theme, idx)
                     slide.shapes.add_picture(chart_img, right_x, Inches(1.2), Inches(4.8), Inches(4.02))
                 except Exception:
                     _chart_placeholder(slide, right_x, Inches(1.2), Inches(4.8), Inches(4.02),
@@ -829,6 +961,17 @@ def _chart_placeholder(slide, x, y, w, h, theme: ThemeEngine, idx: int, label: s
                   label, 9, theme.dark_muted, align=PP_ALIGN.CENTER, font=font)
 
 
+def _chart_frame(slide, x, y, w, h, theme: ThemeEngine, accent_idx: int = 0):
+    """Premium chart frame with shadow effect and accent top-border."""
+    # Shadow rectangle (offset down-right)
+    _add_rect(slide, x + Inches(0.04), y + Inches(0.04), w, h,
+              theme.bg_header, alpha=0.35, bg=theme.bg)
+    # Main frame background
+    _add_rect(slide, x, y, w, h, theme.chart_frame)
+    # Top accent border
+    _add_rect(slide, x, y, w, Inches(0.04), theme.accent(accent_idx))
+
+
 def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
                   style: str, typography: Dict[str, str], motif: str = "",
                   chart_specs: list | None = None, insights: list | None = None,
@@ -870,7 +1013,7 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
             _add_text_box(slide, MARGIN, Inches(1.18), Inches(7.1), Inches(0.32),
                           chart_subtitle, 8, theme.muted, italic=True, font=body_font)
             _accent_divider(slide, Inches(1.35), theme)
-            _add_rect(slide, MARGIN - Inches(0.08), Inches(1.62), Inches(7.25), Inches(5.1), theme.surface)
+            _chart_frame(slide, MARGIN - Inches(0.08), Inches(1.62), Inches(7.25), Inches(5.1), theme, idx)
             try:
                 slide.shapes.add_picture(png_path, MARGIN, Inches(1.7), Inches(7.1), Inches(4.95))
             except Exception as exc:
@@ -892,7 +1035,7 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
                           _shorten(chart_name, 90), 20, theme.white, bold=True, font=title_font, min_size=14)
             _add_text_box(slide, MARGIN, Inches(1.38), Inches(10.5), Inches(0.45),
                           chart_subtitle, 10, theme.muted, italic=True, font=body_font)
-            _add_rect(slide, MARGIN - Inches(0.08), Inches(2.02), Inches(11.66), Inches(4.35), theme.surface)
+            _chart_frame(slide, MARGIN - Inches(0.08), Inches(2.02), Inches(11.66), Inches(4.35), theme, idx)
             try:
                 slide.shapes.add_picture(png_path, MARGIN, Inches(2.1), Inches(11.5), Inches(4.2))
             except Exception as exc:
@@ -913,7 +1056,7 @@ def _chart_slides(prs, chart_paths: list, theme: ThemeEngine, palette: list,
                           "Use this chart as the evidence anchor for the recommendation that follows.",
                           8, theme.dark_muted, italic=True, font=body_font, spacing=11)
             chart_x = Inches(4.35)
-            _add_rect(slide, chart_x - Inches(0.08), Inches(0.95), Inches(8.1), Inches(5.75), theme.surface)
+            _chart_frame(slide, chart_x - Inches(0.08), Inches(0.95), Inches(8.1), Inches(5.75), theme, idx)
             try:
                 slide.shapes.add_picture(png_path, chart_x, Inches(1.03), Inches(7.95), Inches(5.58))
             except Exception as exc:
@@ -1038,6 +1181,8 @@ def _build_slide_plan(
     density_caps = {"minimal": 3, "medium": 5, "rich": 8}
     insight_cap = density_caps.get(density, 5)
     insight_count = min(len(significant), insight_cap)
+    section_caps = {"minimal": 1, "medium": 2, "rich": 4}
+    narrative_section_count = min(len(sections), section_caps.get(density, 2))
 
     valid_chart_count = sum(1 for p in chart_paths if _resolve_png_path(p))
     highlighted_charts = sum(
@@ -1059,6 +1204,7 @@ def _build_slide_plan(
     return {
         "include_summary": include_summary,
         "include_story": has_story,
+        "narrative_section_count": narrative_section_count,
         "insight_count": insight_count,
         "chart_count": chart_count,
         "include_recommendations": has_recommendations,
@@ -1120,11 +1266,16 @@ def generate_slides(
     design_spec: Dict[str, Any],
     chart_paths: List[str],
     job_id: str,
+    output_path: Optional[str] = None,
 ) -> str:
     """Generate a professional PPTX from analysis results."""
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
+
+    # Reset background variation counter for this deck
+    global _bg_variant_idx
+    _bg_variant_idx = 0
 
     palette = design_spec.get("color_palette", ["#4f81bd", "#9cbb58", "#f79646", "#8064a2"])
     theme_name = design_spec.get("theme", "generic")
@@ -1142,6 +1293,10 @@ def generate_slides(
         slide_steps.append(("summary", lambda: _executive_summary_slide(prs, narrative, theme, sections, style_name, typography)))
     if plan["include_story"]:
         slide_steps.append(("story_arc", lambda: _story_arc_slide(prs, design_spec, theme, style_name, typography)))
+    if plan["narrative_section_count"]:
+        slide_steps.append(("story_detail", lambda: _section_deep_dive_slides(
+            prs, sections, theme, style_name, typography, section_limit=plan["narrative_section_count"],
+        )))
     if insights and plan["insight_count"]:
         slide_steps.append((
             "insights",
@@ -1170,10 +1325,37 @@ def generate_slides(
         except Exception as exc:
             logger.log_error(f"Slide generation failed for: {element}", exc, job_id=job_id)
 
-    # Persist
-    output_dir = os.path.join("data", "slides")
-    os.makedirs(output_dir, exist_ok=True)
-    path = os.path.join(output_dir, f"{job_id}.pptx")
+    # ── Post-processing: slide footers with page numbers ──
+    total_slides = len(prs.slides)
+    body_font = typography.get("body_font", "Calibri")
+    for slide_idx, slide in enumerate(prs.slides):
+        # Alternate background tint on even slides for visual variety
+        if slide_idx > 0 and slide_idx % 2 == 0:
+            try:
+                _set_bg(slide, theme.bg_alt)
+            except Exception:
+                pass
+        # Slide number (right-aligned, bottom)
+        _add_text_box(
+            slide, Inches(11.5), Inches(7.05), Inches(1.4), Inches(0.3),
+            f"{slide_idx + 1} / {total_slides}", 7, theme.dark_muted,
+            align=PP_ALIGN.RIGHT, font=body_font,
+        )
+        # Branding (left-aligned, bottom) — skip cover slide
+        if slide_idx > 0:
+            _add_text_box(
+                slide, MARGIN, Inches(7.05), Inches(3), Inches(0.3),
+                "NexusMind Studio", 7, theme.dark_muted,
+                font=body_font,
+            )
+
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        path = output_path
+    else:
+        output_dir = os.path.join("data", "slides")
+        os.makedirs(output_dir, exist_ok=True)
+        path = os.path.join(output_dir, f"{job_id}.pptx")
     prs.save(path)
     logger.log_operation("Slides generated", job_id=job_id, slide_count=len(prs.slides), path=path, slide_plan=plan)
     return path
@@ -1210,9 +1392,10 @@ def _set_bg(slide, color: RGBColor):
 
 
 def _section_label(slide, text: str, theme: ThemeEngine, font: str):
-    """Small uppercase section label at top of slide."""
-    _add_text_box(slide, MARGIN, Inches(0.25), Inches(8.5), Inches(0.28),
-                  _shorten(text, 72), 8, theme.accent(0), bold=True, font=font)
+    """Uppercase section label with accent marker at top of slide."""
+    _add_rect(slide, MARGIN, Inches(0.28), Inches(0.22), Inches(0.14), theme.accent(0))
+    _add_text_box(slide, MARGIN + Inches(0.32), Inches(0.25), Inches(8.5), Inches(0.28),
+                  _shorten(text, 72), 9, theme.accent(0), bold=True, font=font)
 
 
 def _resolve_png_path(path: str) -> str | None:

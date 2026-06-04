@@ -1,6 +1,6 @@
 'use client';
 import { Button } from '@/components/ui/button';
-import { Download, Share2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Download, Share2, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 
@@ -14,20 +14,26 @@ export function ReportToolbar({ jobId }: Props) {
   };
 
   return (
-    <div className="flex items-center gap-2 sticky top-0 bg-background z-10 py-4 border-b">
+    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background/95 py-4 backdrop-blur">
       <Link href="/analysis/history">
-        <Button variant="ghost">← All Analyses</Button>
+        <Button variant="ghost" className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          All Analyses
+        </Button>
       </Link>
       <div className="flex-1" />
-      <Button variant="outline" onClick={() => apiClient.downloadAnalysisReport(jobId)}>
-        <Download className="h-4 w-4 mr-2" />Download
+      <Button variant="outline" className="gap-2" onClick={() => apiClient.downloadAnalysisReport(jobId)}>
+        <Download className="h-4 w-4" />
+        Download PPTX
       </Button>
-      <Button variant="outline" onClick={handleShare}>
-        <Share2 className="h-4 w-4 mr-2" />Share
+      <Button variant="outline" className="gap-2" onClick={handleShare}>
+        <Share2 className="h-4 w-4" />
+        Share
       </Button>
       <Link href={`/analysis?rerun=${jobId}`}>
-        <Button variant="outline">
-          <RotateCcw className="h-4 w-4 mr-2" />Re-run
+        <Button variant="outline" className="gap-2">
+          <RotateCcw className="h-4 w-4" />
+          Re-run
         </Button>
       </Link>
     </div>

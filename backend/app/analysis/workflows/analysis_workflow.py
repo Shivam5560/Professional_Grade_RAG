@@ -219,8 +219,11 @@ class AnalysisWorkflow:
         if "design" not in completed_steps:
             profile = self._get_profile(context)
             pri_data = self.checkpoint_store.get_step_state(self.job_id, "prioritize_insights")
+            design_query = query
+            if "pptx" in set(config.get("output_format", [])):
+                design_query = f"{query}\n\nOutput intent: detailed PPTX presentation with narrative storytelling, visual evidence, implications, and next-step planning."
             await self._run_with_timeout(
-                self._step_design(pri_data, profile, query),
+                self._step_design(pri_data, profile, design_query),
                 "design",
             )
         else:
@@ -361,7 +364,17 @@ class AnalysisWorkflow:
         prioritizer = InsightPrioritizer()
         prioritized = await prioritizer.run(ExecutionCompleteResult(results=agent_results), query)
         insight_dicts = [
-            {"insight_id": ins.insight_id, "content": ins.content, "significance_score": ins.significance_score, "source_agents": ins.source_agents}
+            {
+                "insight_id": ins.insight_id,
+                "content": ins.content,
+                "significance_score": ins.significance_score,
+                "source_agents": ins.source_agents,
+                "title": ins.title,
+                "subtitle": ins.subtitle,
+                "recommendation": ins.recommendation,
+                "narrative_role": ins.narrative_role,
+                "data_evidence": ins.data_evidence,
+            }
             for ins in prioritized.insights
         ]
         self._emit("prioritize_insights", {"status": "completed", "insights": insight_dicts})
@@ -376,8 +389,13 @@ class AnalysisWorkflow:
         narrator = NarrativeGenerator()
         narrative = await narrator.run(InsightsPrioritizedResult(insights=insights), query, profile)
         sections_dicts = [{"title": s.title, "content": s.content} for s in narrative.sections]
-        self._emit("generate_narrative", {"status": "completed", "summary": narrative.executive_summary[:200]})
-        self._checkpoint("generate_narrative", {"summary": narrative.executive_summary, "sections": sections_dicts})
+        self._emit("generate_narrative", {"status": "completed", "summary": narrative.executive_summary[:200], "title": narrative.report_title})
+        self._checkpoint("generate_narrative", {
+            "summary": narrative.executive_summary,
+            "sections": sections_dicts,
+            "title": narrative.report_title,
+            "subtitle": narrative.report_subtitle,
+        })
 
     async def _step_design(self, pri_data: Optional[Dict], profile: Dict[str, Any], query: str) -> None:
         self._emit("design", {"status": "started"})
@@ -436,10 +454,9 @@ class AnalysisWorkflow:
         )
 
         summary = narr_data.get("summary", "Untitled Analysis")
-        ctx_data = self.checkpoint_store.get_step_state(self.job_id, "build_context") or {}
-        profile = ctx_data.get("profile", {})
         job = self.db.query(AnalysisJob).filter(AnalysisJob.id == self.job_id).first()
-        title = _derive_report_title(job.query if job else "", summary, profile)
+        title = narr_data.get("title") or _derive_report_title(job.query if job else "", summary, {})
+        subtitle = narr_data.get("subtitle") or _derive_report_subtitle(summary)
 
         design_spec = {
             "theme": design_data.get("theme", "generic"),
@@ -453,7 +470,7 @@ class AnalysisWorkflow:
             "storytelling_arc": design_data.get("storytelling_arc", ""),
             "design_principle": design_data.get("design_principle", ""),
             "mood_description": design_data.get("mood_description", ""),
-            "subtitle": _derive_report_subtitle(summary),
+            "subtitle": subtitle,
             "template_style": design_data.get("template_style", ""),
             "visual_motif": design_data.get("visual_motif", ""),
         }
@@ -470,21 +487,8 @@ class AnalysisWorkflow:
             chart_paths=chart_paths,
         )
 
-        # Generate PPTX slides with design intelligence theming
-        from app.services.analysis.slide_generator import generate_slides
-
-        slides_path = generate_slides(
-            title=title,
-            narrative=summary,
-            sections=narr_data.get("sections", []),
-            insights=insight_data.get("insights", []),
-            design_spec=design_spec,
-            chart_paths=chart_paths,
-            job_id=self.job_id,
-        )
-
-        self._emit("compose", {"status": "completed", "report_id": report.id})
-        self._checkpoint("compose", {"report_id": report.id, "chart_count": len(chart_paths), "slides_path": slides_path})
+        self._emit("compose", {"status": "completed", "report_id": report.id, "pptx": "generated_on_download"})
+        self._checkpoint("compose", {"report_id": report.id, "chart_count": len(chart_paths), "pptx": "generated_on_download"})
         self._send_ws("complete", {"report_id": report.id, "status": "completed"})
 
     # ------------------------------------------------------------------
@@ -511,8 +515,7 @@ class AnalysisWorkflow:
         except Exception as exc:
             logger.log_error("Step failed", exc, step=step_name, job_id=self.job_id)
             self._emit(step_name, {"status": "error", "error": str(exc)[:500]})
-            # Don't re-raise — allow subsequent steps to continue with fallbacks
-            # The step's own checkpoint won't be saved, so recovery will re-run it.
+            raise exc
 
 
 # ------------------------------------------------------------------
@@ -571,6 +574,12 @@ def run_analysis_workflow(
                 source_id=job.source_id,
                 config=job.config or {},
             )
+            # Mark job as completed in DB
+            job.status = "completed"
+            job.completed_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            logger.log_operation("Workflow database status updated to completed", job_id=job_id)
         except Exception as exc:
             logger.log_error("Workflow failed", exc, job_id=job_id)
             workflow._send_ws("error", {"message": str(exc), "status": "failed"})

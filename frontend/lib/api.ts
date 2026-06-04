@@ -694,6 +694,34 @@ class ApiClient {
     await this.request<void>(`/analysis/${jobId}/cancel`, { method: 'POST' });
   }
 
+  async deleteAnalysisJob(jobId: string): Promise<void> {
+    await this.request<void>(`/analysis/${jobId}`, { method: 'DELETE' });
+  }
+
+  async getAnalysisStatus(jobId: string): Promise<{
+    job_id: string;
+    status: string;
+    query: string;
+    source_type: string;
+    created_at: string;
+    updated_at: string;
+    completed_at: string | null;
+    error_message: string | null;
+    progress_events: Array<{ step_name: string; timestamp: string; payload: Record<string, unknown> }>;
+  }> {
+    return this.request<{
+      job_id: string;
+      status: string;
+      query: string;
+      source_type: string;
+      created_at: string;
+      updated_at: string;
+      completed_at: string | null;
+      error_message: string | null;
+      progress_events: Array<{ step_name: string; timestamp: string; payload: Record<string, unknown> }>;
+    }>(`/analysis/${jobId}`);
+  }
+
   async getAnalysisReport(jobId: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>(`/analysis/${jobId}/report`);
   }

@@ -108,9 +108,10 @@ Design a visual narrative that guides the audience through the data story. Consi
 2. **Mood**: What emotional response should the presentation evoke? Trust, excitement, urgency, calm?
 3. **Hierarchy**: Which insights deserve hero treatment? Which are supporting evidence?
 4. **Rhythm**: Alternate between dense information slides and visual breathers.
-5. **Typography**: Font choices affect perceived credibility. Match to the domain.
-6. **Template variety**: Do not always choose the safest default. Pick a template family that gives the deck a distinct visual point of view.
-7. **Theme-prone visuals**: Chart specs must carry the same palette, typography, and mood as the slide deck so exported chart images feel native to the presentation.
+5. **Storytelling**: Charts are evidence, not the story. Include context, interpretation, decision implications, and next moves.
+6. **Typography**: Font choices affect perceived credibility. Match to the domain.
+7. **Template variety**: Do not always choose the safest default. Pick a template family that gives the deck a distinct visual point of view.
+8. **Theme-prone visuals**: Chart specs must carry the same palette, typography, and mood as the slide deck so exported chart images feel native to the presentation.
 
 ## Available Design Tokens
 
@@ -198,6 +199,9 @@ Rules:
 - visual_motif must be one of: grid, rings, diagonal, dots, line
 - Choose different template_style/visual_motif combinations when the domain, query, or dataset shape calls for a different deck personality
 - Each chart_spec must include narrative_role explaining its purpose in the story
+- Prefer fewer meaningful charts over many shallow chart types; do not create a chart unless it answers a real analytical question
+- If a chart repeats a metric, make its narrative_role different: baseline, driver, risk, segment, trend, or decision implication
+- The deck must include non-chart storytelling moments: overview, implications, watchouts, future plan, or decision roadmap
 - Each chart_spec should include colors, template_style, visual_motif, and theme so chart images match the deck
 - Limit to top 8 most impactful insights (for chart specs)
 """
@@ -235,13 +239,14 @@ Dataset Snapshot:
 - Numeric columns: {numeric}
 - Categorical columns: {categorical}
 - Datetime columns: {datetime_cols}
+- Analyst brief: {profile.get('analysis_brief', {})}
 - Domain hint: {domain_hint}
 
 Prioritized Insights:
 {insight_texts}
 
-Design a professional presentation for this analysis. Match the theme to the domain.
-Assign chart types to insights based on their analytical intent."""
+Design a detailed professional presentation for this analysis. Match the theme to the domain.
+Assign chart types only where visualization improves the story. The rest of the deck should explain context, meaning, implications, and future actions."""
 
         try:
             data = await self._call_llm(prompt, SYSTEM_PROMPT)

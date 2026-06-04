@@ -18,6 +18,12 @@ export interface Insight {
   content: string;
   significance_score: number;
   source_agents: string[];
+  title?: string;
+  headline?: string;
+  subtitle?: string;
+  recommendation?: string;
+  action?: string;
+  narrative_role?: string;
 }
 
 export interface Report {

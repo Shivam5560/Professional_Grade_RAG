@@ -65,15 +65,16 @@ class TimeSeriesAgent(BaseAnalysisAgent):
 
         # Resolve value column
         value_col = params.get("target_column") or params.get("value_column")
-        if not value_col:
+        if not value_col or value_col == date_col:
             # Pick first numeric column that isn't the date
+            value_col = None
             for c in quality.numeric_columns:
                 if c != date_col:
                     value_col = c
                     break
 
-        if not value_col or value_col not in df.columns:
-            findings.append(AgentFinding(metric="no_value_column", value="No numeric value column found", description="Time series needs a numeric value column to analyze over time.", significance=0.1))
+        if not value_col or value_col not in df.columns or value_col == date_col:
+            findings.append(AgentFinding(metric="no_value_column", value="No distinct numeric value column found", description="Time series needs a numeric value column separate from the date column to analyze over time.", significance=0.1))
             return AgentResult(agent_name="time_series", task_id=params.get("task_id", ""), findings=findings, confidence=0.1)
 
         # Prepare time series
@@ -81,6 +82,11 @@ class TimeSeriesAgent(BaseAnalysisAgent):
             ts_df = df[[date_col, value_col]].copy()
             ts_df[date_col] = pd.to_datetime(ts_df[date_col], errors="coerce")
             ts_df = ts_df.dropna(subset=[date_col, value_col])
+
+            # Group duplicate dates by calculating their mean to prevent duplicate key alignment issues
+            if ts_df[date_col].duplicated().any():
+                ts_df = ts_df.groupby(date_col, as_index=False)[value_col].mean()
+
             ts_df = ts_df.sort_values(date_col)
             ts_df = ts_df.set_index(date_col)
 

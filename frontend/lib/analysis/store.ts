@@ -7,9 +7,12 @@ interface AnalysisState {
   jobStatus: AnalysisJob['status'] | 'idle';
   progressEvents: WorkflowEvent[];
   reportData: Report | null;
+  socketConnected: boolean;
+  setSocketConnected: (connected: boolean) => void;
   startAnalysis: (jobId: string) => void;
   appendEvent: (event: WorkflowEvent) => void;
-  setReportData: (report: Report) => void;
+  setReportData: (report: Report | null) => void;
+  setJobState: (status: AnalysisJob['status'] | 'idle', events: WorkflowEvent[], report: Report | null) => void;
   reset: () => void;
 }
 
@@ -21,6 +24,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   jobStatus: 'idle',
   progressEvents: [],
   reportData: null,
+  socketConnected: false,
+  setSocketConnected: (connected) => set({ socketConnected: connected }),
   startAnalysis: (jobId) => {
     seenEventKeys.clear();
     set({ activeJobId: jobId, jobStatus: 'queued', progressEvents: [], reportData: null });
@@ -32,7 +37,15 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     seenEventKeys.add(key);
     set((state) => ({ progressEvents: [...state.progressEvents, event] }));
   },
-  setReportData: (report) => set({ reportData: report, jobStatus: 'completed' }),
+  setReportData: (report) => set({ reportData: report, jobStatus: report ? 'completed' : 'failed' }),
+  setJobState: (status, events, report) => {
+    seenEventKeys.clear();
+    events.forEach((event) => {
+      const key = `${event.step_name}::${event.timestamp}`;
+      seenEventKeys.add(key);
+    });
+    set({ jobStatus: status, progressEvents: events, reportData: report });
+  },
   reset: () => {
     seenEventKeys.clear();
     set({ activeJobId: null, jobStatus: 'idle', progressEvents: [], reportData: null });

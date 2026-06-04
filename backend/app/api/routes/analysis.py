@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from app.api.deps import get_current_user
 from app.config import settings
@@ -234,6 +236,37 @@ def cancel_analysis(
     return {"job_id": job_id, "status": "cancelled"}
 
 
+@router.delete("/{job_id}")
+def delete_analysis_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete an analysis job, cascading database records and removing disk chart assets."""
+    job = (
+        db.query(AnalysisJob)
+        .filter(AnalysisJob.id == job_id, AnalysisJob.user_id == current_user.id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Clean up local charts directory
+    charts_dir = os.path.join(settings.analysis_chart_dir, job_id)
+    if os.path.exists(charts_dir) and os.path.isdir(charts_dir):
+        try:
+            import shutil
+            shutil.rmtree(charts_dir)
+            logger.log_operation("Deleted charts directory", job_id=job_id)
+        except Exception as exc:
+            logger.log_error("Failed to delete charts directory", exc, job_id=job_id)
+
+    db.delete(job)
+    db.commit()
+    logger.log_operation("Analysis job deleted", job_id=job_id, user_id=current_user.id)
+    return {"message": "Job deleted successfully", "job_id": job_id}
+
+
 @router.get("/{job_id}/report")
 def get_analysis_report(
     job_id: str,
@@ -305,16 +338,48 @@ def download_analysis_report(
     if job.status in ("queued", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Job is {job.status}. Report not available yet.")
 
-    # Build the slides path from known convention
-    slides_path = os.path.join("data", "slides", f"{job_id}.pptx")
-    if not os.path.exists(slides_path):
-        raise HTTPException(status_code=404, detail="Slide deck not found. It may still be generating.")
+    report = (
+        db.query(AnalysisReport)
+        .filter(AnalysisReport.job_id == job_id, AnalysisReport.user_id == current_user.id)
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    charts = (
+        db.query(AnalysisChartAsset)
+        .filter(AnalysisChartAsset.job_id == job_id, AnalysisChartAsset.user_id == current_user.id)
+        .all()
+    )
+    chart_paths = [chart.file_path for chart in charts if chart.file_path and os.path.exists(chart.file_path)]
+
+    from app.services.analysis.slide_generator import generate_slides
+
+    fd, slides_path = tempfile.mkstemp(prefix=f"analysis-{job_id[:8]}-", suffix=".pptx")
+    os.close(fd)
+    try:
+        generate_slides(
+            title=report.title,
+            narrative=report.narrative,
+            sections=report.sections or [],
+            insights=report.insights or [],
+            design_spec=report.design_spec or {},
+            chart_paths=chart_paths,
+            job_id=job_id,
+            output_path=slides_path,
+        )
+    except Exception as exc:
+        if os.path.exists(slides_path):
+            os.unlink(slides_path)
+        logger.log_error("On-demand slide deck generation failed", exc, job_id=job_id)
+        raise HTTPException(status_code=500, detail="Failed to generate slide deck")
 
     filename = f"analysis-report-{job_id[:8]}.pptx"
     return FileResponse(
         path=slides_path,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         filename=filename,
+        background=BackgroundTask(lambda path: os.path.exists(path) and os.unlink(path), slides_path),
     )
 
 

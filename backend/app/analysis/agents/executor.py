@@ -68,7 +68,11 @@ class ExecutionOrchestrator:
         for r in results:
             if isinstance(r, Exception):
                 logger.log_error("Agent execution failed with exception", r)
-                continue
+                raise r
+            # Also fail if an agent explicitly returned a preparation or execution error
+            for f in r.findings:
+                if f.metric in ("dispatch_error", "unknown_agent") or f.metric.endswith("_error"):
+                    raise ValueError(f"Agent '{r.agent_name}' failed: {f.description} (value: {f.value})")
             successful.append(r)
 
         logger.log_operation(

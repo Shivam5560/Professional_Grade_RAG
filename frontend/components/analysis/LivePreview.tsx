@@ -1,6 +1,6 @@
 'use client';
 import { WorkflowEvent } from '@/lib/analysis/types';
-import { CheckCircle2, Circle, Loader2, XCircle, Download, FileText, Sparkles, Activity } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileText, Sparkles, Activity, Timer, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 import { useAnalysisStore } from '@/lib/analysis/store';
@@ -45,7 +45,9 @@ export function LivePreview({ events, jobId }: Props) {
   const isComplete = jobStatus === 'completed';
   const latestByStep = new Map<string, WorkflowEvent>();
   events.forEach((event) => latestByStep.set(event.step_name, event));
-  const completedCount = ANALYSIS_STEPS.filter((step) => latestByStep.get(step.key)?.payload.status === 'completed').length;
+  const completedCount = isComplete
+    ? ANALYSIS_STEPS.length
+    : ANALYSIS_STEPS.filter((step) => latestByStep.get(step.key)?.payload.status === 'completed').length;
   const failedCount = ANALYSIS_STEPS.filter((step) => {
     const status = latestByStep.get(step.key)?.payload.status;
     return status === 'error' || status === 'timeout';
@@ -56,18 +58,20 @@ export function LivePreview({ events, jobId }: Props) {
   }) || events[events.length - 1];
   const progress = isComplete ? 100 : Math.round((completedCount / ANALYSIS_STEPS.length) * 100);
   const activeLabel = activeEvent ? STEP_LABELS[activeEvent.step_name] || activeEvent.step_name : 'Waiting for analysis';
+  const activeStep = ANALYSIS_STEPS.find((step) => step.key === activeEvent?.step_name);
+  const activeSummary = activeEvent ? eventSummary(activeEvent) : 'Preparing the analysis workspace';
 
   return (
-    <div className="h-full rounded-lg border bg-background p-4 flex flex-col">
+    <div className="flex h-full flex-col rounded-lg border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-medium flex items-center gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
             <Activity className="h-4 w-4 text-primary" />
-            Live Progress
+            Live Workspace
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">{activeLabel}</p>
         </div>
-        <div className="rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+        <div className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
           {progress}%
         </div>
       </div>
@@ -76,75 +80,65 @@ export function LivePreview({ events, jobId }: Props) {
         <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <div className="rounded-md border p-2">
+      <div className="mb-5 grid grid-cols-3 gap-2">
+        <div className="rounded-md border bg-background p-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             Done
           </div>
           <p className="mt-1 text-lg font-semibold">{completedCount}</p>
         </div>
-        <div className="rounded-md border p-2">
+        <div className="rounded-md border bg-background p-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Activity className="h-3.5 w-3.5 text-primary" />
+            <Workflow className="h-3.5 w-3.5 text-primary" />
             Stages
           </div>
           <p className="mt-1 text-lg font-semibold">{ANALYSIS_STEPS.length}</p>
         </div>
-        <div className="rounded-md border p-2">
+        <div className="rounded-md border bg-background p-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <XCircle className="h-3.5 w-3.5 text-destructive" />
+            <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
             Issues
           </div>
           <p className="mt-1 text-lg font-semibold">{failedCount}</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-        {events.length === 0 && !isComplete && (
-          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            Waiting for analysis to begin...
+      <div className="mb-5 rounded-lg border bg-background p-4">
+        <div className="flex items-start gap-3">
+          <div className="rounded-md bg-primary/10 p-2 text-primary">
+            <Timer className="h-4 w-4" />
           </div>
-        )}
-
-        {ANALYSIS_STEPS.map((step) => {
-          const ev = latestByStep.get(step.key);
-          const status = ev?.payload.status as string | undefined;
-          const summary = ev ? eventSummary(ev) : 'Pending';
-          const isActive = status === 'started';
-          const isDone = status === 'completed';
-          const isFailed = status === 'error' || status === 'timeout';
-
-          return (
-            <div
-              key={step.key}
-              className={`flex items-start gap-2 rounded-md border px-3 py-2 ${
-                isActive ? 'border-primary/40 bg-primary/5' : isDone ? 'border-emerald-500/20 bg-emerald-500/5' : isFailed ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-background'
-              }`}
-            >
-              {isDone ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
-              ) : isFailed ? (
-                <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
-              ) : isActive ? (
-                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin mt-0.5 shrink-0" />
-              ) : (
-                <Circle className="h-3.5 w-3.5 text-muted-foreground/60 mt-0.5 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-xs font-medium truncate">{step.label}</p>
-                {summary && (
-                  <p className={`text-xs truncate ${
-                    isFailed ? 'text-destructive' : 'text-muted-foreground'
-                  }`}>
-                    {summary}
-                  </p>
-                )}
-              </div>
-            </div>
-          );
-        })}
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{activeStep?.label || 'Queued'}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{activeStep?.detail || activeSummary}</p>
+            {activeSummary && activeSummary !== 'Started' && (
+              <p className="mt-2 text-xs text-muted-foreground">{activeSummary}</p>
+            )}
+          </div>
+        </div>
       </div>
+
+      {!isComplete && events.length > 0 && (
+        <div className="min-h-0 flex-1 flex items-center justify-center">
+          <div className="text-center space-y-2 py-4">
+            <div className="mx-auto h-8 w-8 animate-pulse rounded-full bg-primary/10 flex items-center justify-center">
+              <Activity className="h-4 w-4 text-primary" />
+            </div>
+            <p className="text-sm font-medium">{completedCount} of {ANALYSIS_STEPS.length} stages complete</p>
+            <p className="text-xs text-muted-foreground">Analysis is running — results will appear when ready</p>
+          </div>
+        </div>
+      )}
+
+      {events.length === 0 && !isComplete && (
+        <div className="min-h-0 flex-1 flex items-center justify-center">
+          <div className="rounded-md border border-dashed bg-background p-6 text-center">
+            <Timer className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">Waiting for analysis to begin...</p>
+          </div>
+        </div>
+      )}
 
       {isComplete && events.length > 0 && (
         <div className="mt-4 pt-4 border-t space-y-2">
