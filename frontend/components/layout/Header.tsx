@@ -36,16 +36,17 @@ export function Header({
   const isResume = pathname?.startsWith('/nexus');
   const isResumeGen = pathname?.startsWith('/nexus/generate');
   const isAnalysis = pathname?.startsWith('/analysis');
-  const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : isAnalysis ? 'Analysis' : 'NexusMind';
-  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : isAnalysis ? 'Data Lab' : 'Studio';
-  const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : isAnalysis ? 'DA' : 'NX';
+  const isWorkflows = pathname?.startsWith('/workflows') || isAnalysis;
+  const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : isWorkflows ? 'Workflows' : 'NexusMind';
+  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : isWorkflows ? 'Agents & Workflows' : 'Studio';
+  const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : isWorkflows ? 'WF' : 'NX';
   const mainNavLinks = [
     { label: 'Dashboard', href: '/', isActive: pathname === '/' },
     { label: 'RAG', href: '/chat', isActive: pathname?.startsWith('/chat') },
     { label: 'AuraSQL', href: '/aurasql', isActive: pathname?.startsWith('/aurasql') },
     { label: 'Resume', href: '/nexus', isActive: pathname?.startsWith('/nexus') && !pathname?.startsWith('/nexus/generate') },
     { label: 'ResumeGen', href: '/nexus/generate', isActive: pathname?.startsWith('/nexus/generate') },
-    { label: 'Analysis', href: '/analysis', isActive: pathname?.startsWith('/analysis') },
+    { label: 'Workflows', href: '/workflows', isActive: pathname?.startsWith('/workflows') || pathname?.startsWith('/analysis') },
     { label: 'KB', href: '/knowledge-base', isActive: pathname?.startsWith('/knowledge-base') },
     { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
   ];

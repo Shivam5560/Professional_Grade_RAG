@@ -14,7 +14,7 @@ export function PlotlyChart({ chartJsonUrl }: Props) {
       const _Plotly = await import('react-plotly.js');
       if (!isMounted || !containerRef.current) return;
       try {
-        const res = await fetch(chartJsonUrl);
+        const res = await fetch(chartJsonUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } });
         const _chartJson = await res.json();
         // _Plotly.newPlot(containerRef.current, _chartJson.data, _chartJson.layout);
       } catch {

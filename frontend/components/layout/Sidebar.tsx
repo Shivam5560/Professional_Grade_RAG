@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, Trash2, BarChart3 } from "lucide-react";
+import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, Trash2, Workflow } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api";
@@ -307,10 +307,10 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
           <Button
             variant="ghost"
             className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/analysis')}
+            onClick={() => router.push('/workflows')}
           >
-            <BarChart3 className="h-4 w-4" />
-            Data Analysis
+            <Workflow className="h-4 w-4" />
+            Workflows
           </Button>
           <Button
             variant="ghost"

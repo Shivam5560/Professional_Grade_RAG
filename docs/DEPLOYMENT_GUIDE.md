@@ -63,7 +63,7 @@
 
 3. **Environment Variables** (Settings → Environment Variables)
    ```
-   NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+   NEXT_PUBLIC_API_BASE_URL=https://your-backend.onrender.com
    NEXT_PUBLIC_EMBEDDING_URL=https://your-embedding-service.onrender.com
    ```
 
@@ -237,7 +237,7 @@ This eliminates CORS issues because the browser only talks to the Vercel domain.
 ### Main Frontend (Vercel)
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_API_URL` | Yes | Backend API URL on Render |
+| `NEXT_PUBLIC_API_BASE_URL` | Yes | Backend API URL on Render |
 | `NEXT_PUBLIC_EMBEDDING_URL` | No | Direct embedding service URL |
 
 ### Main Backend (Render)

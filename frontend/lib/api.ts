@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * API client for the RAG backend.
  */
@@ -68,7 +69,13 @@ class ApiClient {
 
   private getAuthHeaders(): Record<string, string> {
     const { accessToken } = useAuthStore.getState();
-    return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+    const headers: Record<string, string> = {
+      'ngrok-skip-browser-warning': 'true',
+    };
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    return headers;
   }
 
   private async refreshTokens(): Promise<boolean> {
@@ -80,6 +87,7 @@ class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
@@ -789,6 +797,61 @@ class ApiClient {
       throw new Error(err.detail || `HTTP ${response.status}`);
     }
     return response.text();
+  }
+
+  // ── Workflows Methods ────────────────────────────────────
+  async startAutoTailor(payload: {
+    resume_id: string;
+    job_description: string;
+    target_score?: number;
+    max_iterations?: number;
+  }): Promise<Record<string, any>> {
+    return this.request<Record<string, any>>('/workflows/auto-tailor/start', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getAutoTailorStatus(analysisId: string): Promise<Record<string, any>> {
+    return this.request<Record<string, any>>(`/workflows/auto-tailor/${analysisId}`, {
+      method: 'GET',
+    });
+  }
+
+  async respondToAutoTailor(
+    analysisId: string,
+    payload: {
+      action: 'approve' | 'abort' | 'refine';
+      user_feedback?: string;
+    }
+  ): Promise<Record<string, any>> {
+    return this.request<Record<string, any>>(`/workflows/auto-tailor/${analysisId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  getAutoTailorDownloadUrl(analysisId: string): string {
+    return `${BASE_PATH}/workflows/auto-tailor/${analysisId}/download`;
+  }
+
+  async downloadAutoTailorPdf(analysisId: string): Promise<void> {
+    const url = this.getAutoTailorDownloadUrl(analysisId);
+    const response = await fetch(url, { headers: { ...this.getAuthHeaders() } });
+    if (response.status === 401) {
+      const refreshed = await this.refreshTokens();
+      if (refreshed) {
+        return this.downloadAutoTailorPdf(analysisId);
+      }
+    }
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `tailored-resume-${analysisId.slice(0, 8)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
   }
 }
 

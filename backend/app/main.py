@@ -17,6 +17,7 @@ from app.api.routes import nexus_resume
 from app.api.routes import aurasql
 from app.api.routes import resumegen
 from app.api.routes import analysis
+from app.api.routes import workflows
 from app import __version__
 from app.db.database import engine, Base
 from app.observability import (
@@ -135,6 +136,7 @@ app.include_router(aurasql.router, prefix="/api/v1", tags=["AuraSQL"])
 app.include_router(nexus_resume.router, prefix="/api/v1", tags=["Nexus Resume"])
 app.include_router(resumegen.router, prefix="/api/v1", tags=["Resume Generator"])
 app.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])
+app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
 
 
 @app.get("/")

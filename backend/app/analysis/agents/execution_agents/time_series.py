@@ -27,7 +27,7 @@ try:
     from statsmodels.tsa.stattools import adfuller
 
     HAS_STATSMODELS = True
-except ImportError:
+except (ImportError, TypeError, Exception) as _sm_err:
     HAS_STATSMODELS = False
 
 

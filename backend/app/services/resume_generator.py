@@ -26,7 +26,29 @@ class LatexResumeGenerator:
             text = str(text) if text is not None else ""
         if not text:
             return ""
+        
         out = text
+        
+        # Map common non-ASCII/Unicode characters to their safe LaTeX/ASCII representations
+        for uni_char, safe_char in {
+            "\u2011": "-",        # Non-breaking hyphen
+            "\u202f": " ",        # Narrow no-break space
+            "\u00a0": " ",        # No-break space
+            "\u2013": "--",       # En dash
+            "\u2014": "---",      # Em dash
+            "\u201c": "``",       # Left double quote
+            "\u201d": "''",       # Right double quote
+            "\u2018": "`",        # Left single quote
+            "\u2019": "'",        # Right single quote
+            "\u2248": "approx. ", # Approximation sign
+            "•": "*",             # Bullet point
+        }.items():
+            out = out.replace(uni_char, safe_char)
+
+        # Normalize remaining accented characters to standard ASCII counterparts
+        import unicodedata
+        out = unicodedata.normalize('NFKD', out).encode('ascii', 'ignore').decode('ascii')
+
         out = out.replace("\\", r"\textbackslash{}")
         for char, esc in {
             "{": r"\{", "}": r"\}", "&": r"\&", "%": r"\%",

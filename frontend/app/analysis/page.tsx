@@ -102,7 +102,7 @@ export default function AnalysisHubPage() {
               <BarChart3 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Data Analysis Studio</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Data Storyteller</h1>
               <p className="text-sm text-muted-foreground">Upload data, ask questions, get AI-powered insights & reports</p>
             </div>
           </div>
