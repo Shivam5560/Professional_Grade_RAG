@@ -646,8 +646,8 @@ def compute_technical_score(
     - JD frequency weighting (if jd_text provided)
     
     Score breakdown:
-    - 70% weight on required skills match
-    - 30% weight on preferred skills match
+    - 80% weight on required skills match
+    - 20% weight on preferred skills match
     """
     preferred_skills = preferred_skills or []
     
@@ -680,7 +680,7 @@ def compute_technical_score(
         # Calculate weight for this skill
         category, cat_weight = get_skill_category(req)
         jd_freq_weight = jd_keyword_freq.get(req.lower(), 1)
-        combined_weight = cat_weight * (1 + 0.2 * min(jd_freq_weight, 3))
+        combined_weight = cat_weight * (1 + 0.3 * min(jd_freq_weight, 5))
         
         max_required_score += combined_weight
         
@@ -717,8 +717,8 @@ def compute_technical_score(
     required_score = (required_score_weighted / max_required_score * 100) if max_required_score > 0 else 100
     preferred_score = (preferred_score_weighted / max_preferred_score * 100) if max_preferred_score > 0 else 100
     
-    # Weighted average (70% required, 30% preferred)
-    total_score = required_score * 0.7 + preferred_score * 0.3
+    # Weighted average (80% required, 20% preferred)
+    total_score = required_score * 0.8 + preferred_score * 0.2
     
     # Categorize matched/missing skills
     category_breakdown = {}
@@ -823,11 +823,11 @@ def compute_ats_score(resume_text: str, job_description: str) -> Dict[str, Any]:
     
     # Calculate weighted total
     total_score = (
-        keyword_score * 0.40 +
+        keyword_score * 0.50 +
         section_score * 0.20 +
-        contact_score * 0.15 +
+        contact_score * 0.10 +
         length_score * 0.10 +
-        date_score * 0.10 +
+        date_score * 0.05 +
         formatting_score * 0.05
     )
     

@@ -26,13 +26,14 @@ from app.config import settings
 from app.db.database import get_db, SessionLocal
 from app.db.models import Document, DocumentTreeStructure, TreeNode, User
 from app.api.deps import get_current_user
+from app.services.messaging import publish_message
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
-@router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     file: UploadFile = File(...),
     user_id: int = Form(...),
@@ -88,80 +89,25 @@ async def upload_document(
             user_id=user_id,
         )
         
-        # Process document
-        doc_processor = get_document_processor()
-        
-        metadata = {
-            "user_id": user_id,  # Critical: store user_id in metadata
+        job_id = str(uuid.uuid4())
+        tmp_dir = os.path.join(settings.data_dir, "tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        file_path = os.path.join(tmp_dir, f"{job_id}_{file.filename}")
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        message = {
+            "job_id": job_id,
+            "user_id": user_id,
+            "job_type": "upload_document",
+            "file_path": file_path,
+            "filename": file.filename,
+            "title": title,
+            "category": category
         }
-        if title:
-            metadata["title"] = title
-        if category:
-            metadata["category"] = category
+        await publish_message("jobs", message)
         
-        document_id, num_chunks = await doc_processor.ingest_file(
-            file_content=content,
-            filename=file.filename,
-            metadata=metadata
-        )
-        
-        # Save PDF file to disk for PageIndex tree generation
-        file_extension = Path(file.filename).suffix.lower()
-        if file_extension == ".pdf":
-            pdf_dir = os.path.join(settings.data_dir, "documents")
-            os.makedirs(pdf_dir, exist_ok=True)
-            pdf_path = os.path.join(pdf_dir, f"{document_id}.pdf")
-            
-            # Write PDF to disk
-            with open(pdf_path, "wb") as f:
-                f.write(content)
-            
-            logger.log_operation(
-                "💾 PDF saved to disk",
-                document_id=document_id,
-                path=pdf_path,
-            )
-        
-        # Save document metadata to database
-        file_extension = Path(file.filename).suffix.lower()
-        db_document = Document(
-            id=document_id,
-            user_id=user_id,
-            filename=file.filename,
-            file_size=len(content),
-            file_type=file_extension,
-            vector_count=num_chunks,
-            title=title,
-            category=category,
-        )
-        db.add(db_document)
-        db.commit()
-        db.refresh(db_document)
-        
-        logger.info(
-            "document_upload_completed",
-            document_id=document_id,
-            filename=file.filename,
-            num_chunks=num_chunks,
-            user_id=user_id,
-        )
-        
-        # Auto-generate tree for PDF documents if enabled
-        if settings.pageindex_auto_generate and file_extension == ".pdf" and background_tasks:
-            pdf_path = os.path.join(settings.data_dir, "documents", f"{document_id}.pdf")
-            if os.path.exists(pdf_path):
-                background_tasks.add_task(_generate_tree_background, document_id, pdf_path)
-                logger.log_operation(
-                    "🌲 Auto-triggering tree generation",
-                    document_id=document_id,
-                )
-        
-        return DocumentUploadResponse(
-            document_id=document_id,
-            status="processed",
-            chunks_created=num_chunks,
-            message=f"Document '{file.filename}' successfully processed into {num_chunks} chunks"
-        )
+        return {"job_id": job_id, "status": "accepted", "message": "Document upload job queued."}
         
     except ValueError as e:
         logger.error("document_upload_validation_error", error=str(e), filename=file.filename)
@@ -498,7 +444,15 @@ async def generate_tree(
 
         # Mark as pending and kick off background task
         pageindex_service.mark_tree_status(db, document_id, "processing")
-        background_tasks.add_task(_generate_tree_background, document_id, pdf_path)
+        job_id = str(uuid.uuid4())
+        message = {
+            "job_id": job_id,
+            "user_id": request.user_id,
+            "job_type": "generate_tree",
+            "document_id": document_id,
+            "pdf_path": pdf_path
+        }
+        await publish_message("jobs", message)
 
         logger.log_operation(
             "🌲 Tree generation started",

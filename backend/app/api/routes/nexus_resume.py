@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import NexusResumeFile, NexusResumeAnalysis, User
 from app.api.deps import get_current_user
+from app.services.messaging import publish_message
+import uuid
+import os
+from app.config import settings
 from app.models.schemas import (
     ResumeUploadResponse,
     ResumeFileInfo,
@@ -54,7 +58,7 @@ def _serialize_analysis(analysis: NexusResumeAnalysis) -> ResumeAnalyzeResponse:
     )
 
 
-@router.post("/resumes/upload", response_model=ResumeUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/resumes/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_resume_endpoint(
     file: UploadFile = File(...),
     user_id: int = Form(...),
@@ -63,8 +67,25 @@ async def upload_resume_endpoint(
 ):
     if user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    record = await upload_resume(db, user_id, file)
-    return ResumeUploadResponse(resume=_serialize_resume(record))
+        
+    job_id = str(uuid.uuid4())
+    tmp_dir = os.path.join(settings.data_dir, "tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    file_path = os.path.join(tmp_dir, f"{job_id}_{file.filename}")
+    
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+        
+    message = {
+        "job_id": job_id,
+        "user_id": user_id,
+        "job_type": "upload_resume",
+        "file_path": file_path,
+        "filename": file.filename
+    }
+    await publish_message("jobs", message)
+    return {"job_id": job_id, "status": "accepted", "message": "Resume upload job queued"}
 
 
 @router.get("/resumes/{user_id}", response_model=ResumeListResponse, status_code=status.HTTP_200_OK)
@@ -82,7 +103,7 @@ async def list_resumes_endpoint(
     )
 
 
-@router.post("/resumes/analyze", response_model=ResumeAnalyzeResponse, status_code=status.HTTP_200_OK)
+@router.post("/resumes/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze_resume_endpoint(
     request: ResumeAnalyzeRequest,
     db: Session = Depends(get_db),
@@ -92,8 +113,17 @@ async def analyze_resume_endpoint(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if not request.job_description.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description is required")
-    analysis = await analyze_resume(db, request.user_id, request.resume_id, request.job_description)
-    return _serialize_analysis(analysis)
+        
+    job_id = str(uuid.uuid4())
+    message = {
+        "job_id": job_id,
+        "user_id": request.user_id,
+        "job_type": "analyze_resume",
+        "resume_id": request.resume_id,
+        "job_description": request.job_description
+    }
+    await publish_message("jobs", message)
+    return {"job_id": job_id, "status": "accepted", "message": "Resume analysis job queued"}
 
 
 @router.get("/resumes/history/{user_id}", response_model=ResumeHistoryResponse, status_code=status.HTTP_200_OK)

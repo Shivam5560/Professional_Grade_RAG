@@ -46,6 +46,8 @@ from app.models.analysis_schemas import (
     WorkflowProgressEvent,
 )
 from app.services.analysis.data_ingestion import save_uploaded_file
+from app.services.messaging import publish_message
+import asyncio
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +72,7 @@ def _job_to_response(job: AnalysisJob) -> AnalysisJobResponse:
     )
 
 
-def _create_and_schedule_job(
+async def _create_and_schedule_job(
     db: Session,
     user_id: int,
     source_type: str,
@@ -94,8 +96,18 @@ def _create_and_schedule_job(
     db.commit()
     db.refresh(job)
 
-    background_tasks.add_task(_run_analysis_workflow, job_id, user_id)
-    logger.log_operation("Analysis job created", job_id=job_id, user_id=user_id)
+    message = {
+        "job_id": job_id,
+        "user_id": user_id,
+        "job_type": "data_analysis",
+        "source_type": source_type,
+        "source_id": source_id,
+        "query": query,
+        "config": config,
+    }
+    await publish_message("jobs", message)
+
+    logger.log_operation("Analysis job created and published", job_id=job_id, user_id=user_id)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -140,14 +152,14 @@ def upload_analysis_file(
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def start_analysis(
+async def start_analysis(
     request: AnalysisCreateRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Start a new analysis job."""
-    return _create_and_schedule_job(
+    return await _create_and_schedule_job(
         db=db,
         user_id=current_user.id,
         source_type=request.source_type,
@@ -159,14 +171,14 @@ def start_analysis(
 
 
 @router.post("/from-upload", status_code=status.HTTP_201_CREATED)
-def start_analysis_from_upload(
+async def start_analysis_from_upload(
     request: AnalysisFromUploadRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Start an analysis from a previously uploaded file."""
-    return _create_and_schedule_job(
+    return await _create_and_schedule_job(
         db=db,
         user_id=current_user.id,
         source_type="upload",

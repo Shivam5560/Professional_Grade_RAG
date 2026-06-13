@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store';
 import { useToast } from '@/hooks/useToast';
 import { apiClient } from '@/lib/api';
+import { useJobs } from '@/components/providers/JobProvider';
 
 // Configuration constants
 const MAX_FILE_SIZE_MB = 200;
@@ -29,10 +30,12 @@ interface DocumentUploadProps {
 
 export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const { addJob, isJobActive } = useJobs();
+
+  const isUploading = isJobActive("upload_resume");
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file size
@@ -108,11 +111,9 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         description: 'Please log in to upload documents.',
         variant: 'destructive',
       });
-      setIsUploading(false);
       return;
     }
 
-    setIsUploading(true);
     let successCount = 0;
 
     for (let i = 0; i < filesToUpload.length; i++) {
@@ -129,21 +130,38 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         });
         successCount++;
 
-        // Update status to success
-        setFiles(prev => prev.map(f => 
-          f.file === currentFile.file ? { 
-            ...f, 
-            status: 'success',
-            documentId: result.document_id as string,
-            chunksCreated: result.chunks_created as number,
-            message: `Uploaded successfully! ${result.chunks_created} chunks created.`
-          } : f
-        ));
+        if (result.job_id) {
+          // It's a background job
+          addJob({ id: result.job_id as string, type: "upload_resume", status: "running" });
+          toast({
+            title: 'Upload processing',
+            description: `${currentFile.file.name} is uploading, you will get a notification when done.`,
+          });
+          
+          setFiles(prev => prev.map(f => 
+            f.file === currentFile.file ? { 
+              ...f, 
+              status: 'pending', // or keep 'uploading' if you track it differently
+              message: `Processing in background...`
+            } : f
+          ));
+        } else {
+          // Synchronous response fallback
+          setFiles(prev => prev.map(f => 
+            f.file === currentFile.file ? { 
+              ...f, 
+              status: 'success',
+              documentId: result.document_id as string,
+              chunksCreated: result.chunks_created as number,
+              message: `Uploaded successfully! ${result.chunks_created} chunks created.`
+            } : f
+          ));
 
-        toast({
-          title: 'Document ready',
-          description: `${currentFile.file.name} uploaded and indexed (${result.chunks_created} chunks).`,
-        });
+          toast({
+            title: 'Document ready',
+            description: `${currentFile.file.name} uploaded and indexed (${result.chunks_created} chunks).`,
+          });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Upload failed';
         // Update status to error
@@ -163,8 +181,6 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       }
     }
 
-    setIsUploading(false);
-    
     // If all files uploaded successfully and callback exists, close after delay
     if (successCount === filesToUpload.length && onUploadComplete) {
       setTimeout(() => {
@@ -224,6 +240,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
             onChange={handleFileSelect}
             multiple
             accept={ALLOWED_EXTENSIONS.join(',')}
+            disabled={isUploading}
             className="flex-1 bg-zinc-800/60 border-white/20 text-white focus:ring-blue-500/60 rounded-xl"
           />
         </div>

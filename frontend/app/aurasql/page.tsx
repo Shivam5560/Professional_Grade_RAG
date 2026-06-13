@@ -17,6 +17,11 @@ import AuthPage from '@/app/auth/page';
 import VerticalMagnificationDock from '@/components/ui/vertical-magnification-dock';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
 
+import { AgGridReact } from 'ag-grid-react';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-quartz.css';
+import { ColDef } from 'ag-grid-community';
+
 export default function AuraSqlHomePage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
@@ -261,6 +266,37 @@ export default function AuraSqlHomePage() {
     clampedContextPage * contextPageSize,
     clampedContextPage * contextPageSize + contextPageSize
   );
+
+  const connectionColDefs = useMemo<ColDef[]>(() => [
+    { field: 'name', headerName: 'Name', flex: 1 },
+    { field: 'db_type', headerName: 'Type', width: 100 },
+    { field: 'database', headerName: 'Database', flex: 1 },
+    { 
+      headerName: 'Actions',
+      width: 220,
+      cellRenderer: (params: any) => {
+        const conn = params.data;
+        return (
+          <div className="flex gap-2 items-center h-full">
+            <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${conn.id}`)}>Open</Button>
+            <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/connections/${conn.id}`)}>Edit</Button>
+            <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(conn.id)}><Trash2 className="h-4 w-4" /></Button>
+          </div>
+        );
+      }
+    }
+  ], [router]);
+
+  const historyColDefs = useMemo<ColDef[]>(() => [
+    { field: 'natural_language_query', headerName: 'Query', flex: 1 },
+    { field: 'status', headerName: 'Status', width: 100 },
+    { 
+      field: 'created_at', 
+      headerName: 'Date', 
+      width: 180,
+      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleString() : '—'
+    }
+  ], []);
 
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
@@ -586,24 +622,13 @@ export default function AuraSqlHomePage() {
                     <CardTitle>Latest Generation Feed</CardTitle>
                     <CardDescription>Most recent generated SQL intents from user prompts.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    {generatedHistory.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No activity yet.</p>
-                    ) : (
-                      generatedHistory.slice(0, 6).map((item) => (
-                        <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-card/60 px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-sm text-foreground line-clamp-2">
-                              {item.natural_language_query || item.generated_sql || 'SQL generation'}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground mt-1">{new Date(item.created_at).toLocaleString()}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-[9px] uppercase tracking-[0.14em] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20">
-                            generated
-                          </Badge>
-                        </div>
-                      ))
-                    )}
+                  <CardContent className="h-[300px] p-0 ag-theme-quartz-dark">
+                    <AgGridReact
+                      rowData={generatedHistory.slice(0, 50)}
+                      columnDefs={historyColDefs}
+                      rowHeight={45}
+                      domLayout="normal"
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -614,46 +639,13 @@ export default function AuraSqlHomePage() {
                     <CardTitle>Connections</CardTitle>
                     <CardDescription>Pick a saved connection to start querying.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    {loading ? (
-                      <div className="space-y-3">
-                        {[1,2].map(i => (
-                          <div key={i} className="rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
-                            <Skeleton className="h-4 w-2/3 mb-2" />
-                            <Skeleton className="h-3 w-1/2" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : connections.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No connections yet.</p>
-                    ) : (
-                      connections.map((connection) => (
-                        <div key={connection.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3 hover:border-foreground/20 hover:shadow-sm transition-all group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
-                              <Database className="h-4 w-4 text-indigo-500" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">{connection.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {connection.db_type} • {connection.database} • {connection.schema_name || 'default'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${connection.id}`)}>
-                              Open
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/connections/${connection.id}`)}>
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(connection.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  <CardContent className="h-[300px] p-0 ag-theme-quartz-dark">
+                    <AgGridReact
+                      rowData={connections}
+                      columnDefs={connectionColDefs}
+                      rowHeight={45}
+                      domLayout="normal"
+                    />
                   </CardContent>
                 </Card>
 

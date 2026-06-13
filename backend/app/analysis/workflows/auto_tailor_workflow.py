@@ -341,7 +341,7 @@ class AutoTailorWorkflow(Workflow):
 
     @step()
     async def evaluate_score(self, ev: ResumeScoredEvent) -> StopEvent:
-        """Step 4: Check if we meet target score, else yield to Human-in-the-loop pause."""
+        """Step 4: Suspend workflow and store intermediate draft results, waiting for human approval."""
         analysis_id = ev.analysis_id
         resume_data = ev.resume_data
         scores = ev.scores
@@ -352,38 +352,40 @@ class AutoTailorWorkflow(Workflow):
         iteration = ev.iteration
 
         overall = scores["overall"]
-        logger.info(f"[AutoTailorWorkflow] Evaluating score: {overall}% vs Target={target_score}%. Iteration={iteration}")
+        logger.info(f"[AutoTailorWorkflow] Suspending workflow to allow Human-in-the-loop iteration approvals. Iteration={iteration}")
 
-        # Check if we should stop
-        if overall >= target_score or iteration >= max_iterations:
-            logger.info("[AutoTailorWorkflow] Workflow completed auto-tailoring cycle. Triggering PDF compilation.")
-            # Trigger PDF generation step
-            pdf_path = self._compile_pdf_file(resume_data)
-            
-            final_payload = {
-                "status": "completed",
-                "current_iteration": iteration,
-                "target_score": target_score,
-                "latest_score": overall,
-                "resume_data": resume_data,
-                "scores_breakdown": scores,
-                "critic_feedback": critic,
-                "pdf_path": pdf_path
-            }
-            return StopEvent(result=final_payload)
-        
-        # Else: Suspend workflow and wait for human response
-        logger.info("[AutoTailorWorkflow] Target not met. Pausing workflow for Human-in-the-loop action.")
-        
-        # Save 'paused_for_human' state in database
+        # Save 'needs_approval_attention' state in database and compute diff
         analysis_record = (
             self.db.query(NexusResumeAnalysis)
             .filter(NexusResumeAnalysis.id == self.analysis_id)
             .first()
         )
+        
+        old_data = {}
+        if analysis_record and analysis_record.analysis:
+            history = analysis_record.analysis.get("history", [])
+            if history:
+                old_data = history[-1].get("resume_data", {})
+            else:
+                resume_file = self.db.query(NexusResumeFile).filter(NexusResumeFile.resume_id == analysis_record.resume_id).first()
+                if resume_file and resume_file.extracted_data:
+                    old_data = resume_file.extracted_data
+        
+        # Inject old experiences directly into resume_data to support frontend's Diff View
+        if old_data.get("experiences"):
+            resume_data["original_experiences"] = old_data.get("experiences")
+        elif old_data.get("resume_data", {}).get("experiences"):
+            resume_data["original_experiences"] = old_data.get("resume_data", {}).get("experiences")
+        else:
+            resume_data["original_experiences"] = resume_data.get("experiences", [])
+        
+        diff_state = {
+            "old": old_data,
+            "new": resume_data
+        }
+
         if analysis_record:
             analysis_record.overall_score = overall
-            # Append iteration to history list
             history = analysis_record.analysis.get("history", []) if analysis_record.analysis else []
             history.append({
                 "iteration": iteration,
@@ -394,6 +396,7 @@ class AutoTailorWorkflow(Workflow):
             })
             
             analysis_record.analysis = {
+                **analysis_record.analysis,
                 "status": "paused_for_human",
                 "current_iteration": iteration,
                 "target_score": target_score,
@@ -401,7 +404,8 @@ class AutoTailorWorkflow(Workflow):
                 "resume_data": resume_data,
                 "scores_breakdown": scores,
                 "critic_feedback": critic,
-                "history": history
+                "history": history,
+                "diff": diff_state
             }
             self.db.commit()
 
@@ -412,7 +416,8 @@ class AutoTailorWorkflow(Workflow):
             "latest_score": overall,
             "resume_data": resume_data,
             "scores_breakdown": scores,
-            "critic_feedback": critic
+            "critic_feedback": critic,
+            "diff": diff_state
         }
         return StopEvent(result=paused_payload)
 

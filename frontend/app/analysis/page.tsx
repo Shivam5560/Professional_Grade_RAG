@@ -7,6 +7,7 @@ import { AnalysisConfigAccordion } from '@/components/analysis/AnalysisConfigAcc
 import { AnalysisConfig } from '@/lib/analysis/types';
 import { apiClient } from '@/lib/api';
 import { useAnalysisStore } from '@/lib/analysis/store';
+import { useJobs } from '@/components/providers/JobProvider';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -58,15 +59,21 @@ export default function AnalysisHubPage() {
     output_format: ['interactive', 'pptx'],
   });
 
+  const { addJob, removeJob, isJobActive, activeJobs } = useJobs();
+  const loading = isJobActive("start_analysis");
+
   // Reset stale analysis state when user navigates back to this page
   useEffect(() => {
     reset();
   }, [reset]);
 
   const handleSubmit = async () => {
-    if (!file || !query.trim()) return;
-    setLoading(true);
+    if (!file || !query.trim() || loading) return;
     setError(null);
+
+    const tempJobId = "temp_uploading_" + Date.now();
+    // Track a generic starting job
+    addJob({ id: tempJobId, type: "start_analysis", status: "running" });
 
     try {
       const uploadData = await apiClient.uploadAnalysisFile(file);
@@ -78,14 +85,16 @@ export default function AnalysisHubPage() {
         config: config as unknown as Record<string, unknown>,
       });
 
-      setLoading(false);
       if (startData.job_id) {
+        // Register the real job
+        addJob({ id: startData.job_id, type: "start_analysis", status: "running" });
         router.push(`/analysis/${startData.job_id}`);
       }
     } catch (err) {
-      setLoading(false);
       setError(err instanceof Error ? err.message : 'Failed to start analysis');
       console.error('Failed to start analysis:', err);
+    } finally {
+      removeJob(tempJobId);
     }
   };
 

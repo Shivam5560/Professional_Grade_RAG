@@ -292,19 +292,6 @@ export function ChatInterface({
         </div>
       </div>
 
-      <div className="relative z-10 px-4 pt-3">
-        <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">{modeMeta.title}</p>
-            <p className="text-xs text-muted-foreground">{modeMeta.subtitle}</p>
-          </div>
-          {mode === 'ask' && (
-            <Badge variant="outline" className="border-border/70 text-[10px] uppercase tracking-[0.18em]">
-              In-memory files only
-            </Badge>
-          )}
-        </div>
-      </div>
 
       {error && (
         <Alert variant="destructive" className="m-4">
@@ -342,8 +329,8 @@ export function ChatInterface({
               onUploadingChange={setIsRagUploading}
             />
             
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-end gap-3">
+              <div className="flex items-center gap-2 mb-1">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -351,11 +338,11 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading}
-                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
                       title="Select chat mode"
                       aria-label="Select chat mode"
                     >
-                      <ModeIcon className="h-4 w-4" />
+                      <ModeIcon className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56">
@@ -402,11 +389,11 @@ export function ChatInterface({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70"
+                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70"
                       title="MCP tools"
                       aria-label="MCP tools"
                     >
-                      <Wrench className="h-4 w-4" />
+                      <Wrench className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-80">
@@ -429,20 +416,20 @@ export function ChatInterface({
                     !servicesHealthy ||
                     (mode === 'ask' ? isAskUploading : isRagUploading)
                   }
-                  className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                  className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
                   title={mode === 'ask' ? 'Add ask file' : 'Upload file'}
                   aria-label={mode === 'ask' ? 'Add ask file' : 'Upload file'}
                 >
                   {mode === 'ask' ? (
                     isAskUploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-5 w-5" />
                     )
                   ) : isRagUploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-5 w-5" />
                   )}
                 </Button>
 
@@ -453,11 +440,11 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading || promptSuggestions.length === 0}
-                      className="h-10 w-10 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
                       title="Insert a saved prompt"
                       aria-label="Insert a saved prompt"
                     >
-                      <ListPlus className="h-4 w-4" />
+                      <ListPlus className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-80 max-h-[300px] overflow-y-auto">
@@ -480,7 +467,6 @@ export function ChatInterface({
                 </DropdownMenu>
               </div>
 
-              <div className="flex items-end gap-3">
               <div className="flex-1">
                 <MessageInput
                   onSend={handleSend}
@@ -503,7 +489,6 @@ export function ChatInterface({
                   }
                 />
               </div>
-            </div>
             </div>
             <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">

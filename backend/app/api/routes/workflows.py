@@ -35,9 +35,8 @@ class StartTailorRequest(BaseModel):
     target_score: float = Field(default=85.0, description="ATS score threshold to stop iterations")
     max_iterations: int = Field(default=3, description="Maximum automated rewrite cycles")
 
-class RespondTailorRequest(BaseModel):
-    action: str = Field(..., description="'approve', 'abort', or 'refine'")
-    user_feedback: Optional[str] = Field(default=None, description="Custom feedback for refining in next iteration")
+class RejectTailorRequest(BaseModel):
+    comments: str = Field(..., description="User feedback/comments for refining in the next iteration")
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
@@ -201,7 +200,6 @@ async def respond_to_human_interrupt(
     """
     logger.info(f"User responding to Auto-Tailor {analysis_id} with action: {payload.action}")
 
-    # Fetch record
     analysis_record = (
         db.query(NexusResumeAnalysis)
         .filter(
@@ -211,10 +209,7 @@ async def respond_to_human_interrupt(
         .first()
     )
     if not analysis_record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Analysis job not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis job not found")
 
     state = analysis_record.analysis or {}
     current_status = state.get("status")
@@ -225,19 +220,17 @@ async def respond_to_human_interrupt(
             detail=f"Job is not awaiting user response (current status: {current_status})"
         )
 
-    # 1. Action: ABORT
     if payload.action == "abort":
         state["status"] = "aborted"
         analysis_record.analysis = state
         db.commit()
         return {"status": "aborted", "message": "Workflow aborted by user"}
 
-    # 2. Action: APPROVE & FINALIZE
     if payload.action == "approve":
         resume_data = state.get("resume_data", {})
-        
-        # Compile PDF
         from app.config import settings
+        import os
+        from app.services.resume_generator import generate_resume_pdf
         upload_dir = settings.nexus_resume_upload_dir
         os.makedirs(upload_dir, exist_ok=True)
         pdf_filename = f"tailored_{analysis_record.id}.pdf"
@@ -245,16 +238,12 @@ async def respond_to_human_interrupt(
         
         result = generate_resume_pdf(resume_data, pdf_path)
         if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"PDF generation failed: {result.get('message')}"
-            )
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"PDF generation failed: {result.get('message')}")
 
         state["status"] = "completed"
         state["pdf_path"] = pdf_path
         analysis_record.analysis = state
         
-        # Mark resume file status as analyzed
         resume_file = db.query(NexusResumeFile).filter(NexusResumeFile.resume_id == analysis_record.resume_id).first()
         if resume_file:
             resume_file.status = "analyzed"
@@ -266,97 +255,31 @@ async def respond_to_human_interrupt(
             "message": "Resume approved and compiled successfully."
         }
 
-    # 3. Action: REFINE (Loop back with custom human feedback)
     if payload.action == "refine":
         if not payload.user_feedback:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User feedback is required for refinement action"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User feedback is required for refinement action")
 
-        # Update status back to 'running'
         state["status"] = "running"
         analysis_record.analysis = state
         db.commit()
 
-        # Extract values for resume workflow run
-        previous_draft = state.get("resume_data")
-        critic_feedback = state.get("critic_feedback")
-        current_iteration = state.get("current_iteration", 1)
-        target_score = state.get("target_score", 85.0)
-        max_iterations = state.get("max_iterations", 3)
+        from app.services.messaging import publish_message
+        job_payload = {
+            "job_type": "auto_tailor_reiterate",
+            "job_id": analysis_id,
+            "user_id": str(current_user.id),
+            "user_feedback": payload.user_feedback
+        }
+        await publish_message("jobs", job_payload)
 
-        try:
-            # Re-run workflow starting direct at `draft_resume` by sending RewriteEvent
-            import asyncio
-            workflow = AutoTailorWorkflow(db=db, analysis_id=analysis_record.id, disable_validation=True, timeout=300.0)
-            rewrite_ev = RewriteEvent(
-                analysis_id=analysis_record.id,
-                resume_data=previous_draft,
-                critic_feedback=critic_feedback,
-                job_description=analysis_record.job_description,
-                iteration=current_iteration + 1,
-                target_score=target_score,
-                max_iterations=max_iterations,
-                human_feedback=payload.user_feedback
-            )
-            
-            # Start workflow run as a task
-            run_task = asyncio.create_task(workflow.run())
-            
-            # Give the workflow tasks a moment to initialize and wait for event queues
-            await asyncio.sleep(0.01)
-            
-            # Send the RewriteEvent to trigger draft_resume step
-            workflow.send_event(rewrite_ev)
-            
-            # Await the result of the workflow
-            result = await run_task
+        return {
+            "analysis_id": analysis_id,
+            "status": "resubmitted",
+            "message": "Auto-Tailor reiteration submitted to background worker."
+        }
 
-            # Refresh database session
-            db.refresh(analysis_record)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid action: {payload.action}")
 
-            # If iteration completed the workflow cycle
-            if result.get("status") == "completed":
-                analysis_record.overall_score = result.get("latest_score")
-                analysis_record.analysis = {
-                    **analysis_record.analysis,
-                    "status": "completed",
-                    "pdf_path": result.get("pdf_path"),
-                    "resume_data": result.get("resume_data"),
-                    "scores_breakdown": result.get("scores_breakdown"),
-                    "critic_feedback": result.get("critic_feedback")
-                }
-                resume_file = db.query(NexusResumeFile).filter(NexusResumeFile.resume_id == analysis_record.resume_id).first()
-                if resume_file:
-                    resume_file.status = "analyzed"
-                db.commit()
-
-            return {
-                "analysis_id": analysis_record.id,
-                "status": result.get("status"),
-                "current_iteration": result.get("current_iteration"),
-                "latest_score": result.get("latest_score"),
-                "resume_data": result.get("resume_data"),
-                "scores_breakdown": result.get("scores_breakdown"),
-                "critic_feedback": result.get("critic_feedback"),
-                "pdf_path": result.get("pdf_path")
-            }
-        except Exception as e:
-            logger.error(f"Refinement workflow loop failed: {e}", exc_info=True)
-            # Revert to paused so user can try again
-            state["status"] = "paused_for_human"
-            analysis_record.analysis = state
-            db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Refinement failed: {str(e)}"
-            )
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Invalid action: {payload.action}"
-    )
 
 
 @router.get("/auto-tailor/{analysis_id}/download")

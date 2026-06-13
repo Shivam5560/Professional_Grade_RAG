@@ -18,8 +18,10 @@ from app.api.routes import aurasql
 from app.api.routes import resumegen
 from app.api.routes import analysis
 from app.api.routes import workflows
+from app.api.routes import notifications
 from app import __version__
 from app.db.database import engine, Base
+from app.services.messaging import consume_notifications
 from app.observability import (
     flush_langfuse,
     log_langfuse_startup_status,
@@ -97,7 +99,12 @@ async def lifespan(app: FastAPI):
     # Fire-and-forget warmup — don't block API readiness
     warmup_task = asyncio.create_task(_warmup_services())
 
+
+    # Start notifications consumer
+    consumer_task = asyncio.create_task(consume_notifications())
+
     logger.log_operation("API ready")
+
 
     yield
 
@@ -108,7 +115,16 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+
+    # Shutdown consumer
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
+
     logger.log_operation("Application shutting down")
+
     flush_langfuse()
     logger.log_operation("Application shutdown complete")
 
@@ -137,6 +153,7 @@ app.include_router(nexus_resume.router, prefix="/api/v1", tags=["Nexus Resume"])
 app.include_router(resumegen.router, prefix="/api/v1", tags=["Resume Generator"])
 app.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])
 app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["Notifications"])
 
 
 @app.get("/")

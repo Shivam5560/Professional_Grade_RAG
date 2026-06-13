@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Space_Grotesk, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import { ClientProviders } from '@/components/layout/ClientProviders'
+import { JobProvider } from '@/components/providers/JobProvider'
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -34,8 +35,10 @@ export default function RootLayout({
       data-theme-mode="dark"
     >
       <body>
-        {children}
-        <ClientProviders />
+        <JobProvider>
+          {children}
+          <ClientProviders />
+        </JobProvider>
       </body>
     </html>
   )

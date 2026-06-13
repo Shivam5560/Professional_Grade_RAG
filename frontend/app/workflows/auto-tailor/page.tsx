@@ -14,8 +14,9 @@ import { ShaderAnimation } from '@/components/ui/shader-animation';
 import { useToast } from '@/hooks/useToast';
 import { 
   Sparkles, Loader2, ArrowLeft, CheckCircle2, 
-  AlertTriangle, Download, RefreshCw, XCircle
+  AlertTriangle, Download, RefreshCw, XCircle, FileDiff
 } from 'lucide-react';
+import ReactDiffViewer from 'react-diff-viewer-continued';
 
 export default function AutoTailorPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function AutoTailorPage() {
   
   // HITL State
   const [userFeedback, setUserFeedback] = useState('');
-  const [hitlTab, setHitlTab] = useState<'critic' | 'scores' | 'preview'>('critic');
+  const [hitlTab, setHitlTab] = useState<'critic' | 'scores' | 'diff' | 'preview'>('critic');
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -353,6 +354,7 @@ export default function AutoTailorPage() {
                 {[
                   { id: 'critic', label: 'Critic Gaps' },
                   { id: 'scores', label: 'ATS Scores' },
+                  { id: 'diff', label: 'Diff View' },
                   { id: 'preview', label: 'Resume Draft' }
                 ].map((t) => (
                   <button
@@ -429,7 +431,27 @@ export default function AutoTailorPage() {
                 </div>
               )}
 
-              {/* Tab 3: Resume Preview */}
+              {/* Tab 3: Diff View */}
+              {hitlTab === 'diff' && (
+                <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileDiff className="h-5 w-5 text-indigo-400" />
+                    <h2 className="text-lg font-bold text-foreground">Old vs New Changes</h2>
+                  </div>
+                  <div className="border border-border/60 rounded-2xl overflow-hidden text-sm">
+                    <ReactDiffViewer 
+                      oldValue={resumeData?.old_text || JSON.stringify(resumeData?.original_experiences, null, 2) || "Original text not available."} 
+                      newValue={resumeData?.new_text || JSON.stringify(resumeData?.experiences, null, 2) || "New text not available."} 
+                      splitView={true}
+                      useDarkTheme={true}
+                      leftTitle="Original Master"
+                      rightTitle="Tailored Draft"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Resume Preview */}
               {hitlTab === 'preview' && resumeData && (
                 <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6 max-h-[600px] overflow-y-auto pr-2">
                   <div className="text-center border-b border-border/50 pb-4">
@@ -483,10 +505,25 @@ export default function AutoTailorPage() {
             {/* Right Column: HITL Responses */}
             <div className="space-y-6">
               <div className="glass-panel sheen-border rounded-3xl p-6 space-y-5 bg-card/65">
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-foreground">Human-in-the-loop Action</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    The latest score is **{latestScore}%**, which is below your target of **{targetScore}%**. You can refine the draft, approve it anyway, or abort.
+                <div className="space-y-1.5 flex flex-col items-center mb-4">
+                  <h3 className="font-bold text-foreground text-center">Human-in-the-loop Action</h3>
+                  <div className="relative w-32 h-32 mt-4 mb-2">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/30" />
+                      <circle 
+                        cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="8" 
+                        strokeDasharray="282.7" 
+                        strokeDashoffset={282.7 - (282.7 * latestScore) / 100} 
+                        className={`${latestScore >= targetScore ? 'text-green-500' : 'text-amber-500'} transition-all duration-1000 ease-out`} 
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-black">{latestScore}%</span>
+                      <span className="text-[10px] uppercase text-muted-foreground">Match</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground leading-relaxed mt-2">
+                    The latest score is **{latestScore}%**, which is {latestScore >= targetScore ? 'above' : 'below'} your target of **{targetScore}%**. You can refine the draft, approve it anyway, or abort.
                   </p>
                 </div>
 

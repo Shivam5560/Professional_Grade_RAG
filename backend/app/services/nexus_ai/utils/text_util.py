@@ -137,31 +137,9 @@ def normalize_skill(skill: str) -> str:
 
 
 def fuzzy_skill_match(skill1: str, skill2: str) -> bool:
-    """Check if two skills are semantically equivalent using normalization and BM25."""
-    norm1 = normalize_skill(skill1)
-    norm2 = normalize_skill(skill2)
-    
-    # Direct match after normalization
-    if norm1 == norm2:
-        return True
-    
-    # Check if either contains the other (handles "Python" vs "Python Programming")
-    if norm1 in norm2 or norm2 in norm1:
-        return True
-    
-    # Check if acronym expansion matches
-    # "NLP" -> "natural language processing" vs "Natural Language Processing"
-    tokens1 = set(norm1.split())
-    tokens2 = set(norm2.split())
-    
-    # If significant token overlap (>= 50% of smaller set)
-    if tokens1 and tokens2:
-        overlap = len(tokens1 & tokens2)
-        min_tokens = min(len(tokens1), len(tokens2))
-        if overlap >= min_tokens * 0.5:
-            return True
-    
-    return False
+    """Check if two skills are semantically equivalent using advanced matching from scorers_v2."""
+    from app.services.nexus_ai.core.scorers_v2 import skills_match
+    return skills_match(candidate_skill=skill2, required_skill=skill1)
 
 
 def _tokenize_for_bm25(text: str) -> List[str]:
@@ -644,9 +622,19 @@ def advanced_ats_similarity(resume_dict: Dict[str, Any], job_description_dict: D
     # --- 2. Skills Comparison ---
     resume_skills_list = resume_dict.get("keywords", [])
     if not isinstance(resume_skills_list, list): resume_skills_list = []
+    
     req_found, req_missing, req_match_details, skill_int_just, skill_user_just = find_skill_matches_with_embeddings(
         resume_skills_list, jd_req_skills_list_orig, embed_model, SKILL_SIMILARITY_THRESHOLD
     )
+    
+    from app.services.nexus_ai.core.scorers_v2 import compute_technical_score
+    technical_score_v2 = compute_technical_score(
+        candidate_skills=resume_skills_list + req_found,
+        required_skills=jd_req_skills_list_orig,
+        preferred_skills=job_description_dict.get("other_qualifications", []),
+        jd_text=job_description_dict.get("summary", "")
+    )
+    
     results["required_skills_found"] = req_found
     results["required_skills_missing"] = req_missing
     results["required_skills_found_count"] = len(req_found)
@@ -654,11 +642,12 @@ def advanced_ats_similarity(resume_dict: Dict[str, Any], job_description_dict: D
     unique_jd_req_skills_count = len(
         set(filter(None, [preprocess_text(s) for s in jd_req_skills_list_orig if isinstance(s, str)])))
     results["total_required_skills_in_jd"] = unique_jd_req_skills_count
-    results["required_skill_match_percentage"] = round((len(req_found) / unique_jd_req_skills_count) * 100,
-                                                       2) if unique_jd_req_skills_count > 0 else 100.0
-    results["section_scores"]["skills"] = results["required_skill_match_percentage"]
-    results["internal_justification"]["skills"] = skill_int_just
-    results["user_justification"]["skills"] = skill_user_just
+    
+    results["required_skill_match_percentage"] = technical_score_v2["score"]
+    results["section_scores"]["skills"] = technical_score_v2["score"]
+    
+    results["internal_justification"]["skills"] = skill_int_just + f" V2 Score Details: {technical_score_v2.get('match_summary', '')}."
+    results["user_justification"]["skills"] = skill_user_just + f" Score weighted by skill category and JD frequency."
 
     # --- 3. Work Experience / Projects (Summary Comparison) ---
     summary_int_parts = []
