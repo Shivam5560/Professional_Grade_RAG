@@ -1161,18 +1161,20 @@ def compute_overall_score(
 ) -> Dict[str, Any]:
     """
     Compute weighted overall score from all components.
-    
-    Weights:
-    - Technical Match: 35% (most important for job fit)
-    - ATS Compatibility: 25% (critical for getting past screening)
-    - Writing Quality: 15% (important for impression)
-    - Section Completeness: 25% (structural requirements)
+
+    Production-aligned weights (Auto-Tailor scoring):
+    - Technical Match:      80% — primary signal; skills matching is what ATS pipelines
+                                  actually evaluate in production hiring pipelines.
+    - ATS Compatibility:    10% — keyword hygiene, section headers, formatting checks.
+    - Writing Quality:       5% — grammar, action verbs, readability. Shown in UI for
+                                  informational purposes; low prod impact.
+    - Section Completeness:  5% — structural section presence. Shown in UI; low prod impact.
     """
     weights = {
-        'technical': 0.35,
-        'ats': 0.25,
-        'grammar': 0.15,
-        'section': 0.25
+        'technical': 0.80,
+        'ats':       0.10,
+        'grammar':   0.05,
+        'section':   0.05,
     }
     
     overall = (

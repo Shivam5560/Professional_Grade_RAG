@@ -494,6 +494,15 @@ export default function AutoTailorPage() {
                   <span>Iteration {currentIteration} of {maxIterations}</span>
                 </div>
 
+                {/* Score formula */}
+                <div className="rounded-xl border border-border/40 bg-background/30 px-3 py-2 text-[10px] text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-foreground/70">Score formula: </span>
+                  Technical <span className="text-indigo-400 font-semibold">80%</span>
+                  {' + '}ATS <span className="text-emerald-400 font-semibold">10%</span>
+                  {' + '}Writing <span className="text-amber-400/80">5%</span>
+                  {' + '}Sections <span className="text-sky-400/80">5%</span>
+                </div>
+
                 {/* Direct refinement input */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
                   <label className="text-xs font-bold text-muted-foreground">Direct the next rewrite iteration</label>
@@ -557,6 +566,9 @@ export default function AutoTailorPage() {
             <div className="border border-border/60 rounded-2xl p-4 bg-background/40">
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Final Match Score</span>
               <span className="text-4xl font-black text-foreground mt-1 block">{latestScore}%</span>
+              <span className="text-[10px] text-muted-foreground mt-1 block">
+                Technical 80% · ATS 10% · Writing 5% · Sections 5%
+              </span>
             </div>
 
             <div className="pt-2 flex flex-col gap-2">

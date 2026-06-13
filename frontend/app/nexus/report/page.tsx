@@ -130,11 +130,13 @@ const MiniScore = ({
   title,
   score,
   accent,
+  notice,
 }: {
   icon: React.ElementType;
   title: string;
   score: number | null;
   accent: string;
+  notice?: string;
 }) => (
   <div className="rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm px-5 py-4 shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md">
     <div className="flex items-center gap-2 mb-3">
@@ -145,6 +147,9 @@ const MiniScore = ({
     </div>
     <p className={`text-3xl font-black ${color(score)}`}>{fmt(score)}%</p>
     <Bar value={clamp(score)} />
+    {notice && (
+      <p className="mt-2 text-[10px] text-amber-500/80 leading-relaxed">{notice}</p>
+    )}
   </div>
 );
 
@@ -334,11 +339,30 @@ export default function NexusReportPage() {
           </motion.section>
 
           {/* ═══════════════════ 2. SCORE BREAKDOWN (4 cards) ═══════════════════ */}
-          <motion.section variants={item} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MiniScore icon={Gauge}        title="Technical Match"      score={techMatchScore} accent="bg-indigo-500/15 text-indigo-500" />
-            <MiniScore icon={FileSearch}    title="ATS Compatibility"    score={atsScore}       accent="bg-emerald-500/15 text-emerald-500" />
-            <MiniScore icon={FileText}      title="Writing Quality"      score={writingScore}   accent="bg-amber-500/15 text-amber-500" />
-            <MiniScore icon={ClipboardCheck} title="Section Complete"    score={sectionScore}   accent="bg-sky-500/15 text-sky-500" />
+          <motion.section variants={item} className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MiniScore icon={Gauge}         title="Technical Match"   score={techMatchScore} accent="bg-indigo-500/15 text-indigo-500" />
+              <MiniScore icon={FileSearch}    title="ATS Compatibility" score={atsScore}        accent="bg-emerald-500/15 text-emerald-500" />
+              <MiniScore icon={FileText}      title="Writing Quality"   score={writingScore}   accent="bg-amber-500/15 text-amber-500"  notice="Informational only" />
+              <MiniScore icon={ClipboardCheck} title="Section Complete" score={sectionScore}   accent="bg-sky-500/15 text-sky-500"       notice="Informational only" />
+            </div>
+
+            {/* Score formula pill */}
+            <div className="flex items-center justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm px-4 py-1.5 text-[11px] text-muted-foreground">
+                <Zap className="h-3 w-3 text-indigo-400 shrink-0" />
+                <span>
+                  Score&nbsp;=&nbsp;
+                  <span className="font-semibold text-foreground">Technical 80%</span>
+                  {' + '}
+                  <span className="font-semibold text-foreground">ATS 10%</span>
+                  {' + '}
+                  <span className="text-amber-500/80">Writing 5%</span>
+                  {' + '}
+                  <span className="text-sky-500/80">Sections 5%</span>
+                </span>
+              </div>
+            </div>
           </motion.section>
 
           {/* ═══════════════════ 3. SKILLS MATCH ═══════════════════ */}
@@ -594,10 +618,17 @@ export default function NexusReportPage() {
               <h2 className="text-2xl font-black tracking-tight flex items-center gap-2 mb-1">
                 <ClipboardCheck className="h-6 w-6 text-sky-500" /> Section Analysis
               </h2>
-              <p className="text-sm text-muted-foreground mb-6">
-                Overall section score: <span className={`font-bold ${color(sa.score)}`}>{fmt(sa.score)}%</span>
-                {sa.summary && <> · {sa.summary}</>}
-              </p>
+              <div className="flex flex-wrap items-center gap-3 mb-5">
+                <p className="text-sm text-muted-foreground">
+                  Overall section score: <span className={`font-bold ${color(sa.score)}`}>{fmt(sa.score)}%</span>
+                  {sa.summary && <> · {sa.summary}</>}
+                </p>
+                {/* Low-impact notice */}
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] text-amber-400">
+                  <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                  Informational only
+                </span>
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
