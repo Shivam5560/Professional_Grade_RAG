@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Database, Plus, Sparkles, Layers, Trash2, MessageSquare, Home, ChevronDown } from 'lucide-react';
+import { Database, Plus, Sparkles, Layers, Trash2, MessageSquare, Home, ChevronDown, Activity, Network } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlHistoryItem, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
@@ -17,10 +17,10 @@ import AuthPage from '@/app/auth/page';
 import VerticalMagnificationDock from '@/components/ui/vertical-magnification-dock';
 import { ShaderAnimation } from '@/components/ui/shader-animation';
 
-import { AgGridReact } from 'ag-grid-react';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
-import { ColDef } from 'ag-grid-community';
+
+
+
+
 
 export default function AuraSqlHomePage() {
   const router = useRouter();
@@ -320,6 +320,16 @@ export default function AuraSqlHomePage() {
       icon: <Plus size={18} />,
       label: 'New Chat',
       onClick: () => router.push('/aurasql/query'),
+    },
+    {
+      icon: <Activity size={18} />,
+      label: 'Generation Feed',
+      onClick: () => router.push('/aurasql/history'),
+    },
+    {
+      icon: <Network size={18} />,
+      label: 'Connections',
+      onClick: () => router.push('/aurasql/connections'),
     },
     {
       icon: <Database size={18} />,
@@ -622,13 +632,19 @@ export default function AuraSqlHomePage() {
                     <CardTitle>Latest Generation Feed</CardTitle>
                     <CardDescription>Most recent generated SQL intents from user prompts.</CardDescription>
                   </CardHeader>
-                  <CardContent className="h-[300px] p-0 ag-theme-quartz-dark">
-                    <AgGridReact
-                      rowData={generatedHistory.slice(0, 50)}
-                      columnDefs={historyColDefs}
-                      rowHeight={45}
-                      domLayout="normal"
-                    />
+                  <CardContent className="space-y-3">
+                    {generatedHistory.slice(0, 3).map((item, i) => (
+                      <div key={i} className="flex flex-col gap-1 rounded-xl border border-border/60 bg-card/60 p-3">
+                        <span className="text-sm font-medium line-clamp-1">{item.natural_language_query}</span>
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
+                          <span className="uppercase text-[10px] tracking-wider">{item.status}</span>
+                          <span>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <Button variant="outline" className="w-full mt-2" onClick={() => router.push('/aurasql/history')}>
+                      View Full Data Grid
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
@@ -639,13 +655,19 @@ export default function AuraSqlHomePage() {
                     <CardTitle>Connections</CardTitle>
                     <CardDescription>Pick a saved connection to start querying.</CardDescription>
                   </CardHeader>
-                  <CardContent className="h-[300px] p-0 ag-theme-quartz-dark">
-                    <AgGridReact
-                      rowData={connections}
-                      columnDefs={connectionColDefs}
-                      rowHeight={45}
-                      domLayout="normal"
-                    />
+                  <CardContent className="space-y-3">
+                    {connections.slice(0, 3).map((conn) => (
+                      <div key={conn.id} className="flex justify-between items-center rounded-xl border border-border/60 bg-card/60 p-3">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{conn.name}</span>
+                          <span className="text-xs text-muted-foreground">{conn.db_type}</span>
+                        </div>
+                        <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/query?connection=${conn.id}`)}>Connect</Button>
+                      </div>
+                    ))}
+                    <Button variant="outline" className="w-full mt-2" onClick={() => router.push('/aurasql/connections')}>
+                      View Full Data Grid
+                    </Button>
                   </CardContent>
                 </Card>
 
