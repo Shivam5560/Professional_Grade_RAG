@@ -85,7 +85,7 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-xl px-6 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.35)]">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur-md md:px-6">
       <div className="flex items-center gap-3">
         {showSidebarToggle && (
           <Button
@@ -102,12 +102,12 @@ export function Header({
             )}
           </Button>
         )}
-        <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center shadow-lg ring-2 ring-foreground/10 pulse-glow">
-          <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">{brandMark}</span>
+        <div className="h-9 w-9 rounded-lg logo-mark flex items-center justify-center ring-1 ring-foreground/10">
+          <span className="text-primary-foreground font-semibold text-xs">{brandMark}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-lg font-black tracking-tight text-foreground">{brandTitle}</span>
-          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          <span className="text-base font-semibold tracking-tight text-foreground">{brandTitle}</span>
+          <span className="text-[11px] text-muted-foreground">
             {brandSubtitle}
           </span>
         </div>
@@ -117,9 +117,9 @@ export function Header({
               key={link.href}
               variant="ghost"
               size="sm"
-              className={`text-xs uppercase tracking-[0.2em] min-w-[84px] ${
+              className={`text-sm ${
                 link.isActive
-                  ? 'bg-foreground/10 text-foreground'
+                  ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => router.push(link.href)}

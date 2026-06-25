@@ -140,7 +140,7 @@ function AuraSqlQueryPageContent() {
   const [loadingContext, setLoadingContext] = useState(false);
   const [savingContext, setSavingContext] = useState(false);
   const [loadingGenerate, setLoadingGenerate] = useState(false);
-  const [loadingExecute, setLoadingExecute] = useState(false);
+  const [executingMessageId, setExecutingMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -551,7 +551,7 @@ function AuraSqlQueryPageContent() {
     const sql = message?.editedSql || message?.sql;
     if (!sql) return;
 
-    setLoadingExecute(true);
+    setExecutingMessageId(messageId);
     setError(null);
     try {
       const result = await apiClient.executeAuraSqlWithSession(
@@ -577,7 +577,7 @@ function AuraSqlQueryPageContent() {
       );
       reportError(err instanceof Error ? err.message : 'Failed to execute SQL');
     } finally {
-      setLoadingExecute(false);
+      setExecutingMessageId(null);
     }
   };
 
@@ -779,7 +779,7 @@ function AuraSqlQueryPageContent() {
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
-  const showLoader = loading || loadingTables || loadingContext || savingContext || loadingGenerate || loadingExecute;
+  const showLoader = loading || loadingTables || loadingContext || savingContext;
   const loaderTitle = loading
     ? 'Loading workspace'
     : loadingTables
@@ -788,10 +788,6 @@ function AuraSqlQueryPageContent() {
     ? 'Building recommendations'
     : savingContext
     ? 'Saving schema context'
-    : loadingGenerate
-    ? 'Generating and validating SQL'
-    : loadingExecute
-    ? 'Executing query'
     : 'Working';
   const loaderSubtitle = loading
     ? 'Syncing connections, contexts, and session history.'
@@ -801,10 +797,6 @@ function AuraSqlQueryPageContent() {
     ? 'Analyzing selected schema for targeted prompts.'
     : savingContext
     ? 'Persisting selected tables for this session.'
-    : loadingGenerate
-    ? 'Drafting SQL, then checking syntax and schema grounding.'
-    : loadingExecute
-    ? 'Running SQL on the selected connection and collecting results.'
     : 'Please wait.';
   const loaderSteps = [
     { label: 'Load connections and history', active: loading, done: !loading },
@@ -813,12 +805,6 @@ function AuraSqlQueryPageContent() {
       active: loadingTables || loadingContext || savingContext,
       done: !loadingTables && !loadingContext && !savingContext,
     },
-    {
-      label: 'Generate SQL + run validation checks',
-      active: loadingGenerate,
-      done: !loadingGenerate,
-    },
-    { label: 'Execute query and stream rows', active: loadingExecute, done: !loadingExecute },
   ];
 
   return (
@@ -826,9 +812,6 @@ function AuraSqlQueryPageContent() {
       <div className="pointer-events-none absolute inset-0 app-aurora" />
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.16),transparent_65%)] blur-2xl float-slow" />
-      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.18),transparent_65%)] blur-3xl float-slower" />
-      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.14),transparent_70%)] blur-3xl float-slowest" />
 
       <Header
         showSidebarToggle
@@ -961,10 +944,14 @@ function AuraSqlQueryPageContent() {
                                   <Button
                                     size="sm"
                                     onClick={() => handleExecuteMessage(message.id)}
-                                    disabled={loadingExecute || !(message.editedSql || message.sql)}
+                                    disabled={Boolean(executingMessageId) || !(message.editedSql || message.sql)}
                                   >
-                                    {loadingExecute ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-1" />}
-                                    Execute
+                                    {executingMessageId === message.id ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <PlayCircle className="h-4 w-4 mr-1" />
+                                    )}
+                                    {executingMessageId === message.id ? 'Executing' : 'Execute'}
                                   </Button>
                                 </div>
                               </div>
@@ -1057,6 +1044,13 @@ function AuraSqlQueryPageContent() {
                                       {table}
                                     </Badge>
                                   ))}
+                                </div>
+                              )}
+
+                              {executingMessageId === message.id && (
+                                <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Running SQL on the selected connection and preparing the result table.
                                 </div>
                               )}
 

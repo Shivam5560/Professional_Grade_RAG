@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { ResumeFileInfo } from '@/lib/types';
@@ -11,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { LoadingOverlay, LoadingState } from '@/components/ui/loading-state';
+import { PageShell } from '@/components/layout/PageShell';
 import { useToast } from '@/hooks/useToast';
 import { 
   Sparkles, Loader2, ArrowLeft, CheckCircle2, 
@@ -211,7 +211,18 @@ export default function AutoTailorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative">
+    <PageShell
+      title="Auto-Tailor Resume"
+      eyebrow="Human-in-the-loop workflow"
+      description="Tailor a master resume to a job description with scoring, critique, diff review, and final PDF generation."
+      maxWidth="6xl"
+      actions={
+        <Button variant="outline" size="sm" onClick={() => router.push('/workflows')} className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Workflows
+        </Button>
+      }
+    >
       {actionLoading ? (
         <LoadingOverlay
           title={workflowState === 'running' ? 'Auto-Tailor agents running' : 'Sending workflow action'}
@@ -219,24 +230,7 @@ export default function AutoTailorPage() {
         />
       ) : null}
 
-      <Header />
-
-      <main className="relative z-10 px-4 md:px-8 py-6 max-w-6xl mx-auto space-y-6">
-        
-        {/* Back navigation */}
-        <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => router.push('/workflows')}
-            className="text-muted-foreground hover:text-foreground h-9"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Workflows
-          </Button>
-          <span className="text-muted-foreground/40">/</span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Auto-Tailor Agent</span>
-        </div>
+      <div className="space-y-6">
 
         {/* ─── PHASE 1: SETUP FORM ─── */}
         {workflowState === 'setup' && (
@@ -244,7 +238,7 @@ export default function AutoTailorPage() {
             <div className="md:col-span-2 space-y-6">
               
               {/* Form Input fields */}
-              <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6">
+              <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-6">
                 <div>
                   <h2 className="text-lg font-bold text-foreground">1. Select Master Resume</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Choose your base profile from which the RAG system will extract experiences.</p>
@@ -290,7 +284,7 @@ export default function AutoTailorPage() {
 
             {/* Right configurations */}
             <div className="space-y-6">
-              <div className="glass-panel sheen-border rounded-3xl p-6 space-y-6">
+              <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-6">
                 <h3 className="font-bold text-foreground">Workflow Settings</h3>
                 
                 <div className="space-y-2">
@@ -344,7 +338,7 @@ export default function AutoTailorPage() {
 
         {/* ─── PHASE 2: RUNNING / PROGRESS SCREEN ─── */}
         {workflowState === 'running' && (
-          <div className="glass-panel sheen-border rounded-3xl p-10 max-w-md mx-auto text-center space-y-6 bg-accent-soft">
+          <div className="rounded-lg border bg-card p-8 max-w-md mx-auto text-center space-y-6 shadow-sm">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center rounded-full bg-foreground/5 border border-border/80">
               <Loader2 className="h-8 w-8 animate-spin text-foreground" />
             </div>
@@ -393,7 +387,7 @@ export default function AutoTailorPage() {
 
               {/* Tab 1: Critic Feedback */}
               {hitlTab === 'critic' && (
-                <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-4">
+                <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-4">
                   <div className="flex items-center gap-2 mb-2">
                     <AlertTriangle className="h-5 w-5 text-amber-400" />
                     <h2 className="text-lg font-bold text-foreground">Critic Agent Gap Analysis</h2>
@@ -406,7 +400,7 @@ export default function AutoTailorPage() {
 
               {/* Tab 2: ATS Scores Breakdown */}
               {hitlTab === 'scores' && scoresBreakdown && (
-                <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6">
+                <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-6">
                   <div className="flex items-center justify-between border-b border-border/50 pb-4">
                     <h2 className="text-lg font-bold text-foreground">ATS Score Breakdown</h2>
                     <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20 text-base font-black px-3 py-1">
@@ -453,7 +447,7 @@ export default function AutoTailorPage() {
 
               {/* Tab 3: Diff View */}
               {hitlTab === 'diff' && (
-                <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-6 max-h-[600px] overflow-y-auto pr-2">
                   <div className="flex items-center gap-2 mb-2">
                     <FileDiff className="h-5 w-5 text-indigo-400" />
                     <h2 className="text-lg font-bold text-foreground">Old vs New Changes</h2>
@@ -473,7 +467,7 @@ export default function AutoTailorPage() {
 
               {/* Tab 4: Resume Preview */}
               {hitlTab === 'preview' && resumeData && (
-                <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-6 max-h-[600px] overflow-y-auto pr-2">
                   <div className="text-center border-b border-border/50 pb-4">
                     <h1 className="text-2xl font-black">{resumeData.name}</h1>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -524,7 +518,7 @@ export default function AutoTailorPage() {
 
             {/* Right Column: HITL Responses */}
             <div className="space-y-6">
-              <div className="glass-panel sheen-border rounded-3xl p-6 space-y-5 bg-card/65">
+              <div className="rounded-lg border bg-card p-5 shadow-sm md:p-6 space-y-5">
                 <div className="space-y-1.5 flex flex-col items-center mb-4">
                   <h3 className="font-bold text-foreground text-center">Human-in-the-loop Action</h3>
                   <div className="relative w-32 h-32 mt-4 mb-2">
@@ -608,7 +602,7 @@ export default function AutoTailorPage() {
 
         {/* ─── PHASE 4: COMPLETE STATE ─── */}
         {workflowState === 'completed' && (
-          <div className="glass-panel sheen-border rounded-3xl p-10 max-w-md mx-auto text-center space-y-6 bg-accent-soft">
+          <div className="rounded-lg border bg-card p-8 max-w-md mx-auto text-center space-y-6 shadow-sm">
             <div className="w-16 h-16 mx-auto flex items-center justify-center rounded-full bg-green-500/10 border border-green-500/30">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
@@ -650,7 +644,7 @@ export default function AutoTailorPage() {
 
         {/* ─── PHASE 5: ABORTED STATE ─── */}
         {workflowState === 'aborted' && (
-          <div className="glass-panel sheen-border rounded-3xl p-10 max-w-md mx-auto text-center space-y-6 bg-accent-soft">
+          <div className="rounded-lg border bg-card p-8 max-w-md mx-auto text-center space-y-6 shadow-sm">
             <div className="w-16 h-16 mx-auto flex items-center justify-center rounded-full bg-red-500/10 border border-red-500/30">
               <XCircle className="h-8 w-8 text-red-500" />
             </div>
@@ -671,7 +665,7 @@ export default function AutoTailorPage() {
           </div>
         )}
 
-      </main>
-    </div>
+      </div>
+    </PageShell>
   );
 }
