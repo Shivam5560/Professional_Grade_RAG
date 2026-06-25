@@ -172,7 +172,15 @@ class Settings(BaseSettings):
             cleaned = (origin or "").strip().rstrip("/")
             if cleaned:
                 origins.append(cleaned)
-        return origins
+                if cleaned == "http://localhost:3000":
+                    origins.append("http://127.0.0.1:3000")
+                elif cleaned == "http://127.0.0.1:3000":
+                    origins.append("http://localhost:3000")
+                elif cleaned == "https://localhost:3000":
+                    origins.append("https://127.0.0.1:3000")
+                elif cleaned == "https://127.0.0.1:3000":
+                    origins.append("https://localhost:3000")
+        return list(dict.fromkeys(origins))
 
     def validate_security_posture(self) -> None:
         insecure_defaults = {

@@ -127,7 +127,14 @@ def setup_cors(app):
         allow_origins=settings.normalized_cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin",
+            "X-Requested-With",
+            "ngrok-skip-browser-warning",
+        ],
     )
     
     logger.log_operation("cors_configured", origins=settings.normalized_cors_origins)
