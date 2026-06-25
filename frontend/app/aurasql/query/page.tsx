@@ -958,11 +958,12 @@ function AuraSqlQueryPageContent() {
 
                               {(() => {
                                 const insights = getContextInsights(message);
+                                const checks = getMessageChecks(message);
                                 if (!insights) return null;
                                 return (
                                   <div className="rounded-xl border border-border/60 bg-card/60 p-2 text-[11px] space-y-1.5">
                                     <div className="flex flex-wrap gap-1.5">
-                                      {getMessageChecks(message).map((check) => (
+                                      {checks.map((check) => (
                                         <Badge
                                           key={`${message.id}-${check.label}`}
                                           variant="secondary"
@@ -970,6 +971,24 @@ function AuraSqlQueryPageContent() {
                                         >
                                           {check.label}: {check.status}
                                         </Badge>
+                                      ))}
+                                    </div>
+                                    <div className="grid gap-1.5 pt-1 sm:grid-cols-5">
+                                      {checks.map((check) => (
+                                        <div key={`${message.id}-timeline-${check.label}`} className="flex items-center gap-1.5">
+                                          <span
+                                            className={`h-2 w-2 rounded-full ${
+                                              check.status === 'pass'
+                                                ? 'bg-emerald-500'
+                                                : check.status === 'warn'
+                                                ? 'bg-amber-500'
+                                                : check.status === 'fail'
+                                                ? 'bg-rose-500'
+                                                : 'bg-muted-foreground/40'
+                                            }`}
+                                          />
+                                          <span className="truncate text-[10px] text-muted-foreground">{check.label}</span>
+                                        </div>
                                       ))}
                                     </div>
                                     <div className="flex items-center justify-between text-muted-foreground">
@@ -1056,10 +1075,17 @@ function AuraSqlQueryPageContent() {
 
                               {message.execution && (
                                 <div className="space-y-3">
-                                  <Button size="sm" variant="ghost" onClick={() => handleToggleResults(message.id)}>
-                                    {message.showResults ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
-                                    {message.showResults ? 'Hide results' : 'Show results'}
-                                  </Button>
+                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                                    <div className="text-xs text-muted-foreground">
+                                      <span className="font-medium text-foreground">{message.execution.rows.length}</span> rows
+                                      {' · '}
+                                      <span className="font-medium text-foreground">{message.execution.columns.length}</span> columns
+                                    </div>
+                                    <Button size="sm" variant="ghost" onClick={() => handleToggleResults(message.id)}>
+                                      {message.showResults ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
+                                      {message.showResults ? 'Hide results' : 'Show results'}
+                                    </Button>
+                                  </div>
 
                                   {message.showResults && (
                                     <>

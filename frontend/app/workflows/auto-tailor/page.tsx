@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
@@ -16,7 +17,17 @@ import {
   Sparkles, Loader2, ArrowLeft, CheckCircle2, 
   AlertTriangle, Download, RefreshCw, XCircle, FileDiff
 } from 'lucide-react';
-import ReactDiffViewer from 'react-diff-viewer-continued';
+
+const ReactDiffViewer = dynamic(() => import('react-diff-viewer-continued'), {
+  ssr: false,
+  loading: () => (
+    <LoadingState
+      title="Loading diff viewer"
+      description="Preparing the side-by-side resume comparison."
+      className="min-h-[260px]"
+    />
+  ),
+});
 
 const WORKFLOW_STEPS = [
   { id: 'setup', label: 'Setup' },

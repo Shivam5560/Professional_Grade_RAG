@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast } from "lucide-react";
+import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter } from "next/navigation";
@@ -52,6 +52,7 @@ export function Header({
     { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
   ];
   const [llmHealthy, setLlmHealthy] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { mode, palette, setPalette, toggleMode } = useAppTheme();
   const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: 'nexus', label: 'Nexus Slate', icon: Compass },
@@ -132,6 +133,37 @@ export function Header({
       </div>
       
       <div className="flex items-center gap-3">
+        <div className="relative lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileNavOpen((prev) => !prev)}
+            aria-label="Open navigation"
+          >
+            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+          {mobileNavOpen ? (
+            <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-border bg-background p-2 shadow-xl">
+              {mainNavLinks.map((link) => (
+                <Button
+                  key={link.href}
+                  variant="ghost"
+                  size="sm"
+                  className={`w-full justify-start ${
+                    link.isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => {
+                    router.push(link.href);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  {link.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex items-center gap-1.5 mr-2">
           <div
             className={`h-2 w-2 rounded-full transition-all ${
