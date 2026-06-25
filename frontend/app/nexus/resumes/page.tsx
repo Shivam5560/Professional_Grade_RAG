@@ -4,17 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { useNexusFlowStore } from '@/lib/nexusFlowStore';
 import { useToast } from '@/hooks/useToast';
 import type { ResumeFileInfo } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
-
-import { AgGridReact } from 'ag-grid-react';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
-import { ColDef, ICellRendererParams } from 'ag-grid-community';
 
 export default function NexusResumeSelectPage() {
   const router = useRouter();
@@ -105,30 +101,32 @@ export default function NexusResumeSelectPage() {
     router.push('/nexus/jd');
   };
 
-  const ActionRenderer = (params: ICellRendererParams) => {
-    return (
-      <div className="flex gap-2 items-center h-full">
-        <Button size="sm" variant="outline" onClick={() => handleSelectResume(params.data)}>Select</Button>
-        <Button size="sm" variant="destructive" onClick={() => handleDelete(params.data)}>Delete</Button>
-      </div>
-    );
-  };
-
-  const colDefs: ColDef[] = [
-    { field: 'filename', headerName: 'File Name', flex: 1, filter: true },
-    { field: 'resume_id', headerName: 'ID', flex: 1, filter: true },
-    { field: 'status', headerName: 'Status', width: 120, filter: true },
-    { 
-      field: 'created_at', 
-      headerName: 'Uploaded At', 
-      width: 200, 
-      valueFormatter: p => p.value ? new Date(p.value).toLocaleString() : '—'
+  const columns: DataTableColumn<ResumeFileInfo>[] = [
+    { id: 'filename', header: 'File Name', accessor: 'filename' },
+    { id: 'resume_id', header: 'ID', accessor: 'resume_id' },
+    { id: 'status', header: 'Status', accessor: 'status', className: 'w-32' },
+    {
+      id: 'created_at',
+      header: 'Uploaded At',
+      accessor: (resume) => (resume.created_at ? new Date(resume.created_at).toLocaleString() : '—'),
+      className: 'w-52 whitespace-nowrap',
     },
     {
-      headerName: 'Actions',
-      width: 200,
-      cellRenderer: ActionRenderer,
-    }
+      id: 'actions',
+      header: 'Actions',
+      searchable: false,
+      className: 'w-48',
+      cell: (resume) => (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => handleSelectResume(resume)}>
+            Select
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => handleDelete(resume)}>
+            Delete
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -154,18 +152,16 @@ export default function NexusResumeSelectPage() {
           </div>
         </div>
 
-        <div className="flex-1 w-full ag-theme-quartz-dark" style={{ minHeight: '500px' }}>
-          <AgGridReact
-            rowData={resumes}
-            columnDefs={colDefs}
-            rowHeight={50}
-            animateRows={true}
-            pagination={true}
-            paginationPageSize={10}
-            domLayout="autoHeight"
-            overlayLoadingTemplate={loading ? '<span class="ag-overlay-loading-center">Loading...</span>' : undefined}
-          />
-        </div>
+        <DataTable
+          data={resumes}
+          columns={columns}
+          getRowId={(resume) => resume.id}
+          loading={loading}
+          searchPlaceholder="Search resumes..."
+          emptyTitle="No resumes"
+          emptyDescription="Upload a resume to analyze it against a job description."
+          pageSize={10}
+        />
       </main>
     </div>
   );

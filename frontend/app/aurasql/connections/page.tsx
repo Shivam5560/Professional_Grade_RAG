@@ -4,16 +4,12 @@ import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
 import { Plus, Trash2 } from 'lucide-react';
-
-import { AgGridReact } from 'ag-grid-react';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
-import { ColDef, ICellRendererParams } from 'ag-grid-community';
 
 export default function AuraSqlConnectionsPage() {
   const router = useRouter();
@@ -53,28 +49,31 @@ export default function AuraSqlConnectionsPage() {
     }
   }, []);
 
-  const ActionRenderer = useCallback((params: ICellRendererParams) => {
-    const conn = params.data;
-    return (
-      <div className="flex gap-2 items-center h-full">
-        <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${conn.id}`)}>Query</Button>
-        <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/connections/${conn.id}`)}>Edit</Button>
-        <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(conn.id)}><Trash2 className="h-4 w-4" /></Button>
-      </div>
-    );
-  }, [handleDeleteConnection, router]);
-
-  const connectionColDefs = useMemo<ColDef[]>(() => [
-    { field: 'name', headerName: 'Name', flex: 1, filter: true },
-    { field: 'db_type', headerName: 'Type', width: 120, filter: true },
-    { field: 'host', headerName: 'Host', flex: 1 },
-    { field: 'database', headerName: 'Database', flex: 1 },
-    { 
-      headerName: 'Actions',
-      width: 250,
-      cellRenderer: ActionRenderer
-    }
-  ], [ActionRenderer]);
+  const connectionColumns = useMemo<DataTableColumn<AuraSqlConnection>[]>(() => [
+    { id: 'name', header: 'Name', accessor: 'name' },
+    { id: 'db_type', header: 'Type', accessor: 'db_type', className: 'w-32' },
+    { id: 'host', header: 'Host', accessor: 'host' },
+    { id: 'database', header: 'Database', accessor: 'database' },
+    {
+      id: 'actions',
+      header: 'Actions',
+      searchable: false,
+      className: 'w-[250px]',
+      cell: (conn) => (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${conn.id}`)}>
+            Query
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/connections/${conn.id}`)}>
+            Edit
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(conn.id)} aria-label={`Delete ${conn.name}`}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+    },
+  ], [handleDeleteConnection, router]);
 
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
@@ -85,25 +84,24 @@ export default function AuraSqlConnectionsPage() {
       <main className="flex-1 p-8 flex flex-col max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Connections Data Grid</h1>
-            <p className="text-muted-foreground">Manage your database connections in a premium data grid.</p>
+            <h1 className="text-3xl font-bold mb-2">Connections</h1>
+            <p className="text-muted-foreground">Manage your database connections.</p>
           </div>
           <Button onClick={() => router.push('/aurasql/connections/new')}>
             <Plus className="h-4 w-4 mr-2" />
             New Connection
           </Button>
         </div>
-        <div className="flex-1 w-full ag-theme-quartz-dark" style={{ minHeight: '600px' }}>
-          <AgGridReact
-            rowData={connections}
-            columnDefs={connectionColDefs}
-            rowHeight={50}
-            animateRows={true}
-            pagination={true}
-            paginationPageSize={20}
-            overlayLoadingTemplate={loading ? '<span class="ag-overlay-loading-center">Loading...</span>' : undefined}
-          />
-        </div>
+        <DataTable
+          data={connections}
+          columns={connectionColumns}
+          getRowId={(connection) => connection.id}
+          loading={loading}
+          searchPlaceholder="Search connections..."
+          emptyTitle="No connections"
+          emptyDescription="Create a connection to start querying your databases."
+          pageSize={20}
+        />
       </main>
     </div>
   );

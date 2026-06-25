@@ -2,15 +2,11 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { AuraSqlHistoryItem } from '@/lib/types';
 import AuthPage from '@/app/auth/page';
-
-import { AgGridReact } from 'ag-grid-react';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
-import { ColDef } from 'ag-grid-community';
 
 export default function AuraSqlHistoryDataPage() {
   const { isAuthenticated } = useAuthStore();
@@ -30,17 +26,27 @@ export default function AuraSqlHistoryDataPage() {
     });
   }, [isAuthenticated]);
 
-  const historyColDefs = useMemo<ColDef[]>(() => [
-    { field: 'natural_language_query', headerName: 'Natural Language Query', flex: 2, filter: true },
-    { field: 'generated_sql', headerName: 'Generated SQL', flex: 2, filter: true },
-    { field: 'status', headerName: 'Status', width: 120, filter: true },
-    { field: 'connection_id', headerName: 'Connection', width: 150, filter: true },
-    { 
-      field: 'created_at', 
-      headerName: 'Date', 
-      width: 200,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleString() : '—'
-    }
+  const historyColumns = useMemo<DataTableColumn<AuraSqlHistoryItem>[]>(() => [
+    {
+      id: 'natural_language_query',
+      header: 'Natural Language Query',
+      accessor: 'natural_language_query',
+      className: 'max-w-xs whitespace-normal',
+    },
+    {
+      id: 'generated_sql',
+      header: 'Generated SQL',
+      accessor: 'generated_sql',
+      className: 'max-w-sm whitespace-normal font-mono text-xs',
+    },
+    { id: 'status', header: 'Status', accessor: 'status', className: 'w-32' },
+    { id: 'connection_id', header: 'Connection', accessor: 'connection_id', className: 'w-40' },
+    {
+      id: 'created_at',
+      header: 'Date',
+      accessor: (item) => (item.created_at ? new Date(item.created_at).toLocaleString() : '—'),
+      className: 'w-52 whitespace-nowrap',
+    },
   ], []);
 
   if (!isMounted) return null;
@@ -54,17 +60,16 @@ export default function AuraSqlHistoryDataPage() {
           <h1 className="text-3xl font-bold mb-2">Generation Feed</h1>
           <p className="text-muted-foreground">Full history of generated SQL intents.</p>
         </div>
-        <div className="flex-1 w-full ag-theme-quartz-dark" style={{ minHeight: '600px' }}>
-          <AgGridReact
-            rowData={history}
-            columnDefs={historyColDefs}
-            rowHeight={50}
-            animateRows={true}
-            pagination={true}
-            paginationPageSize={20}
-            overlayLoadingTemplate={loading ? '<span class="ag-overlay-loading-center">Loading...</span>' : undefined}
-          />
-        </div>
+        <DataTable
+          data={history}
+          columns={historyColumns}
+          getRowId={(item) => item.id}
+          loading={loading}
+          searchPlaceholder="Search history..."
+          emptyTitle="No generated SQL history"
+          emptyDescription="Generated SQL requests will appear here."
+          pageSize={20}
+        />
       </main>
     </div>
   );
