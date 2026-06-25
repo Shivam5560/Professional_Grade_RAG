@@ -445,79 +445,6 @@ def list_connections(
         .order_by(AuraSqlConnection.created_at.desc())
         .all()
     )
-    @router.get("/connections/{connection_id}", response_model=AuraSqlConnectionResponse)
-    def get_connection(
-        connection_id: str,
-        db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
-    ):
-        connection = (
-            db.query(AuraSqlConnection)
-            .filter(AuraSqlConnection.id == connection_id, AuraSqlConnection.user_id == current_user.id)
-            .first()
-        )
-        if not connection:
-            raise HTTPException(status_code=404, detail="Connection not found")
-        return AuraSqlConnectionResponse(
-            id=connection.id,
-            name=connection.name,
-            db_type=connection.db_type,
-            host=connection.host,
-            port=connection.port,
-            username=connection.username,
-            database=connection.database,
-            schema_name=connection.schema_name,
-            ssl_required=connection.ssl_required,
-        )
-
-
-    @router.patch("/connections/{connection_id}", response_model=AuraSqlConnectionResponse)
-    def update_connection(
-        connection_id: str,
-        payload: AuraSqlConnectionUpdate,
-        db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
-    ):
-        connection = (
-            db.query(AuraSqlConnection)
-            .filter(AuraSqlConnection.id == connection_id, AuraSqlConnection.user_id == current_user.id)
-            .first()
-        )
-        if not connection:
-            raise HTTPException(status_code=404, detail="Connection not found")
-
-        update_data = payload.model_dump(exclude_unset=True)
-        if update_data.get("db_type") == "postgresql" and not update_data.get("schema_name") and not connection.schema_name:
-            raise HTTPException(status_code=400, detail="PostgreSQL schema_name is required")
-        password = update_data.pop("password", None)
-        for key, value in update_data.items():
-            setattr(connection, key, value)
-
-        if password:
-            if not connection.secret:
-                connection.secret = AuraSqlConnectionSecret(
-                    id=str(uuid.uuid4()),
-                    connection_id=connection.id,
-                    encrypted_password=encrypt_secret(password),
-                )
-            else:
-                connection.secret.encrypted_password = encrypt_secret(password)
-
-        db.add(connection)
-        db.commit()
-
-        return AuraSqlConnectionResponse(
-            id=connection.id,
-            name=connection.name,
-            db_type=connection.db_type,
-            host=connection.host,
-            port=connection.port,
-            username=connection.username,
-            database=connection.database,
-            schema_name=connection.schema_name,
-            ssl_required=connection.ssl_required,
-        )
-
     return AuraSqlConnectionListResponse(
         connections=[
             AuraSqlConnectionResponse(
@@ -533,6 +460,80 @@ def list_connections(
             )
             for conn in connections
         ]
+    )
+
+
+@router.get("/connections/{connection_id}", response_model=AuraSqlConnectionResponse)
+def get_connection(
+    connection_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    connection = (
+        db.query(AuraSqlConnection)
+        .filter(AuraSqlConnection.id == connection_id, AuraSqlConnection.user_id == current_user.id)
+        .first()
+    )
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return AuraSqlConnectionResponse(
+        id=connection.id,
+        name=connection.name,
+        db_type=connection.db_type,
+        host=connection.host,
+        port=connection.port,
+        username=connection.username,
+        database=connection.database,
+        schema_name=connection.schema_name,
+        ssl_required=connection.ssl_required,
+    )
+
+
+@router.patch("/connections/{connection_id}", response_model=AuraSqlConnectionResponse)
+def update_connection(
+    connection_id: str,
+    payload: AuraSqlConnectionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    connection = (
+        db.query(AuraSqlConnection)
+        .filter(AuraSqlConnection.id == connection_id, AuraSqlConnection.user_id == current_user.id)
+        .first()
+    )
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connection not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if update_data.get("db_type") == "postgresql" and not update_data.get("schema_name") and not connection.schema_name:
+        raise HTTPException(status_code=400, detail="PostgreSQL schema_name is required")
+    password = update_data.pop("password", None)
+    for key, value in update_data.items():
+        setattr(connection, key, value)
+
+    if password:
+        if not connection.secret:
+            connection.secret = AuraSqlConnectionSecret(
+                id=str(uuid.uuid4()),
+                connection_id=connection.id,
+                encrypted_password=encrypt_secret(password),
+            )
+        else:
+            connection.secret.encrypted_password = encrypt_secret(password)
+
+    db.add(connection)
+    db.commit()
+
+    return AuraSqlConnectionResponse(
+        id=connection.id,
+        name=connection.name,
+        db_type=connection.db_type,
+        host=connection.host,
+        port=connection.port,
+        username=connection.username,
+        database=connection.database,
+        schema_name=connection.schema_name,
+        ssl_required=connection.ssl_required,
     )
 
 

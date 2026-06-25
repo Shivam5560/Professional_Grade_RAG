@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -35,8 +34,9 @@ class StartTailorRequest(BaseModel):
     target_score: float = Field(default=85.0, description="ATS score threshold to stop iterations")
     max_iterations: int = Field(default=3, description="Maximum automated rewrite cycles")
 
-class RejectTailorRequest(BaseModel):
-    comments: str = Field(..., description="User feedback/comments for refining in the next iteration")
+class RespondTailorRequest(BaseModel):
+    action: Literal["approve", "abort", "refine"] = Field(..., description="Human review action")
+    user_feedback: str | None = Field(None, description="Required when action is refine")
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
@@ -224,7 +224,17 @@ async def respond_to_human_interrupt(
         state["status"] = "aborted"
         analysis_record.analysis = state
         db.commit()
-        return {"status": "aborted", "message": "Workflow aborted by user"}
+        return {
+            "analysis_id": analysis_id,
+            "status": "aborted",
+            "current_iteration": state.get("current_iteration", 0),
+            "latest_score": state.get("latest_score", 0.0),
+            "resume_data": state.get("resume_data", {}),
+            "scores_breakdown": state.get("scores_breakdown", {}),
+            "critic_feedback": state.get("critic_feedback", ""),
+            "pdf_path": state.get("pdf_path"),
+            "message": "Workflow aborted by user",
+        }
 
     if payload.action == "approve":
         resume_data = state.get("resume_data", {})
@@ -250,7 +260,13 @@ async def respond_to_human_interrupt(
             
         db.commit()
         return {
+            "analysis_id": analysis_id,
             "status": "completed",
+            "current_iteration": state.get("current_iteration", 0),
+            "latest_score": state.get("latest_score", analysis_record.overall_score or 0.0),
+            "resume_data": state.get("resume_data", {}),
+            "scores_breakdown": state.get("scores_breakdown", {}),
+            "critic_feedback": state.get("critic_feedback", ""),
             "pdf_path": pdf_path,
             "message": "Resume approved and compiled successfully."
         }
