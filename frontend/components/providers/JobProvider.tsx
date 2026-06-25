@@ -7,12 +7,18 @@ export interface Job {
   id: string;
   type: string;
   status: "pending" | "running" | "success" | "error";
+  title?: string;
+  description?: string;
   message?: string;
+  progress?: number;
+  href?: string;
+  createdAt?: string;
 }
 
 interface JobContextType {
   activeJobs: Job[];
   addJob: (job: Job) => void;
+  updateJob: (id: string, patch: Partial<Job>) => void;
   removeJob: (id: string) => void;
   isJobActive: (type: string) => boolean;
 }
@@ -29,8 +35,14 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
       if (prev.some(j => j.id === job.id)) {
         return prev;
       }
-      return [...prev, job];
+      return [...prev, { ...job, createdAt: job.createdAt ?? new Date().toISOString() }];
     });
+  }, []);
+
+  const updateJob = useCallback((id: string, patch: Partial<Job>) => {
+    setActiveJobs((prev) =>
+      prev.map((job) => (job.id === id ? { ...job, ...patch } : job))
+    );
   }, []);
 
   const removeJob = useCallback((id: string) => {
@@ -75,7 +87,12 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
           } else if (data.type === "job_started" || data.type === "job_progress") {
             // Optional: update job progress
             setActiveJobs((prev) => 
-              prev.map(j => j.id === data.job_id ? { ...j, status: "running", message: data.message } : j)
+              prev.map(j => j.id === data.job_id ? {
+                ...j,
+                status: "running",
+                message: data.message,
+                progress: typeof data.progress === "number" ? data.progress : j.progress,
+              } : j)
             );
           }
         } catch (err) {
@@ -107,7 +124,7 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   return (
-    <JobContext.Provider value={{ activeJobs, addJob, removeJob, isJobActive }}>
+    <JobContext.Provider value={{ activeJobs, addJob, updateJob, removeJob, isJobActive }}>
       {children}
     </JobContext.Provider>
   );

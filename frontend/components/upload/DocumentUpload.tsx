@@ -35,7 +35,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const { toast } = useToast();
   const { addJob, isJobActive } = useJobs();
 
-  const isUploading = isJobActive("upload_resume");
+  const isUploading = isJobActive("document_upload") || isJobActive("upload_resume");
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file size
@@ -132,7 +132,15 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
 
         if (result.job_id) {
           // It's a background job
-          addJob({ id: result.job_id as string, type: "upload_resume", status: "running" });
+          addJob({
+            id: result.job_id as string,
+            type: "document_upload",
+            status: "running",
+            title: "Document upload",
+            description: currentFile.file.name,
+            message: "Indexing document in the background.",
+            href: "/knowledge-base",
+          });
           toast({
             title: 'Upload processing',
             description: `${currentFile.file.name} is uploading, you will get a notification when done.`,

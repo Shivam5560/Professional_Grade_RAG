@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { type ThemePalette } from "@/lib/theme";
+import { JobCenter } from "@/components/layout/JobCenter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -141,6 +142,8 @@ export function Header({
             title={llmHealthy ? 'LLM healthy' : 'LLM unhealthy'}
           />
         </div>
+
+        <JobCenter />
         
         <Button 
           variant="ghost" 

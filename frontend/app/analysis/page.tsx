@@ -79,7 +79,15 @@ export default function AnalysisHubPage() {
     setError(null);
 
     const tempJobId = `temp_uploading_${Date.now()}`;
-    addJob({ id: tempJobId, type: 'start_analysis', status: 'running' });
+    addJob({
+      id: tempJobId,
+      type: 'start_analysis',
+      status: 'running',
+      title: 'Starting analysis',
+      description: file.name,
+      message: 'Uploading dataset and preparing the workflow.',
+      href: '/analysis',
+    });
 
     try {
       const uploadData = await apiClient.uploadAnalysisFile(file);
@@ -92,7 +100,15 @@ export default function AnalysisHubPage() {
       });
 
       if (startData.job_id) {
-        addJob({ id: startData.job_id, type: 'start_analysis', status: 'running' });
+        addJob({
+          id: startData.job_id,
+          type: 'analysis',
+          status: 'running',
+          title: 'Analysis workflow',
+          description: query,
+          message: 'Agents are analyzing the uploaded dataset.',
+          href: `/analysis/${startData.job_id}`,
+        });
         router.push(`/analysis/${startData.job_id}`);
       }
     } catch (err) {
