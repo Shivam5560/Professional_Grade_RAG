@@ -10,7 +10,7 @@ import { ResumeFileInfo } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
+import { LoadingOverlay, LoadingState } from '@/components/ui/loading-state';
 import { useToast } from '@/hooks/useToast';
 import { 
   Sparkles, Loader2, ArrowLeft, CheckCircle2, 
@@ -26,6 +26,7 @@ export default function AutoTailorPage() {
 
   // Form State
   const [resumes, setResumes] = useState<ResumeFileInfo[]>([]);
+  const [loadingResumes, setLoadingResumes] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [targetScore, setTargetScore] = useState(85);
@@ -57,6 +58,7 @@ export default function AutoTailorPage() {
     }
 
     const loadResumes = async () => {
+      setLoadingResumes(true);
       try {
         const response = await apiClient.listResumes(user.id);
         setResumes(response.list || []);
@@ -70,6 +72,8 @@ export default function AutoTailorPage() {
           description: 'Unable to fetch your uploaded resumes.',
           variant: 'destructive',
         });
+      } finally {
+        setLoadingResumes(false);
       }
     };
 
@@ -194,16 +198,26 @@ export default function AutoTailorPage() {
     }
   };
 
-  if (!isHydrated) return null;
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-background p-6 text-foreground">
+        <LoadingState
+          title="Preparing Auto-Tailor"
+          description="Loading your session before showing the workflow."
+          className="mx-auto mt-24 max-w-xl"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 opacity-35">
-        <ShaderAnimation className="w-full h-full" speed={0.08} />
-      </div>
-      <div className="pointer-events-none absolute inset-0 app-aurora" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
+    <div className="min-h-screen bg-background text-foreground relative">
+      {actionLoading ? (
+        <LoadingOverlay
+          title={workflowState === 'running' ? 'Auto-Tailor agents running' : 'Sending workflow action'}
+          description="Generating, reviewing, scoring, and preparing the latest resume draft."
+        />
+      ) : null}
 
       <Header />
 
@@ -235,7 +249,13 @@ export default function AutoTailorPage() {
                   <h2 className="text-lg font-bold text-foreground">1. Select Master Resume</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Choose your base profile from which the RAG system will extract experiences.</p>
                   
-                  {resumes.length === 0 ? (
+                  {loadingResumes ? (
+                    <LoadingState
+                      title="Loading resumes"
+                      description="Fetching uploaded resumes for this workflow."
+                      className="mt-3 min-h-[120px]"
+                    />
+                  ) : resumes.length === 0 ? (
                     <div className="mt-3 p-4 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground">
                       No uploaded resumes found. Go upload a resume in the <span className="underline cursor-pointer" onClick={() => router.push('/nexus')}>Resume Studio</span> first.
                     </div>
@@ -314,8 +334,8 @@ export default function AutoTailorPage() {
                   disabled={actionLoading || resumes.length === 0}
                   className="w-full bg-foreground text-background hover:bg-foreground/90 font-bold h-11 shadow-lg gap-2"
                 >
-                  <Sparkles className="h-4 w-4" />
-                  Launch Tailor Loop
+                  {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {actionLoading ? 'Starting Tailor Loop...' : 'Launch Tailor Loop'}
                 </Button>
               </div>
             </div>

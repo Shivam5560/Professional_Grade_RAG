@@ -69,26 +69,6 @@ export default function AuraSqlHomePage() {
     load();
   }, [isAuthenticated]);
 
-  const handleDeleteConnection = async (connectionId: string) => {
-    const confirmed = await toastConfirm({
-      title: 'Delete connection?',
-      description: 'This will remove the connection and its saved contexts.',
-      confirmLabel: 'Delete',
-      variant: 'destructive',
-    });
-    if (!confirmed) return;
-    try {
-      await apiClient.deleteAuraSqlConnection(connectionId);
-      setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
-      setContexts((prev) => prev.filter((ctx) => ctx.connection_id !== connectionId));
-      toast({ title: 'Connection deleted' });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete connection';
-      setError(msg);
-      toast({ title: 'Delete failed', description: msg, variant: 'destructive' });
-    }
-  };
-
   const handleDeleteContext = async (contextId: string) => {
     const confirmed = await toastConfirm({
       title: 'Delete context?',
@@ -266,37 +246,6 @@ export default function AuraSqlHomePage() {
     clampedContextPage * contextPageSize,
     clampedContextPage * contextPageSize + contextPageSize
   );
-
-  const connectionColDefs = useMemo<ColDef[]>(() => [
-    { field: 'name', headerName: 'Name', flex: 1 },
-    { field: 'db_type', headerName: 'Type', width: 100 },
-    { field: 'database', headerName: 'Database', flex: 1 },
-    { 
-      headerName: 'Actions',
-      width: 220,
-      cellRenderer: (params: any) => {
-        const conn = params.data;
-        return (
-          <div className="flex gap-2 items-center h-full">
-            <Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?connection=${conn.id}`)}>Open</Button>
-            <Button size="sm" variant="ghost" onClick={() => router.push(`/aurasql/connections/${conn.id}`)}>Edit</Button>
-            <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(conn.id)}><Trash2 className="h-4 w-4" /></Button>
-          </div>
-        );
-      }
-    }
-  ], [router]);
-
-  const historyColDefs = useMemo<ColDef[]>(() => [
-    { field: 'natural_language_query', headerName: 'Query', flex: 1 },
-    { field: 'status', headerName: 'Status', width: 100 },
-    { 
-      field: 'created_at', 
-      headerName: 'Date', 
-      width: 180,
-      valueFormatter: (p) => p.value ? new Date(p.value).toLocaleString() : '—'
-    }
-  ], []);
 
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;

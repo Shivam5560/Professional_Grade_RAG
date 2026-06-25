@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -43,17 +43,17 @@ export default function AuraSqlConnectionsPage() {
     }
   };
 
-  const handleDeleteConnection = async (connectionId: string) => {
+  const handleDeleteConnection = useCallback(async (connectionId: string) => {
     if (!confirm('Delete this connection?')) return;
     try {
       await apiClient.deleteAuraSqlConnection(connectionId);
       setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
-    } catch (err) {
+    } catch {
       alert('Failed to delete connection');
     }
-  };
+  }, []);
 
-  const ActionRenderer = (params: ICellRendererParams) => {
+  const ActionRenderer = useCallback((params: ICellRendererParams) => {
     const conn = params.data;
     return (
       <div className="flex gap-2 items-center h-full">
@@ -62,7 +62,7 @@ export default function AuraSqlConnectionsPage() {
         <Button size="sm" variant="ghost" onClick={() => handleDeleteConnection(conn.id)}><Trash2 className="h-4 w-4" /></Button>
       </div>
     );
-  };
+  }, [handleDeleteConnection, router]);
 
   const connectionColDefs = useMemo<ColDef[]>(() => [
     { field: 'name', headerName: 'Name', flex: 1, filter: true },
@@ -74,7 +74,7 @@ export default function AuraSqlConnectionsPage() {
       width: 250,
       cellRenderer: ActionRenderer
     }
-  ], [router]);
+  ], [ActionRenderer]);
 
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
@@ -14,7 +13,6 @@ import 'ag-grid-community/styles/ag-theme-quartz.css';
 import { ColDef } from 'ag-grid-community';
 
 export default function AuraSqlHistoryDataPage() {
-  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
   const [history, setHistory] = useState<AuraSqlHistoryItem[]>([]);

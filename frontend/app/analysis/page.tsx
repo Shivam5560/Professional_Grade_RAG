@@ -10,6 +10,7 @@ import { useAnalysisStore } from '@/lib/analysis/store';
 import { useJobs } from '@/components/providers/JobProvider';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { LoadingOverlay } from '@/components/ui/loading-state';
 import {
   BarChart3,
   Upload,
@@ -51,7 +52,6 @@ export default function AnalysisHubPage() {
   const { reset } = useAnalysisStore();
   const [file, setFile] = useState<File | null>(null);
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<AnalysisConfig>({
     max_rows: 50000,
@@ -59,8 +59,8 @@ export default function AnalysisHubPage() {
     output_format: ['interactive', 'pptx'],
   });
 
-  const { addJob, removeJob, isJobActive, activeJobs } = useJobs();
-  const loading = isJobActive("start_analysis");
+  const { addJob, removeJob, isJobActive } = useJobs();
+  const isStartingAnalysis = isJobActive("start_analysis");
 
   // Reset stale analysis state when user navigates back to this page
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function AnalysisHubPage() {
   }, [reset]);
 
   const handleSubmit = async () => {
-    if (!file || !query.trim() || loading) return;
+    if (!file || !query.trim() || isStartingAnalysis) return;
     setError(null);
 
     const tempJobId = "temp_uploading_" + Date.now();
@@ -103,6 +103,12 @@ export default function AnalysisHubPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header />
+      {isStartingAnalysis ? (
+        <LoadingOverlay
+          title="Starting analysis"
+          description="Uploading your file and spawning the analysis agents."
+        />
+      ) : null}
       <div className="mx-auto max-w-6xl px-4 py-8 lg:py-12">
         {/* Hero */}
         <div className="mb-10">
@@ -185,11 +191,11 @@ export default function AnalysisHubPage() {
               <Button
                 id="start-analysis-btn"
                 onClick={handleSubmit}
-                disabled={!isReady || loading}
+                disabled={!isReady || isStartingAnalysis}
                 className="mt-4 w-full gap-2"
                 size="lg"
               >
-                {loading ? (
+                {isStartingAnalysis ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     Uploading & starting...
@@ -203,7 +209,7 @@ export default function AnalysisHubPage() {
                 )}
               </Button>
 
-              {!isReady && !loading && (
+              {!isReady && !isStartingAnalysis && (
                 <p className="mt-2 text-center text-xs text-muted-foreground">
                   {!file ? 'Upload a file to continue' : 'Enter a question to continue'}
                 </p>
