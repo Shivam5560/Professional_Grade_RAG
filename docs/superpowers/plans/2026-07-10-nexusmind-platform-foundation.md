@@ -34,6 +34,7 @@
 - `backend/app/platform/apps/contracts.py` — immutable manifest and dependency contracts
 - `backend/app/platform/apps/registry.py` — registration, enablement, dependency validation, and catalog lookup
 - `backend/app/platform/apps/builtin.py` — manifests for the existing NexusMind applications
+- `backend/app/platform/apps/fastapi.py` — lazy registration of routers owned by enabled applications
 - `backend/app/platform/quality/__init__.py` — public quality-contract exports
 - `backend/app/platform/quality/contracts.py` — evidence, validation, and common result envelope
 - `backend/app/api/routes/apps.py` — read-only application catalog API
@@ -41,6 +42,7 @@
 - `backend/tests/platform/factories.py` — shared platform-test manifest factory
 - `backend/tests/platform/test_app_registry.py` — registry behavior tests
 - `backend/tests/platform/test_apps_api.py` — API contract tests
+- `backend/tests/platform/test_app_routing.py` — disabled-application route isolation tests
 - `backend/tests/platform/test_quality_contracts.py` — quality serialization tests
 - `backend/requirements-dev.txt` — reproducible backend development and test dependencies
 
@@ -89,6 +91,7 @@
 - `AppManifest.id: str` is lowercase kebab-case.
 - `AppManifest.version: str` is semantic version `MAJOR.MINOR.PATCH`.
 - `AppManifest.required_capabilities` and `optional_capabilities` contain `Capability` values.
+- `AppManifest.backend_router_ids` names bootstrap router adapters without importing them.
 - `AppManifest.model_dump(mode="json")` is the API serialization source.
 
 - [ ] **Step 1: Write the failing manifest tests**
@@ -108,6 +111,7 @@ def build_manifest(**overrides):
         "icon": "book-open",
         "frontend_route": "/chat",
         "backend_route_prefixes": ["/api/v1/chat", "/api/v1/documents"],
+        "backend_router_ids": ["chat", "documents", "history"],
         "required_capabilities": [Capability.AUTH, Capability.RETRIEVAL],
         "optional_capabilities": [Capability.WORKFLOWS],
         "required_permissions": ["documents:read"],
@@ -232,6 +236,7 @@ class AppManifest(BaseModel):
     icon: str = Field(pattern=KEBAB_CASE.pattern)
     frontend_route: str = Field(pattern=r"^/[a-z0-9/_\-\[\]]*$")
     backend_route_prefixes: tuple[str, ...] = ()
+    backend_router_ids: tuple[str, ...] = ()
     required_capabilities: tuple[Capability, ...] = ()
     optional_capabilities: tuple[Capability, ...] = ()
     required_permissions: tuple[str, ...] = ()
@@ -250,6 +255,8 @@ class AppManifest(BaseModel):
             raise ValueError("an application cannot depend on itself")
         if len(set(self.backend_route_prefixes)) != len(self.backend_route_prefixes):
             raise ValueError("backend route prefixes must be unique within a manifest")
+        if len(set(self.backend_router_ids)) != len(self.backend_router_ids):
+            raise ValueError("backend router identifiers must be unique within a manifest")
         if len({scenario.id for scenario in self.demo_scenarios}) != len(self.demo_scenarios):
             raise ValueError("demo scenario identifiers must be unique within a manifest")
         return self
@@ -465,6 +472,7 @@ BUILTIN_MANIFESTS = (
         summary="Evidence-backed chat, document comparison, and knowledge retrieval.",
         category="knowledge", icon="book-open", frontend_route="/chat",
         backend_route_prefixes=("/api/v1/chat", "/api/v1/documents"),
+        backend_router_ids=("chat", "documents", "history"),
         required_capabilities=(Capability.AUTH, Capability.RETRIEVAL),
         optional_capabilities=(Capability.WORKFLOWS,),
         required_permissions=("documents:read",), required_env_keys=("LLM_PROVIDER",),
@@ -476,6 +484,7 @@ BUILTIN_MANIFESTS = (
         summary="Safe natural-language analytics across connected relational databases.",
         category="data", icon="database", frontend_route="/aurasql",
         backend_route_prefixes=("/api/v1/aurasql",),
+        backend_router_ids=("aurasql",),
         required_capabilities=(Capability.AUTH, Capability.SQL),
         required_permissions=("database:query",), required_env_keys=("LLM_PROVIDER",),
         demo_scenarios=(_scenario("revenue-analysis", "Revenue analysis", "Generate and explain a read-only revenue query.", "Show monthly revenue by region and explain the SQL."),),
@@ -486,6 +495,7 @@ BUILTIN_MANIFESTS = (
         summary="Reproducible statistical analysis, insight prioritization, and reporting.",
         category="data", icon="chart-no-axes-combined", frontend_route="/analysis",
         backend_route_prefixes=("/api/v1/analysis",),
+        backend_router_ids=("analysis",),
         required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.ARTIFACTS),
         required_permissions=("analysis:run",), required_env_keys=("LLM_PROVIDER",),
         demo_scenarios=(_scenario("sales-diagnostics", "Sales diagnostics", "Profile a sales dataset and identify defensible drivers.", "Analyze the strongest drivers of sales and distinguish evidence from hypotheses."),),
@@ -496,6 +506,7 @@ BUILTIN_MANIFESTS = (
         summary="Narrative-first, data-backed presentation planning and PPTX generation.",
         category="content", icon="presentation", frontend_route="/analysis",
         backend_route_prefixes=("/api/v1/analysis/reports",),
+        backend_router_ids=("analysis",),
         required_capabilities=(Capability.AUTH, Capability.ARTIFACTS, Capability.PRESENTATIONS),
         required_permissions=("presentation:generate",), required_env_keys=("LLM_PROVIDER",),
         demo_scenarios=(_scenario("executive-deck", "Executive deck", "Turn an analysis into an evidence-backed executive presentation.", "Create an executive deck with one decision per slide."),),
@@ -506,6 +517,7 @@ BUILTIN_MANIFESTS = (
         summary="Truth-preserving resume analysis, tailoring, generation, and review.",
         category="career", icon="briefcase-business", frontend_route="/nexus",
         backend_route_prefixes=("/api/v1/nexus", "/api/v1/workflows/auto-tailor"),
+        backend_router_ids=("nexus-resume", "resume-generator", "workflows"),
         required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.CAREER),
         required_permissions=("career:write",), required_env_keys=("LLM_PROVIDER",),
         demo_scenarios=(_scenario("tailor-resume", "Tailor a resume", "Match verified experience to a target role without inventing claims.", "Tailor this verified profile to the selected job description."),),
@@ -516,6 +528,7 @@ BUILTIN_MANIFESTS = (
         summary="Inspect APIs, MCP tools, health, traces, and integration capabilities.",
         category="developer", icon="blocks", frontend_route="/developer",
         backend_route_prefixes=("/api/v1/health",),
+        backend_router_ids=(),
         required_capabilities=(Capability.AUTH, Capability.MCP),
         required_permissions=("developer:read",), required_env_keys=(),
         demo_scenarios=(_scenario("inspect-tools", "Inspect tools", "Review the available MCP tools and platform health.", "List the enabled developer tools and their health."),),
@@ -582,8 +595,10 @@ git commit -m "feat(platform): register built-in NexusMind applications"
 **Files:**
 
 - Create: `backend/app/api/routes/apps.py`
+- Create: `backend/app/platform/apps/fastapi.py`
 - Modify: `backend/app/main.py:12-142`
 - Create: `backend/tests/platform/test_apps_api.py`
+- Create: `backend/tests/platform/test_app_routing.py`
 
 **Interfaces:**
 
@@ -591,6 +606,8 @@ git commit -m "feat(platform): register built-in NexusMind applications"
 - Produces: `GET /api/v1/apps` and `GET /api/v1/apps/{app_id}`
 - Unknown or disabled applications return HTTP 404.
 - Catalog responses are ordered by application identifier.
+- Only router identifiers owned by enabled manifests are installed.
+- Authentication, catalog, health, and notifications remain Core routers and are always installed.
 
 - [ ] **Step 1: Write API tests**
 
@@ -632,6 +649,39 @@ def test_get_unknown_app_returns_404():
     assert response.json()["detail"] == "Application not found"
 ```
 
+```python
+# backend/tests/platform/test_app_routing.py
+from fastapi import FastAPI
+
+from app.platform.apps.builtin import build_builtin_registry
+from app.platform.apps.fastapi import install_enabled_application_routers
+
+
+def test_disabled_application_routes_are_not_registered():
+    app = FastAPI()
+    registry = build_builtin_registry(enabled_ids={"knowledge-studio"})
+
+    install_enabled_application_routers(app, registry)
+
+    paths = {route.path for route in app.routes}
+    assert any(path.startswith("/api/v1/chat") for path in paths)
+    assert any(path.startswith("/api/v1/documents") for path in paths)
+    assert not any(path.startswith("/api/v1/aurasql") for path in paths)
+    assert not any(path.startswith("/api/v1/analysis") for path in paths)
+    assert not any(path.startswith("/api/v1/nexus") for path in paths)
+
+
+def test_shared_router_is_installed_once_for_multiple_owners():
+    app = FastAPI()
+    registry = build_builtin_registry(enabled_ids={"data-analyst", "presentation-studio"})
+
+    install_enabled_application_routers(app, registry)
+
+    analysis_paths = [route.path for route in app.routes if route.path.startswith("/api/v1/analysis")]
+    assert analysis_paths
+    assert len(analysis_paths) == len(set(analysis_paths))
+```
+
 - [ ] **Step 2: Run the API tests and confirm the route is missing**
 
 Run: `cd backend && pytest tests/platform/test_apps_api.py -v`
@@ -662,37 +712,90 @@ def get_application(app_id: str) -> AppManifest:
     return manifest
 ```
 
-- [ ] **Step 4: Install the router in the main application**
+- [ ] **Step 4: Implement lazy router registration for enabled applications**
+
+```python
+# backend/app/platform/apps/fastapi.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from importlib import import_module
+
+from fastapi import FastAPI
+
+from app.platform.apps.registry import AppRegistry, RegistryError
+
+
+@dataclass(frozen=True)
+class RouterSpec:
+    module: str
+    prefix: str
+    tags: tuple[str, ...] = ()
+
+
+ROUTER_SPECS = {
+    "chat": RouterSpec("app.api.routes.chat", "/api/v1"),
+    "documents": RouterSpec("app.api.routes.documents", "/api/v1"),
+    "history": RouterSpec("app.api.routes.history", "/api/v1/history", ("History",)),
+    "aurasql": RouterSpec("app.api.routes.aurasql", "/api/v1", ("AuraSQL",)),
+    "analysis": RouterSpec("app.api.routes.analysis", "/api/v1", ("Analysis",)),
+    "nexus-resume": RouterSpec("app.api.routes.nexus_resume", "/api/v1", ("Nexus Resume",)),
+    "resume-generator": RouterSpec("app.api.routes.resumegen", "/api/v1", ("Resume Generator",)),
+    "workflows": RouterSpec("app.api.routes.workflows", "/api/v1", ("Workflows",)),
+}
+
+
+def install_enabled_application_routers(app: FastAPI, registry: AppRegistry) -> None:
+    router_ids = {
+        router_id
+        for manifest in registry.list_enabled()
+        for router_id in manifest.backend_router_ids
+    }
+    unknown = router_ids - ROUTER_SPECS.keys()
+    if unknown:
+        raise RegistryError(f"application manifests reference unknown routers: {sorted(unknown)}")
+
+    for router_id in sorted(router_ids):
+        spec = ROUTER_SPECS[router_id]
+        module = import_module(spec.module)
+        app.include_router(module.router, prefix=spec.prefix, tags=list(spec.tags))
+```
+
+- [ ] **Step 5: Install Core and enabled application routers in the main application**
 
 ```python
 # backend/app/main.py import block
-from app.api.routes import analysis, apps, aurasql, auth, chat, documents, health, history
-from app.api.routes import nexus_resume, notifications, resumegen, workflows
+from app.api.routes import apps, auth, health, notifications
+from app.platform.apps import get_app_registry
+from app.platform.apps.fastapi import install_enabled_application_routers
 ```
 
 ```python
 # backend/app/main.py router block
 app.include_router(apps.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["Notifications"])
+install_enabled_application_routers(app, get_app_registry())
 ```
 
-- [ ] **Step 5: Run API and registry tests**
+- [ ] **Step 6: Run API, routing, and registry tests**
 
-Run: `cd backend && pytest tests/platform/test_apps_api.py tests/platform/test_app_registry.py -v`
+Run: `cd backend && pytest tests/platform/test_apps_api.py tests/platform/test_app_routing.py tests/platform/test_app_registry.py -v`
 
 Expected: all tests PASS.
 
-- [ ] **Step 6: Verify OpenAPI includes the catalog operations**
+- [ ] **Step 7: Verify OpenAPI includes the catalog operations**
 
 Run: `cd backend && python -c "from app.main import app; paths=app.openapi()['paths']; assert '/api/v1/apps' in paths; assert '/api/v1/apps/{app_id}' in paths; print('catalog paths verified')"`
 
 Expected: `catalog paths verified`.
 
-- [ ] **Step 7: Commit the API**
+- [ ] **Step 8: Commit the API and route isolation**
 
 ```bash
-git add backend/app/api/routes/apps.py backend/app/main.py backend/tests/platform/test_apps_api.py
-git commit -m "feat(api): expose application catalog"
+git add backend/app/api/routes/apps.py backend/app/platform/apps/fastapi.py backend/app/main.py backend/tests/platform/test_apps_api.py backend/tests/platform/test_app_routing.py
+git commit -m "feat(api): expose catalog and isolate application routes"
 ```
 
 ### Task 4: Common Evidence and Quality Result Contract
@@ -1129,6 +1232,7 @@ export interface AppManifest {
   icon: string;
   frontend_route: string;
   backend_route_prefixes: string[];
+  backend_router_ids: string[];
   required_capabilities: Capability[];
   optional_capabilities: Capability[];
   required_permissions: string[];
@@ -1281,6 +1385,7 @@ test("renders app links and capability labels", () => {
       id: "knowledge-studio", version: "1.0.0", name: "Knowledge Studio",
       summary: "Evidence-backed document intelligence.", category: "knowledge", icon: "book-open",
       frontend_route: "/chat", backend_route_prefixes: [], required_capabilities: ["auth", "retrieval"],
+      backend_router_ids: [],
       optional_capabilities: [], required_permissions: [], required_env_keys: [], dependencies: [],
       demo_scenarios: [], health_check_id: "knowledge", packaging_paths: [],
     }],
@@ -1298,6 +1403,7 @@ test("catalog populated state has no automatic accessibility violations", async 
       id: "knowledge-studio", version: "1.0.0", name: "Knowledge Studio",
       summary: "Evidence-backed document intelligence.", category: "knowledge", icon: "book-open",
       frontend_route: "/chat", backend_route_prefixes: [], required_capabilities: ["auth", "retrieval"],
+      backend_router_ids: [],
       optional_capabilities: [], required_permissions: [], required_env_keys: [], dependencies: [],
       demo_scenarios: [], health_check_id: "knowledge", packaging_paths: [],
     }],
@@ -1665,6 +1771,7 @@ test("visitor can browse the application showcase", async ({ page }) => {
         id: "knowledge-studio", version: "1.0.0", name: "Knowledge Studio",
         summary: "Evidence-backed document intelligence.", category: "knowledge", icon: "book-open",
         frontend_route: "/chat", backend_route_prefixes: [], required_capabilities: ["auth", "retrieval"],
+        backend_router_ids: [],
         optional_capabilities: [], required_permissions: [], required_env_keys: [], dependencies: [],
         demo_scenarios: [], health_check_id: "knowledge", packaging_paths: [],
       }]),
