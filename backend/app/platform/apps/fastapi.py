@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import import_module
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from app.platform.apps.registry import AppRegistry, RegistryError
 
@@ -37,7 +37,17 @@ def install_enabled_application_routers(app: FastAPI, registry: AppRegistry) -> 
     if unknown:
         raise RegistryError(f"application manifests reference unknown routers: {sorted(unknown)}")
 
+    resolved_routers: list[tuple[APIRouter, RouterSpec]] = []
     for router_id in sorted(router_ids):
         spec = ROUTER_SPECS[router_id]
         module = import_module(spec.module)
-        app.include_router(module.router, prefix=spec.prefix, tags=list(spec.tags))
+        router = getattr(module, "router", None)
+        if not isinstance(router, APIRouter):
+            raise RegistryError(
+                f"application router {router_id!r} from {spec.module!r} "
+                "must expose an APIRouter as 'router'"
+            )
+        resolved_routers.append((router, spec))
+
+    for router, spec in resolved_routers:
+        app.include_router(router, prefix=spec.prefix, tags=list(spec.tags))
