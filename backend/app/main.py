@@ -12,15 +12,11 @@ from llama_index.core import Settings
 from app.config import settings
 from app.utils.logger import get_logger
 from app.api.middleware import setup_middleware
-from app.api.routes import chat, documents, health, auth, history
-from app.api.routes import nexus_resume
-from app.api.routes import aurasql
-from app.api.routes import resumegen
-from app.api.routes import analysis
-from app.api.routes import workflows
-from app.api.routes import notifications
+from app.api.routes import apps, auth, health, notifications
 from app import __version__
 from app.db.database import engine, Base
+from app.platform.apps import get_app_registry
+from app.platform.apps.fastapi import install_enabled_application_routers
 from app.services.messaging import consume_notifications
 from app.observability import (
     flush_langfuse,
@@ -143,17 +139,11 @@ app = FastAPI(
 setup_middleware(app)
 
 # Include routers
+app.include_router(apps.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(documents.router, prefix="/api/v1")
-app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
-app.include_router(aurasql.router, prefix="/api/v1", tags=["AuraSQL"])
-app.include_router(nexus_resume.router, prefix="/api/v1", tags=["Nexus Resume"])
-app.include_router(resumegen.router, prefix="/api/v1", tags=["Resume Generator"])
-app.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])
-app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["Notifications"])
+install_enabled_application_routers(app, get_app_registry())
 
 
 @app.get("/")
