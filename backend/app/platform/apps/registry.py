@@ -39,6 +39,23 @@ class AppRegistry:
                         f"{manifest.id} requires {dependency.app_id}>={dependency.minimum_version}; "
                         f"installed {installed.version}"
                     )
+        if self._enabled_ids is not None:
+            disabled_dependencies = sorted(
+                (manifest.id, dependency.app_id)
+                for manifest in self._manifests.values()
+                if manifest.id in self._enabled_ids
+                for dependency in manifest.dependencies
+                if dependency.app_id not in self._enabled_ids
+            )
+            if disabled_dependencies:
+                requirements = ", ".join(
+                    f"{app_id} requires {dependency_id}"
+                    for app_id, dependency_id in disabled_dependencies
+                )
+                raise RegistryError(
+                    f"enabled application dependencies must also be enabled: {requirements}; "
+                    "add the required dependency ids to enabled_ids"
+                )
         self._finalized = True
 
     def _require_finalized(self) -> None:

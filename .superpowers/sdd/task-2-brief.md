@@ -1,0 +1,298 @@
+### Task 2: Validated Registry and Built-In Application Manifests
+
+**Files:**
+
+- Create: `backend/app/platform/apps/registry.py`
+- Create: `backend/app/platform/apps/builtin.py`
+- Modify: `backend/app/config.py:1-25`
+- Modify: `backend/app/platform/apps/__init__.py`
+- Create: `backend/tests/platform/test_app_registry.py`
+
+**Interfaces:**
+
+- Consumes: `AppManifest` from Task 1
+- Produces: `AppRegistry.register()`, `AppRegistry.finalize()`, `AppRegistry.list_enabled()`, `AppRegistry.get()`, and `get_app_registry()`
+- `finalize()` is mandatory before reads and validates missing dependencies and minimum versions.
+- The registry is the backend catalog source of truth.
+
+- [ ] **Step 1: Write registry tests**
+
+```python
+# backend/tests/platform/test_app_registry.py
+import pytest
+
+from app.platform.apps.builtin import build_builtin_registry
+from app.platform.apps.contracts import AppDependency
+from app.platform.apps.registry import AppRegistry, RegistryError
+from tests.platform.factories import build_manifest
+
+
+def test_registry_rejects_duplicate_application_id():
+    registry = AppRegistry()
+    registry.register(build_manifest())
+
+    with pytest.raises(RegistryError, match="duplicate application id"):
+        registry.register(build_manifest())
+
+
+def test_registry_rejects_missing_dependency():
+    registry = AppRegistry()
+    registry.register(
+        build_manifest(
+            id="research-intelligence",
+            dependencies=[AppDependency(app_id="knowledge-studio", minimum_version="1.0.0")],
+        )
+    )
+
+    with pytest.raises(RegistryError, match="missing dependency knowledge-studio"):
+        registry.finalize()
+
+
+def test_registry_rejects_incompatible_dependency_version():
+    registry = AppRegistry()
+    registry.register(build_manifest(version="1.0.0"))
+    registry.register(
+        build_manifest(
+            id="research-intelligence",
+            frontend_route="/research",
+            dependencies=[AppDependency(app_id="knowledge-studio", minimum_version="2.0.0")],
+        )
+    )
+
+    with pytest.raises(RegistryError, match="requires knowledge-studio>=2.0.0"):
+        registry.finalize()
+
+
+def test_disabled_apps_are_not_returned():
+    registry = build_builtin_registry(enabled_ids={"knowledge-studio", "aurasql"})
+
+    assert [manifest.id for manifest in registry.list_enabled()] == ["aurasql", "knowledge-studio"]
+    assert registry.get("career-studio") is None
+
+
+def test_registry_rejects_unknown_enabled_application():
+    with pytest.raises(RegistryError, match="unknown enabled application ids"):
+        build_builtin_registry(enabled_ids={"not-installed"})
+
+
+def test_builtin_registry_contains_six_flagships():
+    registry = build_builtin_registry()
+
+    assert {manifest.id for manifest in registry.list_enabled()} == {
+        "aurasql",
+        "career-studio",
+        "data-analyst",
+        "developer-studio",
+        "knowledge-studio",
+        "presentation-studio",
+    }
+```
+
+- [ ] **Step 2: Run the registry tests and confirm missing implementations**
+
+Run: `cd backend && pytest tests/platform/test_app_registry.py -v`
+
+Expected: FAIL during collection because `app.platform.apps.registry` and `builtin` do not exist.
+
+- [ ] **Step 3: Implement the registry**
+
+```python
+# backend/app/platform/apps/registry.py
+from __future__ import annotations
+
+from app.platform.apps.contracts import AppManifest
+
+
+class RegistryError(ValueError):
+    pass
+
+
+def _version_tuple(version: str) -> tuple[int, int, int]:
+    return tuple(int(part) for part in version.split("."))
+
+
+class AppRegistry:
+    def __init__(self, enabled_ids: set[str] | None = None) -> None:
+        self._manifests: dict[str, AppManifest] = {}
+        self._enabled_ids = enabled_ids
+        self._finalized = False
+
+    def register(self, manifest: AppManifest) -> None:
+        if self._finalized:
+            raise RegistryError("cannot register applications after finalization")
+        if manifest.id in self._manifests:
+            raise RegistryError(f"duplicate application id: {manifest.id}")
+        self._manifests[manifest.id] = manifest
+
+    def finalize(self) -> None:
+        if self._enabled_ids is not None:
+            unknown = self._enabled_ids - self._manifests.keys()
+            if unknown:
+                raise RegistryError(f"unknown enabled application ids: {sorted(unknown)}")
+        for manifest in self._manifests.values():
+            for dependency in manifest.dependencies:
+                installed = self._manifests.get(dependency.app_id)
+                if installed is None:
+                    raise RegistryError(f"{manifest.id} has missing dependency {dependency.app_id}")
+                if _version_tuple(installed.version) < _version_tuple(dependency.minimum_version):
+                    raise RegistryError(
+                        f"{manifest.id} requires {dependency.app_id}>={dependency.minimum_version}; "
+                        f"installed {installed.version}"
+                    )
+        self._finalized = True
+
+    def _require_finalized(self) -> None:
+        if not self._finalized:
+            raise RegistryError("registry must be finalized before reading")
+
+    def list_enabled(self) -> list[AppManifest]:
+        self._require_finalized()
+        manifests = self._manifests.values()
+        if self._enabled_ids is not None:
+            manifests = [manifest for manifest in manifests if manifest.id in self._enabled_ids]
+        return sorted(manifests, key=lambda manifest: manifest.id)
+
+    def get(self, app_id: str) -> AppManifest | None:
+        self._require_finalized()
+        if self._enabled_ids is not None and app_id not in self._enabled_ids:
+            return None
+        return self._manifests.get(app_id)
+```
+
+- [ ] **Step 4: Add manifests for the existing applications**
+
+```python
+# backend/app/platform/apps/builtin.py
+from app.config import settings
+from app.platform.apps.contracts import AppManifest, Capability, DemoScenario
+from app.platform.apps.registry import AppRegistry
+
+
+def _scenario(identifier: str, title: str, description: str, prompt: str) -> DemoScenario:
+    return DemoScenario(id=identifier, title=title, description=description, starter_prompt=prompt)
+
+
+BUILTIN_MANIFESTS = (
+    AppManifest(
+        id="knowledge-studio", version="1.0.0", name="Knowledge Studio",
+        summary="Evidence-backed chat, document comparison, and knowledge retrieval.",
+        category="knowledge", icon="book-open", frontend_route="/chat",
+        backend_route_prefixes=("/api/v1/chat", "/api/v1/documents"),
+        backend_router_ids=("chat", "documents", "history"),
+        required_capabilities=(Capability.AUTH, Capability.RETRIEVAL),
+        optional_capabilities=(Capability.WORKFLOWS,),
+        required_permissions=("documents:read",), required_env_keys=("LLM_PROVIDER",),
+        demo_scenarios=(_scenario("compare-documents", "Compare documents", "Compare two documents and cite the supporting passages.", "Compare the selected documents and cite every material difference."),),
+        health_check_id="knowledge", packaging_paths=("backend/app/core", "backend/app/api/routes/chat.py", "backend/app/api/routes/documents.py", "frontend/app/chat"),
+    ),
+    AppManifest(
+        id="aurasql", version="1.0.0", name="AuraSQL",
+        summary="Safe natural-language analytics across connected relational databases.",
+        category="data", icon="database", frontend_route="/aurasql",
+        backend_route_prefixes=("/api/v1/aurasql",),
+        backend_router_ids=("aurasql",),
+        required_capabilities=(Capability.AUTH, Capability.SQL),
+        required_permissions=("database:query",), required_env_keys=("LLM_PROVIDER",),
+        demo_scenarios=(_scenario("revenue-analysis", "Revenue analysis", "Generate and explain a read-only revenue query.", "Show monthly revenue by region and explain the SQL."),),
+        health_check_id="aurasql", packaging_paths=("backend/app/api/routes/aurasql.py", "backend/app/services/aurasql_db.py", "frontend/app/aurasql"),
+    ),
+    AppManifest(
+        id="data-analyst", version="1.0.0", name="Data Analyst Studio",
+        summary="Reproducible statistical analysis, insight prioritization, and reporting.",
+        category="data", icon="chart-no-axes-combined", frontend_route="/analysis",
+        backend_route_prefixes=("/api/v1/analysis",),
+        backend_router_ids=("analysis",),
+        required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.ARTIFACTS),
+        required_permissions=("analysis:run",), required_env_keys=("LLM_PROVIDER",),
+        demo_scenarios=(_scenario("sales-diagnostics", "Sales diagnostics", "Profile a sales dataset and identify defensible drivers.", "Analyze the strongest drivers of sales and distinguish evidence from hypotheses."),),
+        health_check_id="analysis", packaging_paths=("backend/app/analysis", "backend/app/api/routes/analysis.py", "frontend/app/analysis"),
+    ),
+    AppManifest(
+        id="presentation-studio", version="1.0.0", name="Presentation Studio",
+        summary="Narrative-first, data-backed presentation planning and PPTX generation.",
+        category="content", icon="presentation", frontend_route="/analysis",
+        backend_route_prefixes=("/api/v1/analysis/reports",),
+        backend_router_ids=("analysis",),
+        required_capabilities=(Capability.AUTH, Capability.ARTIFACTS, Capability.PRESENTATIONS),
+        required_permissions=("presentation:generate",), required_env_keys=("LLM_PROVIDER",),
+        demo_scenarios=(_scenario("executive-deck", "Executive deck", "Turn an analysis into an evidence-backed executive presentation.", "Create an executive deck with one decision per slide."),),
+        health_check_id="presentations", packaging_paths=("backend/app/services/analysis/slide_generator.py", "frontend/app/analysis/[jobId]/report"),
+    ),
+    AppManifest(
+        id="career-studio", version="1.0.0", name="Career Studio",
+        summary="Truth-preserving resume analysis, tailoring, generation, and review.",
+        category="career", icon="briefcase-business", frontend_route="/nexus",
+        backend_route_prefixes=("/api/v1/nexus", "/api/v1/workflows/auto-tailor"),
+        backend_router_ids=("nexus-resume", "resume-generator", "workflows"),
+        required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.CAREER),
+        required_permissions=("career:write",), required_env_keys=("LLM_PROVIDER",),
+        demo_scenarios=(_scenario("tailor-resume", "Tailor a resume", "Match verified experience to a target role without inventing claims.", "Tailor this verified profile to the selected job description."),),
+        health_check_id="career", packaging_paths=("backend/app/services/nexus_ai", "backend/app/analysis/workflows/auto_tailor_workflow.py", "frontend/app/nexus", "frontend/app/workflows/auto-tailor"),
+    ),
+    AppManifest(
+        id="developer-studio", version="1.0.0", name="Developer and MCP Studio",
+        summary="Inspect APIs, MCP tools, health, traces, and integration capabilities.",
+        category="developer", icon="blocks", frontend_route="/developer",
+        backend_route_prefixes=("/api/v1/health",),
+        backend_router_ids=(),
+        required_capabilities=(Capability.AUTH, Capability.MCP),
+        required_permissions=("developer:read",), required_env_keys=(),
+        demo_scenarios=(_scenario("inspect-tools", "Inspect tools", "Review the available MCP tools and platform health.", "List the enabled developer tools and their health."),),
+        health_check_id="developer", packaging_paths=("mcp-server", "frontend/app/developer"),
+    ),
+)
+
+
+def build_builtin_registry(enabled_ids: set[str] | None = None) -> AppRegistry:
+    registry = AppRegistry(enabled_ids=enabled_ids)
+    for manifest in BUILTIN_MANIFESTS:
+        registry.register(manifest)
+    registry.finalize()
+    return registry
+
+
+_registry = build_builtin_registry(set(settings.enabled_app_ids) or None)
+
+
+def get_app_registry() -> AppRegistry:
+    return _registry
+```
+
+- [ ] **Step 5: Add deployment-level application enablement configuration**
+
+Add the following field under `Settings` API configuration:
+
+```python
+# backend/app/config.py
+enabled_app_ids: List[str] = Field(default_factory=list, alias="NEXUS_ENABLED_APPS")
+```
+
+An empty list enables every built-in application for the showcase. A deployment supplies a JSON array such as `NEXUS_ENABLED_APPS='["knowledge-studio","developer-studio"]'` to enable a subset. Unknown identifiers fail registry finalization.
+
+- [ ] **Step 6: Export the registry interfaces**
+
+```python
+# backend/app/platform/apps/__init__.py
+from app.platform.apps.builtin import get_app_registry
+from app.platform.apps.contracts import AppDependency, AppManifest, Capability, DemoScenario
+from app.platform.apps.registry import AppRegistry, RegistryError
+
+__all__ = [
+    "AppDependency", "AppManifest", "AppRegistry", "Capability", "DemoScenario",
+    "RegistryError", "get_app_registry",
+]
+```
+
+- [ ] **Step 7: Run the registry and manifest tests**
+
+Run: `cd backend && pytest tests/platform/test_app_manifest.py tests/platform/test_app_registry.py -v`
+
+Expected: all tests PASS.
+
+- [ ] **Step 8: Commit the registry**
+
+```bash
+git add backend/app/platform/apps backend/app/config.py backend/tests/platform/factories.py backend/tests/platform/test_app_registry.py
+git commit -m "feat(platform): register built-in NexusMind applications"
+```
+

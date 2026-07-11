@@ -1,0 +1,156 @@
+# Review package: 510c6b0..6b4f6fc
+
+## Commits
+6b4f6fc feat(api): expose catalog and isolate application routes
+
+## Files changed
+ backend/app/api/routes/apps.py       | 18 +++++++++++++++
+ backend/app/main.py                  | 20 +++++------------
+ backend/app/platform/apps/fastapi.py | 43 ++++++++++++++++++++++++++++++++++++
+ 3 files changed, 66 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/backend/app/api/routes/apps.py b/backend/app/api/routes/apps.py
+new file mode 100644
+index 0000000..e33351e
+--- /dev/null
++++ b/backend/app/api/routes/apps.py
+@@ -0,0 +1,18 @@
++from fastapi import APIRouter, HTTPException, status
++
++from app.platform.apps import AppManifest, get_app_registry
++
++router = APIRouter(tags=["Applications"])
++
++
++@router.get("/apps", response_model=list[AppManifest])
++def list_applications() -> list[AppManifest]:
++    return get_app_registry().list_enabled()
++
++
++@router.get("/apps/{app_id}", response_model=AppManifest)
++def get_application(app_id: str) -> AppManifest:
++    manifest = get_app_registry().get(app_id)
++    if manifest is None:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
++    return manifest
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 21ac00f..f2813cd 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -5,29 +5,25 @@ Uses Groq for LLM inference and PostgreSQL for vector storage.
+ """
+ 
+ import logging
+ import asyncio
+ from fastapi import FastAPI
+ from contextlib import asynccontextmanager
+ from llama_index.core import Settings
+ from app.config import settings
+ from app.utils.logger import get_logger
+ from app.api.middleware import setup_middleware
+-from app.api.routes import chat, documents, health, auth, history
+-from app.api.routes import nexus_resume
+-from app.api.routes import aurasql
+-from app.api.routes import resumegen
+-from app.api.routes import analysis
+-from app.api.routes import workflows
+-from app.api.routes import notifications
++from app.api.routes import apps, auth, health, notifications
+ from app import __version__
+ from app.db.database import engine, Base
++from app.platform.apps import get_app_registry
++from app.platform.apps.fastapi import install_enabled_application_routers
+ from app.services.messaging import consume_notifications
+ from app.observability import (
+     flush_langfuse,
+     log_langfuse_startup_status,
+ )
+ 
+ logger = get_logger(__name__)
+ 
+ # Create tables at import time (non-blocking — will fail fast if DB unreachable)
+ try:
+@@ -136,31 +132,25 @@ app = FastAPI(
+     version=__version__,
+     lifespan=lifespan,
+     docs_url="/docs",
+     redoc_url="/redoc",
+ )
+ 
+ # Setup middleware
+ setup_middleware(app)
+ 
+ # Include routers
++app.include_router(apps.router, prefix="/api/v1")
+ app.include_router(health.router, prefix="/api/v1")
+ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+-app.include_router(chat.router, prefix="/api/v1")
+-app.include_router(documents.router, prefix="/api/v1")
+-app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
+-app.include_router(aurasql.router, prefix="/api/v1", tags=["AuraSQL"])
+-app.include_router(nexus_resume.router, prefix="/api/v1", tags=["Nexus Resume"])
+-app.include_router(resumegen.router, prefix="/api/v1", tags=["Resume Generator"])
+-app.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])
+-app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
+ app.include_router(notifications.router, prefix="/api/v1", tags=["Notifications"])
++install_enabled_application_routers(app, get_app_registry())
+ 
+ 
+ @app.get("/")
+ async def root():
+     """Root endpoint with API information."""
+     return {
+         "name": "Professional RAG System",
+         "version": __version__,
+         "status": "online",
+         "docs": "/docs",
+diff --git a/backend/app/platform/apps/fastapi.py b/backend/app/platform/apps/fastapi.py
+new file mode 100644
+index 0000000..7ce930b
+--- /dev/null
++++ b/backend/app/platform/apps/fastapi.py
+@@ -0,0 +1,43 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++from importlib import import_module
++
++from fastapi import FastAPI
++
++from app.platform.apps.registry import AppRegistry, RegistryError
++
++
++@dataclass(frozen=True)
++class RouterSpec:
++    module: str
++    prefix: str
++    tags: tuple[str, ...] = ()
++
++
++ROUTER_SPECS = {
++    "chat": RouterSpec("app.api.routes.chat", "/api/v1"),
++    "documents": RouterSpec("app.api.routes.documents", "/api/v1"),
++    "history": RouterSpec("app.api.routes.history", "/api/v1/history", ("History",)),
++    "aurasql": RouterSpec("app.api.routes.aurasql", "/api/v1", ("AuraSQL",)),
++    "analysis": RouterSpec("app.api.routes.analysis", "/api/v1", ("Analysis",)),
++    "nexus-resume": RouterSpec("app.api.routes.nexus_resume", "/api/v1", ("Nexus Resume",)),
++    "resume-generator": RouterSpec("app.api.routes.resumegen", "/api/v1", ("Resume Generator",)),
++    "workflows": RouterSpec("app.api.routes.workflows", "/api/v1", ("Workflows",)),
++}
++
++
++def install_enabled_application_routers(app: FastAPI, registry: AppRegistry) -> None:
++    router_ids = {
++        router_id
++        for manifest in registry.list_enabled()
++        for router_id in manifest.backend_router_ids
++    }
++    unknown = router_ids - ROUTER_SPECS.keys()
++    if unknown:
++        raise RegistryError(f"application manifests reference unknown routers: {sorted(unknown)}")
++
++    for router_id in sorted(router_ids):
++        spec = ROUTER_SPECS[router_id]
++        module = import_module(spec.module)
++        app.include_router(module.router, prefix=spec.prefix, tags=list(spec.tags))

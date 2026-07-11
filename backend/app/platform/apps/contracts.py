@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 KEBAB_CASE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 RELEASE_SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+FRONTEND_ROUTE = re.compile(r"^/(?:[a-z0-9_\-\[\]]+(?:/[a-z0-9_\-\[\]]+)*)?$")
+BACKEND_ROUTE_PREFIX = re.compile(r"^/[a-z0-9_\-]+(?:/[a-z0-9_\-]+)*$")
 
 
 class Capability(StrEnum):
@@ -46,7 +48,7 @@ class AppManifest(BaseModel):
     summary: str = Field(min_length=10, max_length=240)
     category: str = Field(pattern=KEBAB_CASE.pattern)
     icon: str = Field(pattern=KEBAB_CASE.pattern)
-    frontend_route: str = Field(pattern=r"^/[a-z0-9/_\-\[\]]*$")
+    frontend_route: str = Field(pattern=FRONTEND_ROUTE.pattern)
     backend_route_prefixes: tuple[str, ...] = ()
     backend_router_ids: tuple[str, ...] = ()
     required_capabilities: tuple[Capability, ...] = ()
@@ -57,6 +59,17 @@ class AppManifest(BaseModel):
     demo_scenarios: tuple[DemoScenario, ...] = ()
     health_check_id: str = Field(pattern=KEBAB_CASE.pattern)
     packaging_paths: tuple[str, ...] = ()
+
+    @field_validator("backend_route_prefixes")
+    @classmethod
+    def validate_backend_route_prefixes(cls, prefixes: tuple[str, ...]) -> tuple[str, ...]:
+        invalid = [prefix for prefix in prefixes if BACKEND_ROUTE_PREFIX.fullmatch(prefix) is None]
+        if invalid:
+            raise ValueError(
+                "backend route prefixes must be normalized absolute paths with one leading slash "
+                f"and unencoded path segments: {invalid}"
+            )
+        return prefixes
 
     @model_validator(mode="after")
     def validate_relationships(self) -> "AppManifest":

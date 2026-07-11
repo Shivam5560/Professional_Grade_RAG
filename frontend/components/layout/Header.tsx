@@ -8,6 +8,8 @@ import { useState, useEffect } from "react";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { type ThemePalette } from "@/lib/theme";
 import { JobCenter } from "@/components/layout/JobCenter";
+import { AppNavigation } from "@/components/platform/AppNavigation";
+import { useAppCatalog } from "@/lib/apps/useAppCatalog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,18 +43,9 @@ export function Header({
   const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : isWorkflows ? 'Workflows' : 'NexusMind';
   const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : isWorkflows ? 'Agents & Workflows' : 'Studio';
   const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : isWorkflows ? 'WF' : 'NX';
-  const mainNavLinks = [
-    { label: 'Dashboard', href: '/', isActive: pathname === '/' },
-    { label: 'RAG', href: '/chat', isActive: pathname?.startsWith('/chat') },
-    { label: 'AuraSQL', href: '/aurasql', isActive: pathname?.startsWith('/aurasql') },
-    { label: 'Resume', href: '/nexus', isActive: pathname?.startsWith('/nexus') && !pathname?.startsWith('/nexus/generate') },
-    { label: 'ResumeGen', href: '/nexus/generate', isActive: pathname?.startsWith('/nexus/generate') },
-    { label: 'Workflows', href: '/workflows', isActive: pathname?.startsWith('/workflows') || pathname?.startsWith('/analysis') },
-    { label: 'KB', href: '/knowledge-base', isActive: pathname?.startsWith('/knowledge-base') },
-    { label: 'Dev', href: '/developer', isActive: pathname?.startsWith('/developer') },
-  ];
   const [llmHealthy, setLlmHealthy] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const appCatalog = useAppCatalog();
   const { mode, palette, setPalette, toggleMode } = useAppTheme();
   const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: 'nexus', label: 'Nexus Slate', icon: Compass },
@@ -81,6 +74,10 @@ export function Header({
     };
   }, []);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   const handleLogout = () => {
     logout();
     router.push("/auth");
@@ -88,7 +85,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur-md md:px-6">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {showSidebarToggle && (
           <Button
             variant="ghost"
@@ -113,58 +110,44 @@ export function Header({
             {brandSubtitle}
           </span>
         </div>
-        <div className="hidden lg:flex items-center gap-2 ml-6 whitespace-nowrap">
-          {mainNavLinks.map((link) => (
-            <Button
-              key={link.href}
-              variant="ghost"
-              size="sm"
-              className={`text-sm ${
-                link.isActive
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => router.push(link.href)}
-            >
-              {link.label}
-            </Button>
-          ))}
+        <div className="ml-6 hidden min-w-0 overflow-x-auto whitespace-nowrap lg:block">
+          <AppNavigation catalog={appCatalog} pathname={pathname ?? "/"} />
         </div>
       </div>
-      
-      <div className="flex items-center gap-3">
+
+      <div className="flex shrink-0 items-center gap-3">
         <div className="relative lg:hidden">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setMobileNavOpen((prev) => !prev)}
-            aria-label="Open navigation"
+            aria-controls="mobile-application-navigation"
+            aria-expanded={mobileNavOpen}
+            aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
           >
             {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           {mobileNavOpen ? (
-            <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-border bg-background p-2 shadow-xl">
-              {mainNavLinks.map((link) => (
-                <Button
-                  key={link.href}
-                  variant="ghost"
-                  size="sm"
-                  className={`w-full justify-start ${
-                    link.isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => {
-                    router.push(link.href);
-                    setMobileNavOpen(false);
-                  }}
-                >
-                  {link.label}
-                </Button>
-              ))}
+            <div
+              className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100vh-5rem)] w-64 overflow-y-auto rounded-lg border border-border bg-background p-2 shadow-xl"
+              id="mobile-application-navigation"
+            >
+              <AppNavigation
+                catalog={appCatalog}
+                mobile
+                onNavigate={() => setMobileNavOpen(false)}
+                pathname={pathname ?? "/"}
+              />
             </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5 mr-2">
+        <div
+          className="mr-2 flex items-center gap-1.5"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <div
             className={`h-2 w-2 rounded-full transition-all ${
               llmHealthy
@@ -172,15 +155,20 @@ export function Header({
                 : 'bg-red-400 shadow-sm shadow-red-400/50'
             }`}
             title={llmHealthy ? 'LLM healthy' : 'LLM unhealthy'}
+            aria-hidden="true"
           />
+          <span className="sr-only">
+            {llmHealthy ? 'LLM status: healthy' : 'LLM status: unhealthy'}
+          </span>
         </div>
 
         <JobCenter />
-        
-        <Button 
-          variant="ghost" 
-          size="icon" 
+
+        <Button
+          variant="ghost"
+          size="icon"
           className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+          aria-label="Notifications"
         >
           <Bell className="h-5 w-5" />
         </Button>
@@ -215,14 +203,15 @@ export function Header({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        
+
         {user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="rounded-full bg-foreground text-background hover:bg-foreground/90 shadow-lg"
+                aria-label={`Open account menu for ${user.email}`}
               >
                 <User className="h-5 w-5" />
               </Button>
@@ -234,8 +223,8 @@ export function Header({
                 {user.email}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border/60" />
-              <DropdownMenuItem 
-                onClick={handleLogout} 
+              <DropdownMenuItem
+                onClick={handleLogout}
                 className="text-red-500 focus:text-red-500 focus:bg-red-500/10"
               >
                 <LogOut className="mr-2 h-4 w-4" />
