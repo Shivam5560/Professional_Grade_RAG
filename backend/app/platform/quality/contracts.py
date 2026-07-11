@@ -103,6 +103,14 @@ class QualityMetadata(BaseModel):
         normalized = value.strip()
         return normalized or None
 
+    @field_validator("evaluation_run_id")
+    @classmethod
+    def normalize_evaluation_run_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     @field_validator("trace_id")
     @classmethod
     def require_non_blank_trace_id(cls, value: str) -> str:
@@ -133,6 +141,8 @@ class QualityMetadata(BaseModel):
 
 
 class AIResult(BaseModel, Generic[OutputT]):
+    """Frozen envelope; an arbitrary OutputT may still contain mutable state."""
+
     model_config = ConfigDict(frozen=True)
 
     output: OutputT | None
