@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, alias="API_PORT")
     api_reload: bool = Field(default=False, alias="API_RELOAD")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    enabled_app_ids: List[str] = Field(default_factory=list, alias="NEXUS_ENABLED_APPS")
 
     # Langfuse Observability Configuration
     langfuse_enabled: bool = Field(default=False, alias="LANGFUSE_ENABLED")
