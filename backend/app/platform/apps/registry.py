@@ -14,7 +14,7 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
 class AppRegistry:
     def __init__(self, enabled_ids: set[str] | None = None) -> None:
         self._manifests: dict[str, AppManifest] = {}
-        self._enabled_ids = enabled_ids
+        self._enabled_ids = frozenset(enabled_ids) if enabled_ids is not None else None
         self._finalized = False
 
     def register(self, manifest: AppManifest) -> None:
