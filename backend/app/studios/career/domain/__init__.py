@@ -26,8 +26,18 @@ from .matching import (
     ScoreComponents,
     SelectedMatch,
 )
+from .drafts import (
+    AddedKeyword,
+    AssertedFact,
+    DraftBullet,
+    DraftTransformation,
+    ResumeDraft,
+    stable_draft_id,
+)
 
 __all__ = [
+    "AddedKeyword",
+    "AssertedFact",
     "CareerClaim",
     "CandidateEdge",
     "CareerMatchResult",
@@ -39,13 +49,17 @@ __all__ = [
     "ClaimValueKind",
     "CoverageBand",
     "CoverageSummary",
+    "DraftBullet",
+    "DraftTransformation",
     "MatchStrength",
     "RequirementCategory",
     "RequirementPriority",
     "RoleRequirement",
+    "ResumeDraft",
     "ScoreComponents",
     "SelectedMatch",
     "SourceSpan",
     "TemporalScope",
     "stable_claim_id",
+    "stable_draft_id",
 ]

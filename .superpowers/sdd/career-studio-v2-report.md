@@ -86,3 +86,37 @@ Observed:
 ```
 
 The passing cases include bounded component validation, preserved score breakdowns, no claim double-counting, deterministic tie behavior across input order, weighted coverage ranges, truthful unmatched requirements, inferred-evidence rejection, and edge integrity checks.
+
+### Cycle 3 RED — evidence-constrained drafting and Truth Guardian
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_truth_guardian.py -q
+```
+
+Observed expected failure:
+
+```text
+E   ImportError: cannot import name 'AddedKeyword' from 'app.studios.career.domain'
+1 error in 1.24s
+```
+
+The adversarial suite could not collect because provenance-carrying draft contracts and the Truth Guardian had not been implemented.
+
+### Cycle 3 GREEN — evidence-constrained drafting and Truth Guardian
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_truth_guardian.py -q
+```
+
+Observed:
+
+```text
+............                                                             [100%]
+12 passed in 0.93s
+```
+
+The passing adversarial cases cover verbatim provenance, fabricated and upward-rounded metrics (including metrics omitted from structured facts), incompatible employer/project and temporal combinations, supported keywords, inferred claims, missing/unknown provenance, and typed employer/title/date/skill/degree additions.

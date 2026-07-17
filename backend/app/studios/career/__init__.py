@@ -1,6 +1,8 @@
 """Evidence-first Career Studio core."""
 
 from .domain import (
+    AddedKeyword,
+    AssertedFact,
     CareerClaim,
     CandidateEdge,
     CareerMatchResult,
@@ -12,19 +14,27 @@ from .domain import (
     ClaimValueKind,
     CoverageBand,
     CoverageSummary,
+    DraftBullet,
+    DraftTransformation,
     MatchStrength,
     RequirementCategory,
     RequirementPriority,
+    ResumeDraft,
     RoleRequirement,
     ScoreComponents,
     SelectedMatch,
     SourceSpan,
     TemporalScope,
     stable_claim_id,
+    stable_draft_id,
 )
 from .matching import match_requirements, score_candidate_edge
+from .validation import validate_draft
+from .writing import draft_from_matches
 
 __all__ = [
+    "AddedKeyword",
+    "AssertedFact",
     "CareerClaim",
     "CandidateEdge",
     "CareerMatchResult",
@@ -36,9 +46,12 @@ __all__ = [
     "ClaimValueKind",
     "CoverageBand",
     "CoverageSummary",
+    "DraftBullet",
+    "DraftTransformation",
     "MatchStrength",
     "RequirementCategory",
     "RequirementPriority",
+    "ResumeDraft",
     "RoleRequirement",
     "ScoreComponents",
     "SelectedMatch",
@@ -47,4 +60,7 @@ __all__ = [
     "match_requirements",
     "score_candidate_edge",
     "stable_claim_id",
+    "stable_draft_id",
+    "draft_from_matches",
+    "validate_draft",
 ]
