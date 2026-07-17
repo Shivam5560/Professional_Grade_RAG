@@ -241,6 +241,7 @@ def test_no_selected_evidence_abstains_without_requesting_final_approval() -> No
 
     assert response.run.state is StudioRunState.FAILED
     assert response.run.current_step == "truth-validation"
+    assert response.run.failure_code == "validation-error"
     assert response.approval is None
     assert response.result.output is None
     assert response.result.quality.abstention_reason == (

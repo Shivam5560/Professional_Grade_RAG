@@ -243,7 +243,6 @@ class CareerSpecialist:
                 StudioRunState.RUNNING,
                 now=now,
                 current_step="evidence-matching",
-                progress=0.5,
             )
         else:
             raise ValueError(f"CareerSpecialist cannot execute a {run.state} run")
@@ -300,6 +299,7 @@ class CareerSpecialist:
                 now=now,
                 current_step="truth-validation",
                 progress=0.8,
+                failure_code="validation-error",
             )
             return CareerSpecialistResponse(
                 run=failed_run,

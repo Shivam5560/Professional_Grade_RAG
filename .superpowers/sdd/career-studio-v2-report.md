@@ -2,7 +2,7 @@
 
 **Branch:** `career-studio-v2-core`  
 **Worktree:** `/home/gopal/Professional_Grade_RAG/.worktrees/career-studio-v2`  
-**Plan commit:** `cdcb3dd docs: plan career studio v2 core`
+**Plan commit after rebase:** `7d01024 docs: plan career studio v2 core`
 
 ## Baseline
 
@@ -187,7 +187,7 @@ Observed:
 1 passed in 1.74s
 ```
 
-## Final Verification
+## Pre-review Verification
 
 Full owned test directory:
 
@@ -220,7 +220,7 @@ Quality and ownership checks:
 ```bash
 rg -n 'TO''DO|TB''D|FIX''ME|print\(|breakpoint\(' backend/app/studios/career backend/tests/studios/career .superpowers/sdd/career-studio-v2-report.md
 git diff --check
-git diff --name-only cdcb3dd^..HEAD
+git diff --name-only 7d01024^..HEAD
 ```
 
 Observed: the residue scan and whitespace check produced no findings. Every committed path is within the assigned plan, Career Studio application/test packages, or SDD report ownership boundary.
@@ -231,10 +231,10 @@ Observed: the residue scan and whitespace check produced no findings. Every comm
 - **Section 7.2 — canonical evidence graph:** Claims are typed atomic subject/predicate/object records with one or more exact source spans, temporal scope, context, relationships, verification status, confidence, verifier identity, canonical IDs, deep freezing, and JSON serialization tests.
 - **Section 7.3 — role requirements:** Requirements retain required/preferred priority, typed category, description, exact job source span, confidence, and finite positive weight. They are never reduced to a keyword bag.
 - **Section 7.4 — matching:** All six bounded score components are retained. SciPy maximum-weight bipartite assignment uses sorted identifiers and dummy unmatched columns, prevents claim reuse, weights the objective by requirement importance, and exposes mandatory/preferred coverage ranges, categorical bands, uncertain matches, transferable matches, truthful gaps, and selected evidence.
-- **Sections 7.5-7.6 — drafting and truth:** Every bullet retains claim IDs, transformation, typed asserted facts, supported added keywords, and before/after text. Combination requires shared employer/project context and overlapping time. Numeric text and metric facts must match exactly; unsupported typed facts, keywords, non-verified publication claims, incompatible combinations, and missing lineage are critical abstentions.
+- **Sections 7.5-7.6 — drafting and truth:** Every bullet retains claim IDs, transformation, typed asserted facts, supported added keywords, and before/after text. Combination requires shared employer/project context and overlapping time. Publication prose is independently reconciled with a conservative supported-token policy; dates and metric scalar/unit/measure/context remain typed; unsupported text/facts/keywords, non-verified claims, incompatible combinations, and missing exact-span lineage are critical abstentions.
 - **Section 9 — deterministic failure handling:** The service performs no I/O or model calls. Critical truth failures transition the run to failed while preserving match coverage separately; meaningful user decisions transition to awaiting input.
 - **Section 11 — release gates:** Tests witness zero double-counting, deterministic ties, fabricated metric rejection, typed fact rejection, approval binding, and claim-level draft provenance. ATS layout and artifact round-trip gates are outside this core-only assignment.
-- **Sections 14-15 — TDD vertical slice:** Five witnessed RED/GREEN cycles cover claims/requirements, matching, drafting/truth, workflow approvals, and a self-review regression. The final path is claim graph → typed requirements → weighted match → constrained draft → truth validation → approval state.
+- **Sections 14-15 — TDD vertical slice:** Eight witnessed RED/GREEN cycles cover claims/requirements, matching, drafting/truth, workflow approvals, self-review, independent adversarial review, and hardened-runtime integration. The final path is claim graph → typed requirements → weighted match → constrained draft → truth validation → approval state.
 
 ## Scope and Integration Notes
 
@@ -286,3 +286,92 @@ Observed:
 ```
 
 Truth Guardian now uses a conservative independent prose-token policy, distinguishes unsupported dates, binds numeric mentions to metric scalar/unit/measure and the exact cited claim context, resolves evidence from the exact before-text span, deduplicates deterministically, and safely bounds evidence snippets.
+
+### Cycle 7 RED — hardened runtime failure categorization after rebase
+
+After rebasing locally onto `specialist-studios-v2` commit `b337298`, the shared runtime requires failed transitions to carry a categorized failure code.
+
+Command:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_service.py::test_no_selected_evidence_abstains_without_requesting_final_approval -q
+```
+
+Observed expected failure:
+
+```text
+E   app.platform.runtime.contracts.InvalidRunTransition: failed transition requires a failure_code
+1 failed in 18.15s
+```
+
+The Career Specialist truth-abstention path still used the older runtime call shape and could not create a valid failed run under the hardened lifecycle invariants.
+
+### Cycle 7 GREEN — hardened runtime failure categorization after rebase
+
+Command:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_service.py::test_no_selected_evidence_abstains_without_requesting_final_approval -q
+```
+
+Observed:
+
+```text
+.                                                                        [100%]
+1 passed in 2.22s
+```
+
+The truth-validation abstention now passes `failure_code="validation-error"` directly to the shared transition function, and the service regression asserts the categorized failure on the returned run.
+
+### Cycle 8 RED — monotonic approval resume after rebase
+
+Command:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career tests/platform -q --junitxml=/tmp/career-post-rebase.xml
+```
+
+Observed expected integration failures:
+
+```text
+FAILED test_approved_resume_succeeds_with_end_to_end_provenance - InvalidRunTransition: run progress cannot move backwards
+FAILED test_final_approval_must_match_run_draft_owner_and_evidence - expected approval mismatch, got progress transition failure
+2 failed, 77 passed in 6.55s
+```
+
+The pre-hardening resume path explicitly reset final-approval progress from `0.9` to `0.5`, violating the rebased runtime's monotonic progress invariant before approval checks could run.
+
+### Cycle 8 GREEN — monotonic approval resume after rebase
+
+Command:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_service.py::test_approved_resume_succeeds_with_end_to_end_provenance tests/studios/career/test_service.py::test_final_approval_must_match_run_draft_owner_and_evidence -q
+```
+
+Observed:
+
+```text
+..                                                                       [100%]
+2 passed in 1.69s
+```
+
+The resume transition now preserves the awaiting run's existing progress while updating state and step, allowing exact approval validation and successful publication to proceed under the hardened runtime.
+
+## Final Post-review and Post-rebase Verification
+
+Command:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career tests/platform -q --junitxml=/tmp/career-post-rebase-green.xml
+```
+
+Observed:
+
+```text
+........................................................................ [ 91%]
+.......                                                                  [100%]
+79 passed in 1.91s
+```
+
+This final combined run includes 46 owned Career Studio tests and 33 rebased shared platform contract tests.
