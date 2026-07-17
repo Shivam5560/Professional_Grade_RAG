@@ -84,3 +84,17 @@ ModuleNotFoundError: No module named 'app.studios.data_analyst.execution'
 ......                                                                   [100%]
 6 passed in 6.95s
 ```
+
+### 5. Claim synthesis and verification — RED
+
+```text
+ModuleNotFoundError: No module named 'app.studios.data_analyst.claims'
+1 error in 0.89s
+```
+
+### 5. Claim synthesis and verification — GREEN
+
+```text
+.........                                                                [100%]
+9 passed in 2.76s
+```
