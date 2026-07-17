@@ -56,3 +56,17 @@ ModuleNotFoundError: No module named 'app.studios.data_analyst.profiling'
 ......                                                                   [100%]
 6 passed in 1.28s
 ```
+
+### 3. Registry and planning — RED
+
+```text
+ModuleNotFoundError: No module named 'app.studios.data_analyst.planning'
+1 error in 6.69s
+```
+
+### 3. Registry and planning — GREEN
+
+```text
+........                                                                 [100%]
+8 passed in 3.89s
+```
