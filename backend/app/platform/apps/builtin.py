@@ -1,5 +1,5 @@
 from app.config import settings
-from app.platform.apps.contracts import AppManifest, Capability, DemoScenario
+from app.platform.apps.contracts import AppDependency, AppManifest, Capability, DemoScenario
 from app.platform.apps.registry import AppRegistry
 
 
@@ -46,10 +46,11 @@ BUILTIN_MANIFESTS = (
         id="presentation-studio", version="1.0.0", name="Presentation Studio",
         summary="Narrative-first, data-backed presentation planning and PPTX generation.",
         category="content", icon="presentation", frontend_route="/analysis",
-        backend_route_prefixes=("/api/v1/analysis/reports",),
-        backend_router_ids=("analysis",),
+        backend_route_prefixes=("/api/v1/analysis",),
+        backend_router_ids=("presentation",),
         required_capabilities=(Capability.AUTH, Capability.ARTIFACTS, Capability.PRESENTATIONS),
         required_permissions=("presentation:generate",), required_env_keys=("LLM_PROVIDER",),
+        dependencies=(AppDependency(app_id="data-analyst", minimum_version="1.0.0"),),
         demo_scenarios=(_scenario("executive-deck", "Executive deck", "Turn an analysis into an evidence-backed executive presentation.", "Create an executive deck with one decision per slide."),),
         health_check_id="presentations", packaging_paths=("backend/app/services/analysis/slide_generator.py", "frontend/app/analysis/[jobId]/report"),
     ),

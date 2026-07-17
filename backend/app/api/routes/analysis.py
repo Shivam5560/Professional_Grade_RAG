@@ -52,6 +52,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
+presentation_router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +334,7 @@ def serve_chart_image(job_id: str, filename: str) -> FileResponse:
     return FileResponse(path=chart_path, media_type=media_type)
 
 
-@router.get("/{job_id}/report/download")
+@presentation_router.get("/{job_id}/report/download")
 def download_analysis_report(
     job_id: str,
     current_user: User = Depends(get_current_user),

@@ -13,6 +13,7 @@ class RouterSpec:
     module: str
     prefix: str
     tags: tuple[str, ...] = ()
+    router_name: str = "router"
 
 
 ROUTER_SPECS = {
@@ -21,6 +22,12 @@ ROUTER_SPECS = {
     "history": RouterSpec("app.api.routes.history", "/api/v1/history", ("History",)),
     "aurasql": RouterSpec("app.api.routes.aurasql", "/api/v1", ("AuraSQL",)),
     "analysis": RouterSpec("app.api.routes.analysis", "/api/v1", ("Analysis",)),
+    "presentation": RouterSpec(
+        "app.api.routes.analysis",
+        "/api/v1",
+        ("Analysis",),
+        router_name="presentation_router",
+    ),
     "nexus-resume": RouterSpec("app.api.routes.nexus_resume", "/api/v1", ("Nexus Resume",)),
     "resume-generator": RouterSpec("app.api.routes.resumegen", "/api/v1", ("Resume Generator",)),
     "workflows": RouterSpec("app.api.routes.workflows", "/api/v1", ("Workflows",)),
@@ -41,11 +48,11 @@ def install_enabled_application_routers(app: FastAPI, registry: AppRegistry) -> 
     for router_id in sorted(router_ids):
         spec = ROUTER_SPECS[router_id]
         module = import_module(spec.module)
-        router = getattr(module, "router", None)
+        router = getattr(module, spec.router_name, None)
         if not isinstance(router, APIRouter):
             raise RegistryError(
                 f"application router {router_id!r} from {spec.module!r} "
-                "must expose an APIRouter as 'router'"
+                f"must expose an APIRouter as {spec.router_name!r}"
             )
         resolved_routers.append((router, spec))
 
