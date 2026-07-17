@@ -8,11 +8,14 @@ class DataDatasetSnapshotRecord(Base):
     __tablename__ = "data_analyst_dataset_snapshots"
     __table_args__ = (
         UniqueConstraint("owner_id", "content_digest", name="uq_data_snapshot_owner_digest"),
+        UniqueConstraint("owner_id", "domain_snapshot_id", name="uq_data_snapshot_owner_domain"),
         Index("ix_data_snapshot_owner_id", "owner_id"),
+        Index("ix_data_snapshot_domain_id", "domain_snapshot_id"),
     )
 
     id = Column(String(255), primary_key=True)
     owner_id = Column(Integer, ForeignKey(OWNER_FOREIGN_KEY, ondelete="CASCADE"), nullable=False)
+    domain_snapshot_id = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=False)
     media_type = Column(String(100), nullable=False)
     byte_size = Column(Integer, nullable=False)

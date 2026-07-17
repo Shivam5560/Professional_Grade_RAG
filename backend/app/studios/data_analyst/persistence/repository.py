@@ -86,11 +86,13 @@ class DataAnalystRepository:
         profile: DatasetProfile,
         created_at: datetime,
     ) -> DatasetSnapshot:
-        if owner_id <= 0 or profile.dataset_snapshot_id != snapshot_id:
-            raise ValueError("snapshot ownership and profile identity must be valid")
+        if owner_id <= 0:
+            raise ValueError("snapshot ownership must be valid")
         profile_payload = _payload(profile)
         snapshot = DataDatasetSnapshotRecord(
-            id=snapshot_id, owner_id=owner_id, filename=filename, media_type=media_type,
+            id=snapshot_id, owner_id=owner_id,
+            domain_snapshot_id=profile.dataset_snapshot_id,
+            filename=filename, media_type=media_type,
             byte_size=byte_size, content_digest=content_digest, storage_key=storage_key,
             created_at=created_at,
         )
@@ -128,6 +130,22 @@ class DataAnalystRepository:
         hydrated = _hydrate(profile, DatasetProfile)
         return DatasetSnapshot(snapshot.id, snapshot.owner_id, snapshot.filename, snapshot.media_type, snapshot.byte_size, snapshot.content_digest, snapshot.storage_key, hydrated, _aware(snapshot.created_at))
 
+    def get_snapshot_by_domain_id(
+        self,
+        domain_snapshot_id: str,
+        *,
+        owner_id: int,
+    ) -> DatasetSnapshot:
+        snapshot_id = self.session.execute(
+            select(DataDatasetSnapshotRecord.id).where(
+                DataDatasetSnapshotRecord.domain_snapshot_id == domain_snapshot_id,
+                DataDatasetSnapshotRecord.owner_id == owner_id,
+            )
+        ).scalar_one_or_none()
+        if snapshot_id is None:
+            raise RecordNotFound("dataset snapshot not found")
+        return self.get_snapshot(snapshot_id, owner_id=owner_id)
+
     def persist_run_result(self, result: DataAnalystRunResult, *, owner_id: int, created_at: datetime) -> None:
         if not result.run_history or any(run.owner_id != owner_id for run in result.run_history):
             raise RecordNotFound("analysis run not found")
@@ -137,19 +155,22 @@ class DataAnalystRepository:
             run_repository.get(run_id, owner_id=owner_id)
         except RecordNotFound:
             run_repository.create(result.run_history[0], owner_id=owner_id)
-        self.get_snapshot(result.profile.dataset_snapshot_id, owner_id=owner_id)
+        snapshot = self.get_snapshot_by_domain_id(
+            result.profile.dataset_snapshot_id,
+            owner_id=owner_id,
+        )
         plan_payload = _payload(result.plan)
         rows: list[object] = [
             DataAnalysisPlanRecord(
-                id=result.plan.id, owner_id=owner_id, run_id=run_id,
-                snapshot_id=result.profile.dataset_snapshot_id, payload=plan_payload,
+                id=f"{run_id}:{result.plan.id}", owner_id=owner_id, run_id=run_id,
+                snapshot_id=snapshot.id, payload=plan_payload,
                 payload_digest=_digest(plan_payload), created_at=created_at,
             )
         ]
         rows.extend(
             DataComputationRecord(
                 id=item.id, owner_id=owner_id, run_id=run_id,
-                snapshot_id=item.dataset_snapshot_id, sequence=index,
+                snapshot_id=snapshot.id, sequence=index,
                 payload=(payload := _payload(item)), payload_digest=_digest(payload), created_at=created_at,
             )
             for index, item in enumerate(result.computations)
@@ -158,7 +179,7 @@ class DataAnalystRepository:
         rows.extend(
             DataFindingClaimRecord(
                 id=item.id, owner_id=owner_id, run_id=run_id,
-                snapshot_id=result.profile.dataset_snapshot_id, sequence=index,
+                snapshot_id=snapshot.id, sequence=index,
                 payload=(payload := _payload(item)), payload_digest=_digest(payload), created_at=created_at,
             )
             for index, item in enumerate(claims)
