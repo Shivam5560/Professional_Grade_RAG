@@ -1,0 +1,825 @@
+# Review package: 68a8571..d95ecf9
+
+## Commits
+d95ecf9 feat(platform): isolate presentation router ownership
+2d096d4 feat(frontend): filter application navigation by catalog
+
+## Files changed
+ backend/app/api/routes/analysis.py             |   3 +-
+ backend/app/platform/apps/builtin.py           |   7 +-
+ backend/app/platform/apps/fastapi.py           |  11 +-
+ frontend/app/auth/page.tsx                     |  29 +++--
+ frontend/app/layout.tsx                        |  11 +-
+ frontend/app/page.tsx                          | 144 +++++++++++++++----------
+ frontend/components/aurasql/AuraSqlSidebar.tsx |  30 +++---
+ frontend/components/layout/Sidebar.tsx         |  38 ++++---
+ frontend/lib/apps/useAppCatalog.ts             |  53 ++++++++-
+ 9 files changed, 218 insertions(+), 108 deletions(-)
+
+## Diff
+diff --git a/backend/app/api/routes/analysis.py b/backend/app/api/routes/analysis.py
+index 52fa14f..849fa78 100644
+--- a/backend/app/api/routes/analysis.py
++++ b/backend/app/api/routes/analysis.py
+@@ -45,20 +45,21 @@ from app.models.analysis_schemas import (
+     AnalysisReportResponse,
+     WorkflowProgressEvent,
+ )
+ from app.services.analysis.data_ingestion import save_uploaded_file
+ from app.services.messaging import publish_message
+ import asyncio
+ from app.utils.logger import get_logger
+ 
+ logger = get_logger(__name__)
+ router = APIRouter(prefix="/analysis", tags=["Analysis"])
++presentation_router = APIRouter(prefix="/analysis", tags=["Analysis"])
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # Helpers
+ # ---------------------------------------------------------------------------
+ 
+ def _job_to_response(job: AnalysisJob) -> AnalysisJobResponse:
+     return AnalysisJobResponse(
+         job_id=job.id,
+         status=job.status,  # type: ignore[arg-type]
+@@ -326,21 +327,21 @@ def get_analysis_report(
+ @router.get("/charts/{job_id}/{filename}")
+ def serve_chart_image(job_id: str, filename: str) -> FileResponse:
+     """Serve a chart image file."""
+     chart_path = os.path.join(settings.analysis_chart_dir, job_id, filename)
+     if not os.path.exists(chart_path):
+         raise HTTPException(status_code=404, detail="Chart image not found")
+     media_type = "image/png" if filename.endswith(".png") else "application/json"
+     return FileResponse(path=chart_path, media_type=media_type)
+ 
+ 
+-@router.get("/{job_id}/report/download")
++@presentation_router.get("/{job_id}/report/download")
+ def download_analysis_report(
+     job_id: str,
+     current_user: User = Depends(get_current_user),
+     db: Session = Depends(get_db),
+ ):
+     """Download the analysis report as a PPTX slide deck."""
+     job = (
+         db.query(AnalysisJob)
+         .filter(AnalysisJob.id == job_id, AnalysisJob.user_id == current_user.id)
+         .first()
+diff --git a/backend/app/platform/apps/builtin.py b/backend/app/platform/apps/builtin.py
+index 932b851..0d9cdc5 100644
+--- a/backend/app/platform/apps/builtin.py
++++ b/backend/app/platform/apps/builtin.py
+@@ -1,12 +1,12 @@
+ from app.config import settings
+-from app.platform.apps.contracts import AppManifest, Capability, DemoScenario
++from app.platform.apps.contracts import AppDependency, AppManifest, Capability, DemoScenario
+ from app.platform.apps.registry import AppRegistry
+ 
+ 
+ def _scenario(identifier: str, title: str, description: str, prompt: str) -> DemoScenario:
+     return DemoScenario(id=identifier, title=title, description=description, starter_prompt=prompt)
+ 
+ 
+ BUILTIN_MANIFESTS = (
+     AppManifest(
+         id="knowledge-studio", version="1.0.0", name="Knowledge Studio",
+@@ -39,24 +39,25 @@ BUILTIN_MANIFESTS = (
+         backend_router_ids=("analysis",),
+         required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.ARTIFACTS),
+         required_permissions=("analysis:run",), required_env_keys=("LLM_PROVIDER",),
+         demo_scenarios=(_scenario("sales-diagnostics", "Sales diagnostics", "Profile a sales dataset and identify defensible drivers.", "Analyze the strongest drivers of sales and distinguish evidence from hypotheses."),),
+         health_check_id="analysis", packaging_paths=("backend/app/analysis", "backend/app/api/routes/analysis.py", "frontend/app/analysis"),
+     ),
+     AppManifest(
+         id="presentation-studio", version="1.0.0", name="Presentation Studio",
+         summary="Narrative-first, data-backed presentation planning and PPTX generation.",
+         category="content", icon="presentation", frontend_route="/analysis",
+-        backend_route_prefixes=("/api/v1/analysis/reports",),
+-        backend_router_ids=("analysis",),
++        backend_route_prefixes=("/api/v1/analysis",),
++        backend_router_ids=("presentation",),
+         required_capabilities=(Capability.AUTH, Capability.ARTIFACTS, Capability.PRESENTATIONS),
+         required_permissions=("presentation:generate",), required_env_keys=("LLM_PROVIDER",),
++        dependencies=(AppDependency(app_id="data-analyst", minimum_version="1.0.0"),),
+         demo_scenarios=(_scenario("executive-deck", "Executive deck", "Turn an analysis into an evidence-backed executive presentation.", "Create an executive deck with one decision per slide."),),
+         health_check_id="presentations", packaging_paths=("backend/app/services/analysis/slide_generator.py", "frontend/app/analysis/[jobId]/report"),
+     ),
+     AppManifest(
+         id="career-studio", version="1.0.0", name="Career Studio",
+         summary="Truth-preserving resume analysis, tailoring, generation, and review.",
+         category="career", icon="briefcase-business", frontend_route="/nexus",
+         backend_route_prefixes=("/api/v1/nexus", "/api/v1/workflows/auto-tailor"),
+         backend_router_ids=("nexus-resume", "resume-generator", "workflows"),
+         required_capabilities=(Capability.AUTH, Capability.WORKFLOWS, Capability.CAREER),
+diff --git a/backend/app/platform/apps/fastapi.py b/backend/app/platform/apps/fastapi.py
+index 143bb11..f6036b6 100644
+--- a/backend/app/platform/apps/fastapi.py
++++ b/backend/app/platform/apps/fastapi.py
+@@ -6,48 +6,55 @@ from importlib import import_module
+ from fastapi import APIRouter, FastAPI
+ 
+ from app.platform.apps.registry import AppRegistry, RegistryError
+ 
+ 
+ @dataclass(frozen=True)
+ class RouterSpec:
+     module: str
+     prefix: str
+     tags: tuple[str, ...] = ()
++    router_name: str = "router"
+ 
+ 
+ ROUTER_SPECS = {
+     "chat": RouterSpec("app.api.routes.chat", "/api/v1"),
+     "documents": RouterSpec("app.api.routes.documents", "/api/v1"),
+     "history": RouterSpec("app.api.routes.history", "/api/v1/history", ("History",)),
+     "aurasql": RouterSpec("app.api.routes.aurasql", "/api/v1", ("AuraSQL",)),
+     "analysis": RouterSpec("app.api.routes.analysis", "/api/v1", ("Analysis",)),
++    "presentation": RouterSpec(
++        "app.api.routes.analysis",
++        "/api/v1",
++        ("Analysis",),
++        router_name="presentation_router",
++    ),
+     "nexus-resume": RouterSpec("app.api.routes.nexus_resume", "/api/v1", ("Nexus Resume",)),
+     "resume-generator": RouterSpec("app.api.routes.resumegen", "/api/v1", ("Resume Generator",)),
+     "workflows": RouterSpec("app.api.routes.workflows", "/api/v1", ("Workflows",)),
+ }
+ 
+ 
+ def install_enabled_application_routers(app: FastAPI, registry: AppRegistry) -> None:
+     router_ids = {
+         router_id
+         for manifest in registry.list_enabled()
+         for router_id in manifest.backend_router_ids
+     }
+     unknown = router_ids - ROUTER_SPECS.keys()
+     if unknown:
+         raise RegistryError(f"application manifests reference unknown routers: {sorted(unknown)}")
+ 
+     resolved_routers: list[tuple[APIRouter, RouterSpec]] = []
+     for router_id in sorted(router_ids):
+         spec = ROUTER_SPECS[router_id]
+         module = import_module(spec.module)
+-        router = getattr(module, "router", None)
++        router = getattr(module, spec.router_name, None)
+         if not isinstance(router, APIRouter):
+             raise RegistryError(
+                 f"application router {router_id!r} from {spec.module!r} "
+-                "must expose an APIRouter as 'router'"
++                f"must expose an APIRouter as {spec.router_name!r}"
+             )
+         resolved_routers.append((router, spec))
+ 
+     for router, spec in resolved_routers:
+         app.include_router(router, prefix=spec.prefix, tags=list(spec.tags))
+diff --git a/frontend/app/auth/page.tsx b/frontend/app/auth/page.tsx
+index 1bb3042..180ffbe 100644
+--- a/frontend/app/auth/page.tsx
++++ b/frontend/app/auth/page.tsx
+@@ -5,37 +5,39 @@ import { Label } from "@/components/ui/label"
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+ import { useState } from "react"
+ import { motion } from "framer-motion"
+ import { apiClient } from "@/lib/api"
+ import { useRouter } from "next/navigation"
+ import { ShaderAnimation } from "@/components/ui/shader-animation"
+ import { Brain, Shield, Zap, MessageSquare, Database, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast, ArrowRight, Loader2 } from "lucide-react"
+ import { useAppTheme } from "@/hooks/useAppTheme"
+ import { type ThemePalette } from "@/lib/theme"
+ import { useToast } from "@/hooks/useToast"
++import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog"
+ import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuLabel,
+   DropdownMenuRadioGroup,
+   DropdownMenuRadioItem,
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+ } from "@/components/ui/dropdown-menu"
+ 
+ export default function AuthPage() {
+   const [isLoading, setIsLoading] = useState(false)
+   const [isLoginOverlayVisible, setIsLoginOverlayVisible] = useState(false)
+   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
+   const router = useRouter()
+   const { toast } = useToast()
++  const appCatalog = useAppCatalog()
+   const { mode, palette, toggleMode, setPalette } = useAppTheme()
+   const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+     { value: 'nexus', label: 'Nexus Slate', icon: Compass },
+     { value: 'ocean', label: 'Arctic Cyan', icon: Waves },
+     { value: 'ember', label: 'Solar Ember', icon: Flame },
+     { value: 'graphite', label: 'Graphite Mint', icon: Hexagon },
+     { value: 'forest', label: 'Verdant Core', icon: Leaf },
+     { value: 'royal', label: 'Royal Flux', icon: Crown },
+     { value: 'sunset', label: 'Amber Dusk', icon: Sunset },
+     { value: 'mono', label: 'Mono Steel', icon: Contrast },
+@@ -363,31 +365,38 @@ export default function AuthPage() {
+               </div>
+             ))}
+           </div>
+ 
+           <div className="pt-4 border-t border-border/40 mt-4">
+             <div className="flex items-center justify-between flex-wrap gap-4">
+               <div className="flex items-center space-x-3">
+                 <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg">
+                   NX
+                 </div>
+-                <button
+-                  type="button"
+-                  onClick={() => router.push('/developer')}
+-                  className="text-left group"
+-                >
+-                  <div className="font-bold text-foreground text-sm inline-flex items-center gap-1.5">
+-                    Shivam Sourav
+-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
++                {isAppEnabled(appCatalog, 'developer-studio') ? (
++                  <button
++                    type="button"
++                    onClick={() => router.push('/developer')}
++                    className="text-left group"
++                  >
++                    <div className="font-bold text-foreground text-sm inline-flex items-center gap-1.5">
++                      Shivam Sourav
++                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
++                    </div>
++                    <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata • View developer profile</div>
++                  </button>
++                ) : (
++                  <div className="text-left">
++                    <div className="font-bold text-foreground text-sm">Shivam Sourav</div>
++                    <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata</div>
+                   </div>
+-                  <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata • View developer profile</div>
+-                </button>
++                )}
+               </div>
+               <div className="text-right">
+                 <div className="text-[10px] text-muted-foreground mb-0.5">Powered by</div>
+                 <div className="text-xs font-bold text-accent">LlamaIndex & Groq</div>
+               </div>
+             </div>
+           </div>
+         </motion.div>
+ 
+         {/* Right Side - Auth Form */}
+diff --git a/frontend/app/layout.tsx b/frontend/app/layout.tsx
+index e1b6682..0d1f9d6 100644
+--- a/frontend/app/layout.tsx
++++ b/frontend/app/layout.tsx
+@@ -1,15 +1,16 @@
+ import type { Metadata } from 'next'
+ import { Space_Grotesk, IBM_Plex_Mono } from 'next/font/google'
+ import './globals.css'
+ import { ClientProviders } from '@/components/layout/ClientProviders'
+ import { JobProvider } from '@/components/providers/JobProvider'
++import { AppCatalogProvider } from '@/lib/apps/useAppCatalog'
+ 
+ const spaceGrotesk = Space_Grotesk({
+   subsets: ['latin'],
+   variable: '--font-geist-sans',
+   display: 'swap',
+ })
+ 
+ const plexMono = IBM_Plex_Mono({
+   subsets: ['latin'],
+   variable: '--font-geist-mono',
+@@ -28,18 +29,20 @@ export default function RootLayout({
+   children: React.ReactNode
+ }) {
+   return (
+     <html
+       lang="en"
+       className={`${spaceGrotesk.variable} ${plexMono.variable} theme-graphite dark`}
+       data-theme-palette="graphite"
+       data-theme-mode="dark"
+     >
+       <body>
+-        <JobProvider>
+-          {children}
+-          <ClientProviders />
+-        </JobProvider>
++        <AppCatalogProvider>
++          <JobProvider>
++            {children}
++            <ClientProviders />
++          </JobProvider>
++        </AppCatalogProvider>
+       </body>
+     </html>
+   )
+ }
+diff --git a/frontend/app/page.tsx b/frontend/app/page.tsx
+index ea4f4d5..9b752aa 100644
+--- a/frontend/app/page.tsx
++++ b/frontend/app/page.tsx
+@@ -1,38 +1,94 @@
+ 'use client';
+ 
+-import { useEffect, useState } from 'react';
++import { useEffect, useMemo, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ import { Header } from '@/components/layout/Header';
+ import { Badge } from '@/components/ui/badge';
+ import { ShaderAnimation } from '@/components/ui/shader-animation';
+ import { MessageSquare, Database, Sparkles, ArrowRight, Loader2, FileText, BarChart3 } from 'lucide-react';
+ import { useAuthStore } from '@/lib/store';
+ import AuthPage from '@/app/auth/page';
++import { isAppEnabled, useAppCatalog } from '@/lib/apps/useAppCatalog';
++
++const LAUNCHERS = [
++  {
++    appId: 'knowledge-studio',
++    title: 'RAG Chat',
++    description: 'Grounded answers with citations and confidence scoring.',
++    icon: MessageSquare,
++    path: '/chat',
++    tone: 'bg-[hsl(var(--chart-1)/0.12)] border-[hsl(var(--chart-1)/0.28)] text-[hsl(var(--chart-1))]',
++    badge: 'RAG',
++    badge2: 'Cited',
++  },
++  {
++    appId: 'aurasql',
++    title: 'AuraSQL',
++    description: 'Schema-aware SQL generation and refinement.',
++    icon: Database,
++    path: '/aurasql',
++    tone: 'bg-[hsl(var(--chart-2)/0.12)] border-[hsl(var(--chart-2)/0.28)] text-[hsl(var(--chart-2))]',
++    badge: 'SQL',
++    badge2: 'Schema',
++  },
++  {
++    appId: 'career-studio',
++    title: 'Resume Studio',
++    description: 'ATS alignment and JD-based resume scoring.',
++    icon: Sparkles,
++    path: '/nexus',
++    tone: 'bg-[hsl(var(--chart-4)/0.12)] border-[hsl(var(--chart-4)/0.28)] text-[hsl(var(--chart-4))]',
++    badge: 'Nexus',
++    badge2: 'Scoring',
++  },
++  {
++    appId: 'career-studio',
++    title: 'ResumeGen',
++    description: 'Structured resume builder with LaTeX PDF output.',
++    icon: FileText,
++    path: '/nexus/generate',
++    tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
++    badge: 'PDF',
++    badge2: 'LaTeX',
++  },
++  {
++    appId: 'data-analyst',
++    title: 'Data Analysis',
++    description: 'Multi-agent analysis with statistical modeling and visual reports.',
++    icon: BarChart3,
++    path: '/analysis',
++    tone: 'bg-[hsl(var(--chart-3)/0.12)] border-[hsl(var(--chart-3)/0.28)] text-[hsl(var(--chart-3))]',
++    badge: 'ML',
++    badge2: 'Insights',
++  },
++] as const;
+ 
+ export default function DashboardPage() {
+   const router = useRouter();
+   const { isAuthenticated } = useAuthStore();
++  const appCatalog = useAppCatalog();
+   const [isMounted, setIsMounted] = useState(false);
+   const [navTarget, setNavTarget] = useState<string | null>(null);
++  const enabledLaunchers = useMemo(
++    () => LAUNCHERS.filter((launcher) => isAppEnabled(appCatalog, launcher.appId)),
++    [appCatalog],
++  );
+ 
+   useEffect(() => {
+     setIsMounted(true);
+   }, []);
+ 
+   useEffect(() => {
+-    if (!isMounted || !isAuthenticated) return;
+-    router.prefetch('/chat');
+-    router.prefetch('/aurasql');
+-    router.prefetch('/nexus');
+-    router.prefetch('/analysis');
+-  }, [isMounted, isAuthenticated, router]);
++    if (!isMounted || !isAuthenticated || appCatalog.status !== 'success') return;
++    enabledLaunchers.forEach((launcher) => router.prefetch(launcher.path));
++  }, [appCatalog.status, enabledLaunchers, isMounted, isAuthenticated, router]);
+ 
+   const handleNavigate = (path: string, label: string) => {
+     setNavTarget(label);
+     router.push(path);
+   };
+ 
+   if (!isMounted) return null;
+   if (!isAuthenticated) return <AuthPage />;
+ 
+   return (
+@@ -100,79 +156,57 @@ export default function DashboardPage() {
+                       <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             </article>
+ 
+             <article className="lux-card sheen-border rounded-[30px] p-6 md:p-8 overflow-hidden min-h-[560px] md:min-h-[600px] lg:min-h-[620px]">
+               <div className="flex items-center justify-between gap-3 mb-4">
+                 <Badge variant="outline" className="border-border/60">Tools</Badge>
+-                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">5 Launchers</p>
++                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
++                  {enabledLaunchers.length} {enabledLaunchers.length === 1 ? 'Launcher' : 'Launchers'}
++                </p>
+               </div>
+ 
+               <div className="flex flex-wrap gap-2 mb-4">
+                 {['Production Ready', 'Context Aware', 'Traceable', 'Fast Mode'].map((item) => (
+                   <Badge key={item} variant="outline" className="h-6 px-2.5 text-[9px] uppercase tracking-[0.16em] border-border/70">
+                     {item}
+                   </Badge>
+                 ))}
+               </div>
+ 
+               <div className="space-y-3">
+-                {[
+-                  {
+-                    title: 'RAG Chat',
+-                    description: 'Grounded answers with citations and confidence scoring.',
+-                    icon: MessageSquare,
+-                    path: '/chat',
+-                    tone: 'bg-[hsl(var(--chart-1)/0.12)] border-[hsl(var(--chart-1)/0.28)] text-[hsl(var(--chart-1))]',
+-                    badge: 'RAG',
+-                    badge2: 'Cited',
+-                  },
+-                  {
+-                    title: 'AuraSQL',
+-                    description: 'Schema-aware SQL generation and refinement.',
+-                    icon: Database,
+-                    path: '/aurasql',
+-                    tone: 'bg-[hsl(var(--chart-2)/0.12)] border-[hsl(var(--chart-2)/0.28)] text-[hsl(var(--chart-2))]',
+-                    badge: 'SQL',
+-                    badge2: 'Schema',
+-                  },
+-                  {
+-                    title: 'Resume Studio',
+-                    description: 'ATS alignment and JD-based resume scoring.',
+-                    icon: Sparkles,
+-                    path: '/nexus',
+-                    tone: 'bg-[hsl(var(--chart-4)/0.12)] border-[hsl(var(--chart-4)/0.28)] text-[hsl(var(--chart-4))]',
+-                    badge: 'Nexus',
+-                    badge2: 'Scoring',
+-                  },
+-                  {
+-                    title: 'ResumeGen',
+-                    description: 'Structured resume builder with LaTeX PDF output.',
+-                    icon: FileText,
+-                    path: '/nexus/generate',
+-                    tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
+-                    badge: 'PDF',
+-                    badge2: 'LaTeX',
+-                  },
+-                  {
+-                    title: 'Data Analysis',
+-                    description: 'Multi-agent analysis with statistical modeling and visual reports.',
+-                    icon: BarChart3,
+-                    path: '/analysis',
+-                    tone: 'bg-[hsl(var(--chart-3)/0.12)] border-[hsl(var(--chart-3)/0.28)] text-[hsl(var(--chart-3))]',
+-                    badge: 'ML',
+-                    badge2: 'Insights',
+-                  },
+-                ].map((tool) => (
++                {appCatalog.status === 'loading' ? (
++                  <p
++                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
++                    role="status"
++                    aria-live="polite"
++                  >
++                    Loading available applications…
++                  </p>
++                ) : appCatalog.status === 'error' ? (
++                  <p
++                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
++                    role="alert"
++                  >
++                    Application launchers are temporarily unavailable.
++                  </p>
++                ) : enabledLaunchers.length === 0 ? (
++                  <p
++                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
++                    role="status"
++                  >
++                    No application launchers are enabled.
++                  </p>
++                ) : enabledLaunchers.map((tool) => (
+                   <article
+                     key={tool.title}
+                     role="button"
+                     tabIndex={0}
+                     onClick={() => handleNavigate(tool.path, tool.title)}
+                     onKeyDown={(event) => {
+                       if (event.key === 'Enter' || event.key === ' ') {
+                         event.preventDefault();
+                         handleNavigate(tool.path, tool.title);
+                       }
+diff --git a/frontend/components/aurasql/AuraSqlSidebar.tsx b/frontend/components/aurasql/AuraSqlSidebar.tsx
+index 1a3d96d..a512867 100644
+--- a/frontend/components/aurasql/AuraSqlSidebar.tsx
++++ b/frontend/components/aurasql/AuraSqlSidebar.tsx
+@@ -1,30 +1,32 @@
+ 'use client';
+ 
+ import { useEffect, useMemo, useState } from 'react';
+ import { Button } from '@/components/ui/button';
+ import { ScrollArea } from '@/components/ui/scroll-area';
+ import { Database, Plus, RefreshCw, MessageSquare, Star } from 'lucide-react';
+ import { apiClient } from '@/lib/api';
+ import { AuraSqlSession } from '@/lib/types';
+ import { useRouter } from 'next/navigation';
+ import { cn, formatTimestamp } from '@/lib/utils';
++import { isAppEnabled, useAppCatalog } from '@/lib/apps/useAppCatalog';
+ 
+ interface AuraSqlSidebarProps {
+   currentHistoryId?: string | null;
+   sessions?: AuraSqlSession[];
+   onSelectSession?: (session: AuraSqlSession) => void;
+   onNewChat?: () => void;
+ }
+ 
+ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSession, onNewChat }: AuraSqlSidebarProps) {
+   const router = useRouter();
++  const appCatalog = useAppCatalog();
+   const [history, setHistory] = useState<AuraSqlSession[]>([]);
+   const [isLoading, setIsLoading] = useState(false);
+   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+ 
+   useEffect(() => {
+     const loadHistory = async () => {
+       setIsLoading(true);
+       try {
+         const rows = await apiClient.listAuraSqlSessions();
+         setHistory(rows);
+@@ -175,26 +177,30 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
+             </div>
+           )}
+         </ScrollArea>
+       </div>
+ 
+       <div className="mt-auto p-4 border-t border-border/60">
+         <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60" onClick={() => router.push('/') }>
+           <Database className="h-4 w-4" />
+           Dashboard
+         </Button>
+-        <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2" onClick={() => router.push('/chat')}>
+-          <MessageSquare className="h-4 w-4" />
+-          RAG Chat
+-        </Button>
+-        <Button
+-          variant="ghost"
+-          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2"
+-          onClick={() => router.push('/developer')}
+-        >
+-          <Star className="h-4 w-4" />
+-          Developer
+-        </Button>
++        {isAppEnabled(appCatalog, 'knowledge-studio') ? (
++          <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2" onClick={() => router.push('/chat')}>
++            <MessageSquare className="h-4 w-4" />
++            RAG Chat
++          </Button>
++        ) : null}
++        {isAppEnabled(appCatalog, 'developer-studio') ? (
++          <Button
++            variant="ghost"
++            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2"
++            onClick={() => router.push('/developer')}
++          >
++            <Star className="h-4 w-4" />
++            Developer
++          </Button>
++        ) : null}
+       </div>
+     </div>
+   );
+ }
+diff --git a/frontend/components/layout/Sidebar.tsx b/frontend/components/layout/Sidebar.tsx
+index f2f9246..6702ce3 100644
+--- a/frontend/components/layout/Sidebar.tsx
++++ b/frontend/components/layout/Sidebar.tsx
+@@ -1,31 +1,33 @@
+ import { Button } from "@/components/ui/button";
+ import { ScrollArea } from "@/components/ui/scroll-area";
+ import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, Trash2, Workflow } from "lucide-react";
+ import { useAuthStore } from "@/lib/store";
+ import { useEffect, useState, useCallback, useMemo } from "react";
+ import { apiClient } from "@/lib/api";
+ import { ChatSession } from "@/lib/types";
+ import { cn, formatTimestamp } from "@/lib/utils";
+ import { useRouter } from "next/navigation";
+ import { useToast } from "@/hooks/useToast";
++import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog";
+ 
+ interface SidebarProps {
+   onNewChat: () => void;
+   onLoadSession?: (sessionId: string) => void;
+   currentSessionId?: string;
+ }
+ 
+ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarProps) {
+   const { user } = useAuthStore();
+   const router = useRouter();
+   const { confirm, toast } = useToast();
++  const appCatalog = useAppCatalog();
+   const [history, setHistory] = useState<ChatSession[]>([]);
+   const [isRefreshing, setIsRefreshing] = useState(false);
+   const [showAll, setShowAll] = useState(false);
+ 
+   const loadHistory = useCallback(async () => {
+     if (user) {
+       setIsRefreshing(true);
+       try {
+         const bootstrap = await apiClient.getChatBootstrap(undefined, { includeMessages: false });
+         setHistory(bootstrap.sessions);
+@@ -297,44 +299,48 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
+               ? 'All chats shown'
+               : showAll
+                 ? 'Show less'
+                 : `Show more (${extraCount})`}
+           </Button>
+         </div>
+       </div>
+ 
+       <div className="mt-auto p-4 border-t border-border/60">
+         <div className="space-y-1">
+-          <Button
+-            variant="ghost"
+-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+-            onClick={() => router.push('/workflows')}
+-          >
+-            <Workflow className="h-4 w-4" />
+-            Workflows
+-          </Button>
++          {isAppEnabled(appCatalog, 'career-studio') ? (
++            <Button
++              variant="ghost"
++              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
++              onClick={() => router.push('/workflows')}
++            >
++              <Workflow className="h-4 w-4" />
++              Workflows
++            </Button>
++          ) : null}
+           <Button
+             variant="ghost"
+             className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+             onClick={() => router.push('/knowledge-base')}
+           >
+             <Database className="h-4 w-4" />
+             Knowledge Base
+           </Button>
+           <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all">
+             <Settings className="h-4 w-4" />
+             Settings
+           </Button>
+-          <Button
+-            variant="ghost"
+-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+-            onClick={() => router.push('/developer')}
+-          >
+-            <HelpCircle className="h-4 w-4" />
+-            Developer
+-          </Button>
++          {isAppEnabled(appCatalog, 'developer-studio') ? (
++            <Button
++              variant="ghost"
++              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
++              onClick={() => router.push('/developer')}
++            >
++              <HelpCircle className="h-4 w-4" />
++              Developer
++            </Button>
++          ) : null}
+         </div>
+       </div>
+       </div>
+     </>
+   );
+ }
+diff --git a/frontend/lib/apps/useAppCatalog.ts b/frontend/lib/apps/useAppCatalog.ts
+index 4af5f05..8c6d6ac 100644
+--- a/frontend/lib/apps/useAppCatalog.ts
++++ b/frontend/lib/apps/useAppCatalog.ts
+@@ -1,13 +1,23 @@
+ "use client";
+ 
+-import { useCallback, useEffect, useRef, useState } from "react";
++import {
++  createContext,
++  createElement,
++  useCallback,
++  useContext,
++  useEffect,
++  useMemo,
++  useRef,
++  useState,
++  type ReactNode,
++} from "react";
+ 
+ import { listApps } from "./client";
+ import type { AppManifest } from "./types";
+ 
+ type RetryCatalog = () => Promise<void>;
+ 
+ export type CatalogState =
+   | { status: "loading"; apps: []; error: null; retry: RetryCatalog }
+   | { status: "empty"; apps: []; error: null; retry: RetryCatalog }
+   | {
+@@ -17,27 +27,40 @@ export type CatalogState =
+       retry: RetryCatalog;
+     }
+   | { status: "error"; apps: []; error: Error; retry: RetryCatalog };
+ 
+ type CatalogSnapshot =
+   | { status: "loading"; apps: []; error: null }
+   | { status: "empty"; apps: []; error: null }
+   | { status: "success"; apps: AppManifest[]; error: null }
+   | { status: "error"; apps: []; error: Error };
+ 
+-export function useAppCatalog(): CatalogState {
++const AppCatalogContext = createContext<CatalogState | null>(null);
++
++export function isAppEnabled(
++  catalog: CatalogState,
++  appId: AppManifest["id"],
++): boolean {
++  return (
++    catalog.status === "success" &&
++    catalog.apps.some((app) => app.id === appId)
++  );
++}
++
++export function AppCatalogProvider({ children }: { children: ReactNode }) {
+   const [state, setState] = useState<CatalogSnapshot>({
+     status: "loading",
+     apps: [],
+     error: null,
+   });
+   const mountedRef = useRef(false);
++  const initialLoadStartedRef = useRef(false);
+   const requestIdRef = useRef(0);
+ 
+   const load = useCallback(async () => {
+     const requestId = ++requestIdRef.current;
+ 
+     if (mountedRef.current) {
+       setState({ status: "loading", apps: [], error: null });
+     }
+ 
+     try {
+@@ -63,20 +86,40 @@ export function useAppCatalog(): CatalogState {
+         error:
+           reason instanceof Error
+             ? reason
+             : new Error("Unable to load applications"),
+       });
+     }
+   }, []);
+ 
+   useEffect(() => {
+     mountedRef.current = true;
+-    void load();
++
++    if (!initialLoadStartedRef.current) {
++      initialLoadStartedRef.current = true;
++      void load();
++    }
+ 
+     return () => {
+       mountedRef.current = false;
+-      requestIdRef.current += 1;
+     };
+   }, [load]);
+ 
+-  return { ...state, retry: load };
++  const catalog = useMemo<CatalogState>(
++    () => ({ ...state, retry: load }),
++    [load, state],
++  );
++
++  return createElement(AppCatalogContext.Provider, { value: catalog }, children);
++}
++
++export function useAppCatalog(): CatalogState {
++  const catalog = useContext(AppCatalogContext);
++
++  if (catalog === null) {
++    throw new Error(
++      "useAppCatalog must be used within an AppCatalogProvider",
++    );
++  }
++
++  return catalog;
+ }

@@ -22,5 +22,8 @@ Baseline verification:
 - Task 7: implemented and static review clean (includes structured catalog errors and frontend-route validation hardening in Task 6 files; changes remain uncommitted; automated verification deferred).
 - Task 8: implemented and task-level static review clean (shared catalog state, reserved-route protection, and duplicate-route navigation handling; changes remain uncommitted; automated verification deferred).
 - Cross-task hardening: enabled dependency closure, backend route validation, `/apps` retryable error boundary, and Header accessibility fixes implemented; static review clean.
-- Architecture decisions required: independently isolate the shared Data Analyst/Presentation `analysis` router, and decide whether to migrate hard-coded application links outside Header in this foundation phase.
-- Git status: Tasks 6-8 and cross-task hardening remain uncommitted because Git metadata writes are blocked by the environment approval-usage limit.
+- Architecture decisions approved by user on 2026-07-17: independently isolate the shared Data Analyst/Presentation backend router ownership and extend manifest-driven filtering to application links outside Header.
+- Tasks 6-8 and cross-task hardening were committed as `68a8571` (`Latest`).
+- Backend router isolation: complete in `d95ecf9` (Data Analyst owns `analysis`; Presentation owns `presentation` and depends on Data Analyst; compatibility URL preserved; static review clean; runtime verification deferred).
+- Extended manifest filtering: complete in `2d096d4` (one root catalog provider; dashboard, chat sidebar, AuraSQL sidebar, and auth developer navigation filter by enabled manifests; independent static review clean; runtime verification deferred).
+- Combined architecture review: clean for `68a8571..d95ecf9` with no Critical, Important, or Minor findings; production slice statically approved. Executable verification remains deferred by user direction.
