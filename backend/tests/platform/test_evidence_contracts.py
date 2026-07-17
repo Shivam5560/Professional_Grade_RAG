@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -74,6 +76,42 @@ def test_computation_evidence_serializes_frozen_payloads_as_json():
 
     assert payload["parameters"] == {"columns": ["revenue"]}
     assert payload["assumptions"] == {"minimum_rows": "pass"}
+
+    round_trip = json.loads(evidence.model_dump_json())
+    assert round_trip["parameters"] == {"columns": ["revenue"]}
+
+
+def test_computation_evidence_copies_input_payload_before_freezing():
+    source = {"filters": [{"column": "region", "values": ["west"]}]}
+    evidence = ComputationEvidence(
+        id="ev-copy",
+        run_id="run-1",
+        dataset_snapshot_id="dataset-1",
+        method_id="descriptive-summary",
+        method_version="1.0.0",
+        parameters=source,
+        assumptions={},
+        output_digest="e" * 64,
+    )
+
+    source["filters"][0]["values"].append("east")
+
+    assert evidence.parameters["filters"][0]["values"] == ("west",)
+
+
+@pytest.mark.parametrize("unsupported", [{"bad": {"mutable"}}, {"bad": object()}])
+def test_computation_evidence_rejects_non_json_values(unsupported):
+    with pytest.raises(ValidationError):
+        ComputationEvidence(
+            id="ev-invalid",
+            run_id="run-1",
+            dataset_snapshot_id="dataset-1",
+            method_id="descriptive-summary",
+            method_version="1.0.0",
+            parameters=unsupported,
+            assumptions={},
+            output_digest="f" * 64,
+        )
 
 
 def test_claim_evidence_requires_source_span():

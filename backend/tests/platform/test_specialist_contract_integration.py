@@ -1,9 +1,16 @@
 from datetime import datetime, timezone
 
-from app.platform.approvals import ApprovalRequest
+from app.platform.approvals import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalStatus,
+    decide_approval,
+)
+from app.platform.artifacts import create_artifact_revision
 from app.platform.evidence import (
     ClaimEvidence,
     ComputationEvidence,
+    DerivedEvidence,
     VerificationStatus,
 )
 from app.platform.quality import AIResult, EvidenceReference, QualityMetadata
@@ -94,3 +101,62 @@ def test_career_draft_waits_for_approval_of_inferred_claim():
 
     assert waiting.state is StudioRunState.AWAITING_INPUT
     assert approval.proposed_changes == (claim.id,)
+
+
+def test_career_approval_unlocks_evidence_linked_artifact():
+    run = StudioRun(
+        id="run-publish",
+        owner_id=7,
+        studio_id="career",
+        operation="publish",
+        idempotency_key="publish-1",
+        input_fingerprint="c" * 64,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    waiting = transition_run(
+        transition_run(run, StudioRunState.RUNNING, now=NOW),
+        StudioRunState.AWAITING_INPUT,
+        now=NOW,
+        current_step="final-approval",
+        progress=0.9,
+    )
+    approval = ApprovalRequest(
+        id="approval-final",
+        run_id=run.id,
+        owner_id=run.owner_id,
+        decision_type="final-resume",
+        proposed_changes=("draft-7",),
+        evidence_ids=("claim-verified",),
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    approved = decide_approval(
+        approval,
+        ApprovalDecision.APPROVE,
+        reviewer_id=run.owner_id,
+        now=NOW,
+    )
+    derived = DerivedEvidence(
+        id="ev-draft",
+        parent_evidence_ids=approval.evidence_ids,
+        transformation="truth-preserving-draft",
+        transformation_version="1.0.0",
+        output_digest="d" * 64,
+    )
+    resumed = transition_run(waiting, StudioRunState.RUNNING, now=NOW)
+    succeeded = transition_run(resumed, StudioRunState.SUCCEEDED, now=NOW)
+    artifact = create_artifact_revision(
+        artifact_id="resume-7",
+        owner_id=run.owner_id,
+        studio_id=run.studio_id,
+        run_id=run.id,
+        media_type="application/pdf",
+        content_digest="e" * 64,
+        created_at=NOW,
+        evidence_ids=(derived.id,),
+    )
+
+    assert approved.status is ApprovalStatus.APPROVED
+    assert succeeded.state is StudioRunState.SUCCEEDED
+    assert artifact.evidence_ids == (derived.id,)

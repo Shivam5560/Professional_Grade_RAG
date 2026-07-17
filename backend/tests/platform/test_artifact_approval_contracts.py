@@ -11,6 +11,7 @@ from app.platform.approvals import (
     decide_approval,
 )
 from app.platform.artifacts import create_artifact_revision
+from app.platform.artifacts import ArtifactRevision
 
 
 NOW = datetime(2026, 7, 17, 12, 0, tzinfo=timezone.utc)
@@ -119,6 +120,22 @@ def test_artifact_revision_time_cannot_move_backwards():
         )
 
 
+def test_artifact_model_rejects_inconsistent_revision_lineage():
+    with pytest.raises(ValidationError):
+        ArtifactRevision(
+            revision_id="report-1:r7",
+            artifact_id="report-1",
+            revision=2,
+            owner_id=7,
+            studio_id="data-analyst",
+            run_id="run-2",
+            media_type="application/json",
+            content_digest="b" * 64,
+            supersedes_revision_id=None,
+            created_at=NOW,
+        )
+
+
 def test_pending_approval_accepts_one_terminal_decision():
     approved = decide_approval(
         make_approval(),
@@ -175,4 +192,24 @@ def test_decided_approval_requires_reviewer():
             status=ApprovalStatus.APPROVED,
             created_at=NOW,
             updated_at=NOW,
+        )
+
+
+def test_approval_decision_rejects_backdated_or_cross_owner_actor():
+    later = datetime(2026, 7, 17, 12, 1, tzinfo=timezone.utc)
+    pending = make_approval().model_copy(update={"updated_at": later})
+
+    with pytest.raises(InvalidApprovalDecision, match="earlier"):
+        decide_approval(
+            pending,
+            ApprovalDecision.APPROVE,
+            reviewer_id=7,
+            now=NOW,
+        )
+    with pytest.raises(InvalidApprovalDecision, match="owner"):
+        decide_approval(
+            pending,
+            ApprovalDecision.APPROVE,
+            reviewer_id=8,
+            now=later,
         )

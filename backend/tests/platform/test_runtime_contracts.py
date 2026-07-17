@@ -7,6 +7,7 @@ from app.platform.runtime import (
     InvalidRunTransition,
     StudioRun,
     StudioRunState,
+    request_run_cancellation,
     transition_run,
 )
 
@@ -82,3 +83,70 @@ def test_awaiting_input_can_resume_or_cancel():
 
     assert resumed.state is StudioRunState.RUNNING
     assert cancelled.state is StudioRunState.CANCELLED
+
+
+def test_run_rejects_updated_time_before_creation():
+    earlier = datetime(2026, 7, 17, 11, 59, tzinfo=timezone.utc)
+
+    with pytest.raises(ValidationError):
+        StudioRun(
+            id="run-2",
+            owner_id=7,
+            studio_id="career",
+            operation="draft",
+            idempotency_key="request-2",
+            input_fingerprint="b" * 64,
+            created_at=NOW,
+            updated_at=earlier,
+        )
+
+
+def test_transition_rejects_backdated_time_and_progress_regression():
+    later = datetime(2026, 7, 17, 12, 1, tzinfo=timezone.utc)
+    running = transition_run(
+        make_run(),
+        StudioRunState.RUNNING,
+        now=later,
+        progress=0.5,
+    )
+
+    with pytest.raises(InvalidRunTransition, match="earlier"):
+        transition_run(
+            running,
+            StudioRunState.AWAITING_INPUT,
+            now=NOW,
+        )
+    with pytest.raises(InvalidRunTransition, match="progress"):
+        transition_run(
+            running,
+            StudioRunState.AWAITING_INPUT,
+            now=later,
+            progress=0.25,
+        )
+
+
+def test_failed_transition_requires_categorized_failure_code():
+    running = transition_run(make_run(), StudioRunState.RUNNING, now=NOW)
+
+    with pytest.raises(InvalidRunTransition, match="failure_code"):
+        transition_run(running, StudioRunState.FAILED, now=NOW)
+
+    failed = transition_run(
+        running,
+        StudioRunState.FAILED,
+        now=NOW,
+        failure_code="validation-error",
+    )
+    assert failed.failure_code == "validation-error"
+
+
+def test_cancellation_request_is_distinct_from_cancelled_completion():
+    running = transition_run(make_run(), StudioRunState.RUNNING, now=NOW)
+    requested = request_run_cancellation(running, now=NOW)
+
+    assert requested.state is StudioRunState.RUNNING
+    assert requested.cancellation_requested is True
+
+    cancelled = transition_run(requested, StudioRunState.CANCELLED, now=NOW)
+    assert cancelled.state is StudioRunState.CANCELLED
+    assert cancelled.cancellation_requested is True

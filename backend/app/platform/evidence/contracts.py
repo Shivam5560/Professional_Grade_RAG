@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
+from math import isfinite
 from types import MappingProxyType
 from typing import Any, Literal
 
@@ -9,9 +10,30 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     field_serializer,
     field_validator,
 )
+
+
+def _validate_json_value(value: Any, *, path: str = "parameters") -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise ValueError(f"{path} contains a non-finite number")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{path} contains a non-string key")
+            _validate_json_value(item, path=f"{path}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _validate_json_value(item, path=f"{path}[{index}]")
+        return
+    raise ValueError(f"{path} contains unsupported value type {type(value).__name__}")
 
 
 def _freeze(value: Any) -> Any:
@@ -19,7 +41,9 @@ def _freeze(value: Any) -> Any:
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(item) for item in value)
-    return value
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise ValueError(f"unsupported JSON value type {type(value).__name__}")
 
 
 def _thaw(value: Any) -> Any:
@@ -52,7 +76,7 @@ class ComputationEvidence(BaseModel):
     dataset_snapshot_id: str = Field(min_length=1)
     method_id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     method_version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
-    parameters: Mapping[str, Any] = Field(default_factory=dict)
+    parameters: Mapping[str, JsonValue] = Field(default_factory=dict)
     random_seed: int | None = None
     assumptions: Mapping[str, str] = Field(default_factory=dict)
     output_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -70,6 +94,12 @@ class ComputationEvidence(BaseModel):
     def reject_blank_artifact_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if any(not item.strip() for item in value):
             raise ValueError("evidence identifiers must not be blank")
+        return value
+
+    @field_validator("parameters", mode="before")
+    @classmethod
+    def require_json_parameters(cls, value: Any) -> Any:
+        _validate_json_value(value)
         return value
 
     @field_validator("parameters", "assumptions")

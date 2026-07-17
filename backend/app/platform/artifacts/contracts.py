@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ArtifactRevision(BaseModel):
@@ -47,6 +47,20 @@ class ArtifactRevision(BaseModel):
             raise ValueError("artifact timestamps must be timezone-aware")
         return value
 
+    @model_validator(mode="after")
+    def validate_revision_lineage(self) -> "ArtifactRevision":
+        expected_revision_id = f"{self.artifact_id}:r{self.revision}"
+        if self.revision_id != expected_revision_id:
+            raise ValueError("revision_id must match artifact_id and revision")
+        if self.revision == 1:
+            if self.supersedes_revision_id is not None:
+                raise ValueError("first artifact revision cannot supersede another revision")
+        else:
+            expected_parent = f"{self.artifact_id}:r{self.revision - 1}"
+            if self.supersedes_revision_id != expected_parent:
+                raise ValueError("artifact revision must supersede its immediate parent")
+        return self
+
 
 def create_artifact_revision(
     *,
@@ -60,6 +74,11 @@ def create_artifact_revision(
     evidence_ids: tuple[str, ...] = (),
     previous: ArtifactRevision | None = None,
 ) -> ArtifactRevision:
+    """Create a revision candidate.
+
+    Persistence must atomically compare ``previous.revision_id`` and enforce a
+    unique ``(artifact_id, revision)`` constraint before accepting this value.
+    """
     revision = 1
     supersedes = None
     if previous is not None:

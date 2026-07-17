@@ -87,6 +87,10 @@ def decide_approval(
         raise InvalidApprovalDecision("only pending approvals can be decided")
     if reviewer_id <= 0:
         raise InvalidApprovalDecision("reviewer_id must be positive")
+    if reviewer_id != request.owner_id:
+        raise InvalidApprovalDecision("approval reviewer must be the run owner")
+    if now < request.updated_at:
+        raise InvalidApprovalDecision("approval decision cannot be earlier than updated_at")
 
     normalized_comment = comment.strip() if comment else None
     if decision is ApprovalDecision.REVISE and not normalized_comment:
