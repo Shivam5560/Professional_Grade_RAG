@@ -1,14 +1,14 @@
 export const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export const durations = {
-  fast: 0.2,
-  medium: 0.32,
-  slow: 0.5,
-};
+  fast: 0.16,
+  medium: 0.28,
+  slow: 0.48,
+} as const;
 
 export const fadeUp = {
-  hidden: { opacity: 0, y: 16, filter: "blur(6px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)" },
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0 },
 };
 
 export const fadeIn = {
@@ -20,7 +20,7 @@ export const staggerContainer = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: 0.07,
     },
   },
 };

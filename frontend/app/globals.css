@@ -377,6 +377,27 @@
     }
   }
 
+  @keyframes nexus-orbit {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes nexus-breathe {
+    50% {
+      transform: scale(1.035);
+      opacity: 0.72;
+    }
+  }
+
+  .nexus-orbit {
+    animation: nexus-orbit 18s linear infinite;
+  }
+
+  .nexus-breathe {
+    animation: nexus-breathe 6s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .float-slow,
     .float-slower,
@@ -387,6 +408,11 @@
     }
 
     .marquee-track {
+      animation: none;
+    }
+
+    .nexus-orbit,
+    .nexus-breathe {
       animation: none;
     }
   }
