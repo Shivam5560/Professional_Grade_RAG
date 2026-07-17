@@ -42,3 +42,17 @@ ModuleNotFoundError: No module named 'app.studios'
 .......                                                                  [100%]
 7 passed in 0.88s
 ```
+
+### 2. Dataset profiling — RED
+
+```text
+ModuleNotFoundError: No module named 'app.studios.data_analyst.profiling'
+1 error in 3.51s
+```
+
+### 2. Dataset profiling — GREEN
+
+```text
+......                                                                   [100%]
+6 passed in 1.28s
+```
