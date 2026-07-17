@@ -33,13 +33,12 @@ export function Header({
   const router = useRouter();
   const pathname = usePathname();
   const isAuraSql = pathname?.startsWith('/aurasql');
-  const isResume = pathname?.startsWith('/nexus');
-  const isResumeGen = pathname?.startsWith('/nexus/generate');
+  const isCareer = pathname?.startsWith('/career') || pathname?.startsWith('/nexus');
   const isAnalysis = pathname?.startsWith('/analysis');
   const isWorkflows = pathname?.startsWith('/workflows') || isAnalysis;
-  const brandTitle = isAuraSql ? 'AuraSQL' : isResumeGen ? 'ResumeGen' : isResume ? 'Nexus' : isWorkflows ? 'Workflows' : 'NexusMind';
-  const brandSubtitle = isAuraSql ? 'SQL Studio' : isResumeGen ? 'PDF Builder' : isResume ? 'Resume Studio' : isWorkflows ? 'Agents & Workflows' : 'Studio';
-  const brandMark = isAuraSql ? 'AS' : isResumeGen ? 'RG' : isResume ? 'RS' : isWorkflows ? 'WF' : 'NX';
+  const brandTitle = isAuraSql ? 'AuraSQL' : isCareer ? 'Career Studio' : isAnalysis ? 'Data Analyst' : isWorkflows ? 'Workflows' : 'NexusMind';
+  const brandSubtitle = isAuraSql ? 'SQL Studio' : isCareer ? 'Evidence & applications' : isAnalysis ? 'Verified analytics' : isWorkflows ? 'Agents & Workflows' : 'Studio';
+  const brandMark = isAuraSql ? 'AS' : isCareer ? 'CS' : isAnalysis ? 'DA' : isWorkflows ? 'WF' : 'NX';
   const [llmHealthy, setLlmHealthy] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const appCatalog = useAppCatalog();

@@ -1,283 +1,75 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import {
-  ArrowRight,
-  BarChart3,
-  FileSpreadsheet,
-  History,
-  Lightbulb,
-  MessageSquare,
-  Sparkles,
-  Upload,
-} from 'lucide-react';
-import { FileDropzone } from '@/components/analysis/FileDropzone';
-import { AnalysisConfigAccordion } from '@/components/analysis/AnalysisConfigAccordion';
-import { PageShell, SectionPanel } from '@/components/layout/PageShell';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { ErrorState, LoadingOverlay } from '@/components/ui/loading-state';
-import { apiClient } from '@/lib/api';
-import { useAnalysisStore } from '@/lib/analysis/store';
-import { useJobs } from '@/components/providers/JobProvider';
-import type { AnalysisConfig } from '@/lib/analysis/types';
+import Link from "next/link";
+import { useReducer, useState } from "react";
+import { BarChart3, History, Play, Upload } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
+import { DataAnalystWorkspace } from "@/components/studios/data-analyst/DataAnalystWorkspace";
+import { StudioPanel, StatusPill } from "@/components/studios/StudioPrimitives";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { dataAnalystClient } from "@/lib/studios/data-analyst/client";
+import { analysisWorkspaceReducer, initialAnalysisWorkspace } from "@/lib/studios/data-analyst/reducer";
+import type { Computation, Finding, PlanStep } from "@/lib/studios/data-analyst/types";
 
-const SAMPLE_QUERIES = [
-  {
-    label: 'Trend Analysis',
-    query: 'What are the key trends and patterns in this data? Identify any significant changes over time.',
-    icon: BarChart3,
-  },
-  {
-    label: 'Driver Analysis',
-    query: 'Which factors most strongly influence the target variable? Rank them by importance and explain the relationships.',
-    icon: Lightbulb,
-  },
-  {
-    label: 'Full Exploration',
-    query: 'Perform a comprehensive exploratory analysis: distributions, correlations, anomalies, and key segments.',
-    icon: Sparkles,
-  },
-];
-
-const STEPS = [
-  { icon: Upload, title: 'Upload', desc: 'Drop your CSV or Excel file' },
-  { icon: MessageSquare, title: 'Ask', desc: 'Describe what you want to know' },
-  { icon: Sparkles, title: 'Insights', desc: 'AI analyzes and generates a report' },
-];
-
-const OUTPUTS = [
-  'Interactive report with charts and narrative',
-  'Downloadable PPTX slide deck',
-  'Key insights ranked by significance',
-  'Strategic recommendations',
-];
-
-export default function AnalysisHubPage() {
-  const router = useRouter();
-  const { reset } = useAnalysisStore();
+export default function AnalysisStudioPage() {
+  const [state, dispatch] = useReducer(analysisWorkspaceReducer, initialAnalysisWorkspace);
   const [file, setFile] = useState<File | null>(null);
-  const [query, setQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<AnalysisConfig>({
-    max_rows: 50000,
-    include_predictive: true,
-    output_format: ['interactive', 'pptx'],
-  });
+  const [question, setQuestion] = useState("");
+  const [plan, setPlan] = useState<PlanStep[]>([]);
+  const [computations, setComputations] = useState<Computation[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [limitations, setLimitations] = useState<string[]>([]);
 
-  const { addJob, removeJob, isJobActive } = useJobs();
-  const isStartingAnalysis = isJobActive('start_analysis');
-
-  useEffect(() => {
-    reset();
-  }, [reset]);
-
-  const handleSubmit = async () => {
-    if (!file || !query.trim() || isStartingAnalysis) return;
-    setError(null);
-
-    const tempJobId = `temp_uploading_${Date.now()}`;
-    addJob({
-      id: tempJobId,
-      type: 'start_analysis',
-      status: 'running',
-      title: 'Starting analysis',
-      description: file.name,
-      message: 'Uploading dataset and preparing the workflow.',
-      href: '/analysis',
-    });
-
+  async function start() {
+    if (!file || question.trim().length < 3) return;
+    dispatch({ type: "loading" });
     try {
-      const uploadData = await apiClient.uploadAnalysisFile(file);
-      if (!uploadData.source_id) throw new Error('Upload failed - no source ID returned');
-
-      const startData = await apiClient.startAnalysisFromUpload({
-        source_id: uploadData.source_id,
-        query,
-        config: config as unknown as Record<string, unknown>,
-      });
-
-      if (startData.job_id) {
-        addJob({
-          id: startData.job_id,
-          type: 'analysis',
-          status: 'running',
-          title: 'Analysis workflow',
-          description: query,
-          message: 'Agents are analyzing the uploaded dataset.',
-          href: `/analysis/${startData.job_id}`,
-        });
-        router.push(`/analysis/${startData.job_id}`);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start analysis');
-      console.error('Failed to start analysis:', err);
-    } finally {
-      removeJob(tempJobId);
+      const snapshot = await dataAnalystClient.createDataset(file);
+      dispatch({ type: "profile-loaded", profile: normalizeProfile(snapshot.profile) });
+      const response = await dataAnalystClient.createRun({ snapshot_id: snapshot.snapshot_id, question: question.trim() }, crypto.randomUUID());
+      const run = { ...response.run, question: response.run.question ?? question.trim() };
+      dispatch({ type: "run-loaded", run });
+      setPlan(normalizePlan(response.plan, run.state));
+      const [nextComputations, nextFindings, report] = await Promise.all([
+        dataAnalystClient.getComputations(run.id),
+        dataAnalystClient.getClaims(run.id),
+        dataAnalystClient.getReport(run.id).catch(() => ({ limitations: run.warnings ?? [] })),
+      ]);
+      setComputations(nextComputations);
+      setFindings(nextFindings);
+      setLimitations(report.limitations ?? []);
+    } catch (reason) {
+      dispatch({ type: "failed", message: reason instanceof Error ? reason.message : "Unable to start analysis" });
     }
-  };
+  }
 
-  const isReady = Boolean(file && query.trim().length > 0);
+  async function cancel() {
+    if (!state.activeRun) return;
+    try { await dataAnalystClient.cancelRun(state.activeRun.id); } finally { dispatch({ type: "cancelled", runId: state.activeRun.id }); }
+  }
 
-  return (
-    <PageShell
-      title="Data Storyteller"
-      eyebrow="Analysis workflow"
-      description="Upload a spreadsheet, ask a focused question, and let the analysis agents produce insights and a report."
-      actions={
-        <Button variant="outline" asChild>
-          <Link href="/analysis/history" className="gap-2">
-            <History className="h-4 w-4" />
-            History
-          </Link>
-        </Button>
-      }
-      maxWidth="6xl"
-    >
-      {isStartingAnalysis ? (
-        <LoadingOverlay
-          title="Starting analysis"
-          description="Uploading your file and spawning the analysis agents."
-        />
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          <SectionPanel>
-            <div className="mb-4 flex items-center gap-2">
-              <StepNumber value={1} />
-              <h2 className="text-sm font-semibold">Upload your data</h2>
-            </div>
-            <FileDropzone onFileSelect={setFile} selectedFile={file} />
-          </SectionPanel>
-
-          <SectionPanel>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <StepNumber value={2} />
-                <h2 className="text-sm font-semibold">Ask the business question</h2>
-              </div>
-              {query.length > 0 ? <span className="text-xs text-muted-foreground">{query.length} chars</span> : null}
-            </div>
-            <Textarea
-              id="analysis-query"
-              placeholder="e.g., What are the key trends in revenue and which factors drive customer churn?"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              rows={5}
-              className="resize-none"
-            />
-
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Sample prompts</p>
-              <div className="flex flex-wrap gap-2">
-                {SAMPLE_QUERIES.map((sample) => (
-                  <button
-                    key={sample.label}
-                    onClick={() => setQuery(sample.query)}
-                    className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <sample.icon className="h-3 w-3" />
-                    {sample.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </SectionPanel>
-
-          <SectionPanel>
-            <div className="mb-4 flex items-center gap-2">
-              <StepNumber value={3} />
-              <h2 className="text-sm font-semibold">Configure and run</h2>
-            </div>
-
-            <AnalysisConfigAccordion config={config} onChange={setConfig} />
-
-            {error ? <ErrorState className="mt-4" title="Analysis could not start" description={error} /> : null}
-
-            <Button
-              id="start-analysis-btn"
-              onClick={handleSubmit}
-              disabled={!isReady || isStartingAnalysis}
-              className="mt-4 w-full gap-2"
-              size="lg"
-            >
-              {isStartingAnalysis ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Uploading and starting
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Start Analysis
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
-
-            {!isReady && !isStartingAnalysis ? (
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                {!file ? 'Upload a file to continue' : 'Enter a question to continue'}
-              </p>
-            ) : null}
-          </SectionPanel>
-        </div>
-
-        <aside className="space-y-5">
-          <SectionPanel>
-            <h3 className="mb-4 text-sm font-semibold">How it works</h3>
-            <div className="space-y-4">
-              {STEPS.map((step) => (
-                <div key={step.title} className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <step.icon className="h-4 w-4 text-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{step.title}</p>
-                    <p className="text-xs text-muted-foreground">{step.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionPanel>
-
-          <SectionPanel>
-            <h3 className="mb-3 text-sm font-semibold">Supported formats</h3>
-            <div className="space-y-2">
-              {['CSV', 'Excel (.xlsx)'].map((format) => (
-                <div key={format} className="flex items-center gap-2.5 rounded-md border bg-background p-2.5">
-                  <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-xs font-medium">{format}</p>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">Maximum file size: 100 MB. Up to 100,000 rows.</p>
-          </SectionPanel>
-
-          <SectionPanel>
-            <h3 className="mb-3 text-sm font-semibold">Outputs</h3>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              {OUTPUTS.map((output) => (
-                <li key={output} className="flex items-start gap-2">
-                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" />
-                  {output}
-                </li>
-              ))}
-            </ul>
-          </SectionPanel>
-        </aside>
-      </div>
-    </PageShell>
-  );
+  return <PageShell title="Data Analyst Studio" eyebrow="Evidence-first analytics" description="Profile the dataset, inspect the chosen methods, and trace every published number to deterministic computation evidence." maxWidth="full" actions={<div className="flex gap-2"><Button asChild variant="outline"><Link href="/analysis/history"><History className="mr-2 h-4 w-4" />Run history</Link></Button>{state.activeRun && ["queued", "running"].includes(state.activeRun.state) ? <Button onClick={cancel} variant="destructive">Cancel run</Button> : null}</div>}>
+    <div className="mb-5 grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
+      <StudioPanel title="Start a governed analysis" description="CSV snapshots are immutable. Questions should name the decision or relationship you need to understand.">
+        <label className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-4 hover:border-primary/40">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-background"><Upload className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{file?.name ?? "Choose a CSV dataset"}</span><span className="text-xs text-muted-foreground">UTF-8 CSV · maximum limits are enforced by the server</span></span><input className="sr-only" type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+        </label>
+        <Textarea className="mt-3 min-h-24 resize-none" aria-label="Analysis question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Which factors are associated with higher customer retention, and how stable is the evidence?" />
+        {state.error ? <p className="mt-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">{state.error}</p> : null}
+        <Button className="mt-3 w-full" disabled={!file || question.trim().length < 3 || state.loading} onClick={start}>{state.loading ? <><span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />Running verified workflow</> : <><Play className="mr-2 h-4 w-4" />Profile and analyze</>}</Button>
+      </StudioPanel>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Run contract</p><h2 className="mt-1 text-lg font-semibold">Reproducible by construction</h2></div>{state.activeRun ? <StatusPill state={state.activeRun.state} /> : <BarChart3 className="h-5 w-5 text-[hsl(var(--data))]" />}</div><div className="mt-5 grid gap-3 sm:grid-cols-3">{[["Profile", "Types, missingness, identifiers, sensitive fields"], ["Compute", "Registered methods, assumptions, versions, digests"], ["Verify", "Evidence-linked claims, limitations, no false causality"]].map(([title, body], index) => <div className="rounded-lg border border-border bg-muted/20 p-4" key={title}><span className="font-mono text-[10px] text-muted-foreground">0{index + 1}</span><p className="mt-2 text-xs font-semibold">{title}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{body}</p></div>)}</div></div>
+    </div>
+    <DataAnalystWorkspace profile={state.profile} run={state.activeRun} plan={plan} computations={computations} findings={findings} limitations={limitations} />
+  </PageShell>;
 }
 
-function StepNumber({ value }: { value: number }) {
-  return (
-    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-muted text-xs font-semibold text-foreground">
-      {value}
-    </span>
-  );
+function normalizeProfile(profile: any) {
+  return { ...profile, warnings: profile.warnings ?? [], columns: (profile.columns ?? []).map((column: any) => ({ ...column, inferred_type: column.inferred_type ?? column.semantic_type ?? column.dtype ?? "unknown" })) };
+}
+
+function normalizePlan(value: any, state: string): PlanStep[] {
+  const steps = Array.isArray(value) ? value : value?.steps ?? [];
+  return steps.map((step: any) => ({ id: step.id, method_id: step.method_id, title: step.title ?? step.rationale ?? step.method_id, state: step.state ?? (state === "succeeded" ? "completed" : "pending"), assumptions: step.assumptions ?? [], depends_on: step.depends_on ?? step.prerequisite_step_ids ?? [] }));
 }
