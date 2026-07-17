@@ -130,6 +130,7 @@ class ClaimObject(BaseModel):
     kind: ClaimValueKind
     value: JsonScalar
     unit: str | None = Field(default=None, max_length=100)
+    measure: str | None = Field(default=None, max_length=200)
 
     @field_validator("value")
     @classmethod
@@ -140,9 +141,9 @@ class ClaimObject(BaseModel):
             raise ValueError("numeric claim object value must be finite")
         return value
 
-    @field_validator("unit")
+    @field_validator("unit", "measure")
     @classmethod
-    def normalize_unit(cls, value: str | None) -> str | None:
+    def normalize_metric_descriptor(cls, value: str | None) -> str | None:
         if value is None:
             return None
         normalized = value.strip()
@@ -155,6 +156,10 @@ class ClaimObject(BaseModel):
                 raise ValueError("metric claim values must be numeric")
             if self.unit is None:
                 raise ValueError("metric claim values require a unit")
+            if self.measure is None:
+                raise ValueError("metric claim values require a measure")
+        elif self.unit is not None or self.measure is not None:
+            raise ValueError("only metric claim values may define unit or measure")
         return self
 
 

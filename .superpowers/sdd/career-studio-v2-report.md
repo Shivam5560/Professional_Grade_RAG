@@ -241,3 +241,48 @@ Observed: the residue scan and whitespace check produced no findings. Every comm
 - Composite evidence reuse is intentionally absent from this first slice; every atomic claim is one-to-one, which satisfies the stricter no-double-counting rule.
 - Persistence, APIs, source extraction, ATS layout, artifact rendering, frontend, interview coaching, and cover letters remain excluded by the assigned delivery boundary.
 - The optimizer directly imports SciPy as explicitly allowed. Adding SciPy as a direct production dependency is outside the strictly owned paths; the isolated verification command supplies it explicitly.
+
+### Cycle 6 RED — independent Truth Guardian adversarial review
+
+Commands:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_claims_requirements.py::test_metric_claim_requires_typed_unit_and_measure tests/studios/career/test_truth_guardian.py::test_raw_prose_assertions_are_reconciled_without_trusting_fact_metadata tests/studios/career/test_truth_guardian.py::test_metric_scalar_cannot_move_between_unit_measure_and_context tests/studios/career/test_truth_guardian.py::test_evidence_references_exact_used_span_with_deterministic_deduplication tests/studios/career/test_truth_guardian.py::test_long_used_source_span_retains_locator_without_snippet_overflow -q -rA
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_truth_guardian.py::test_evidence_references_exact_used_span_with_deterministic_deduplication -q
+```
+
+Observed expected failures:
+
+```text
+FAILED test_metric_claim_requires_typed_unit_and_measure - DID NOT RAISE
+FAILED test_raw_prose_assertions_are_reconciled_without_trusting_fact_metadata - missing unsupported prose/date issues
+FAILED test_metric_scalar_cannot_move_between_unit_measure_and_context - draft did not abstain
+FAILED test_long_used_source_span_retains_locator_without_snippet_overflow - EvidenceReference snippet exceeds 1000 characters
+4 failed, 1 passed in 11.05s
+
+FAILED test_evidence_references_exact_used_span_with_deterministic_deduplication - expected project:second, got skills:first
+1 failed in 1.72s
+```
+
+The failures confirm four context-loss defects: caller metadata was trusted for nonnumeric prose, metric values lost unit/measure binding, claim-level evidence hardcoded the first span, and evidence snippets were not bounded.
+
+### Cycle 6 GREEN — independent Truth Guardian adversarial review
+
+Commands used an isolated, offline uv environment backed by the sandbox-writable shared cache at `/tmp/data-analyst-v2-uv-cache` after home-cache escalation became unavailable:
+
+```bash
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_claims_requirements.py::test_metric_claim_requires_typed_unit_and_measure tests/studios/career/test_truth_guardian.py::test_raw_prose_assertions_are_reconciled_without_trusting_fact_metadata tests/studios/career/test_truth_guardian.py::test_metric_scalar_cannot_move_between_unit_measure_and_context tests/studios/career/test_truth_guardian.py::test_evidence_references_exact_used_span_with_deterministic_deduplication tests/studios/career/test_truth_guardian.py::test_long_used_source_span_retains_locator_without_snippet_overflow -q --junitxml=/tmp/career-review-green.xml
+UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career -q --junitxml=/tmp/career-review-full.xml
+```
+
+Observed:
+
+```text
+.....                                                                    [100%]
+5 passed in 1.91s
+
+..............................................                           [100%]
+46 passed in 1.89s
+```
+
+Truth Guardian now uses a conservative independent prose-token policy, distinguishes unsupported dates, binds numeric mentions to metric scalar/unit/measure and the exact cited claim context, resolves evidence from the exact before-text span, deduplicates deterministically, and safely bounds evidence snippets.

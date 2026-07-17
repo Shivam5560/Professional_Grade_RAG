@@ -38,6 +38,7 @@ class AssertedFact(BaseModel):
     kind: ClaimValueKind
     value: JsonScalar
     unit: str | None = Field(default=None, max_length=100)
+    measure: str | None = Field(default=None, max_length=200)
     source_claim_ids: tuple[str, ...] = ()
 
     @field_validator("source_claim_ids")
@@ -47,7 +48,12 @@ class AssertedFact(BaseModel):
 
     @model_validator(mode="after")
     def validate_fact_value(self) -> Self:
-        ClaimObject(kind=self.kind, value=self.value, unit=self.unit)
+        ClaimObject(
+            kind=self.kind,
+            value=self.value,
+            unit=self.unit,
+            measure=self.measure,
+        )
         return self
 
 

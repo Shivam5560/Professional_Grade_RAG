@@ -50,12 +50,13 @@ def claim(
     end: date = date(2024, 12, 31),
     status: VerificationStatus = VerificationStatus.VERIFIED,
     unit: str | None = None,
+    measure: str | None = None,
 ) -> CareerClaim:
     locator = f"claim:{kind.value}:{str(value).casefold().replace(' ', '-')}"
     return CareerClaim.create(
         subject=SUBJECT,
         predicate=predicate,
-        object=ClaimObject(kind=kind, value=value, unit=unit),
+        object=ClaimObject(kind=kind, value=value, unit=unit, measure=measure),
         source_spans=(
             SourceSpan(
                 source_id="resume-1",
@@ -96,6 +97,7 @@ def fact(source: CareerClaim, *, value: str | int | float | bool | None = None) 
         kind=source.object.kind,
         value=source.object.value if value is None else value,
         unit=source.object.unit,
+        measure=getattr(source.object, "measure", None),
         source_claim_ids=(source.id,),
     )
 
@@ -158,6 +160,7 @@ def test_fabricated_or_rounded_up_metric_abstains() -> None:
         ClaimValueKind.METRIC,
         19.6,
         unit="percent",
+        measure="throughput",
         exact_text="Improved throughput by 19.6 percent.",
         predicate=ClaimPredicate.MEASURED,
     )
@@ -183,6 +186,7 @@ def test_metric_hidden_from_structured_facts_is_still_rejected() -> None:
         ClaimValueKind.METRIC,
         19.6,
         unit="percent",
+        measure="throughput",
         exact_text="Improved throughput by 19.6 percent.",
         predicate=ClaimPredicate.MEASURED,
     )
@@ -254,7 +258,7 @@ def test_supported_keyword_is_accepted_and_resolves_to_claim() -> None:
         bullets=(
             bullet(
                 (python_claim,),
-                after_text="Built production Python services.",
+                after_text="Production Python.",
                 asserted_facts=(fact(python_claim),),
                 added_keywords=(
                     AddedKeyword(
@@ -401,3 +405,137 @@ def test_missing_before_text_abstains_as_missing_provenance() -> None:
 
     assert result.output is None
     assert "missing-provenance" in critical_codes(result)
+
+
+def test_raw_prose_assertions_are_reconciled_without_trusting_fact_metadata() -> None:
+    python_claim = claim(
+        ClaimValueKind.SKILL,
+        "Python",
+        exact_text="Used Python in production.",
+        predicate=ClaimPredicate.HAS_SKILL,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (python_claim,),
+                after_text=(
+                    "Principal Engineer at Google with a PhD using Rust and Python "
+                    "in 2025."
+                ),
+                asserted_facts=(fact(python_claim),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(python_claim,), for_publication=True)
+
+    assert result.output is None
+    assert {"unsupported-text-assertion", "unsupported-date"} <= critical_codes(
+        result
+    )
+
+
+def test_metric_scalar_cannot_move_between_unit_measure_and_context() -> None:
+    throughput = claim(
+        ClaimValueKind.METRIC,
+        20,
+        unit="percent",
+        measure="throughput",
+        exact_text="Improved throughput by 20 percent.",
+        predicate=ClaimPredicate.MEASURED,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (throughput,),
+                after_text="Generated $20 million in revenue.",
+                asserted_facts=(
+                    AssertedFact(
+                        kind=ClaimValueKind.METRIC,
+                        value=20,
+                        unit="percent",
+                        measure="throughput",
+                        source_claim_ids=(throughput.id,),
+                    ),
+                ),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(throughput,), for_publication=True)
+
+    assert result.output is None
+    assert "metric-altered" in critical_codes(result)
+
+
+def test_evidence_references_exact_used_span_with_deterministic_deduplication() -> None:
+    first = SourceSpan(
+        source_id="a-resume-1",
+        locator="skills:first",
+        exact_text="Python appears in the skills list.",
+    )
+    second = SourceSpan(
+        source_id="z-portfolio-1",
+        locator="project:second",
+        exact_text="Used Python to build the project API.",
+    )
+    python_claim = CareerClaim.create(
+        subject=SUBJECT,
+        predicate=ClaimPredicate.HAS_SKILL,
+        object=ClaimObject(kind=ClaimValueKind.SKILL, value="Python"),
+        source_spans=(first, second),
+        temporal_scope=TemporalScope(
+            start=date(2023, 1, 1),
+            end=date(2024, 12, 31),
+        ),
+        verification_status=VerificationStatus.VERIFIED,
+        confidence=0.95,
+        verifier_id="reviewer-7",
+        context=ClaimContext(
+            employer_id="employer-acme",
+            project_id="project-platform",
+        ),
+    )
+    used_bullet = DraftBullet(
+        source_claim_ids=(python_claim.id,),
+        transformation=DraftTransformation.VERBATIM,
+        before_text=(second.exact_text,),
+        after_text=second.exact_text,
+        asserted_facts=(fact(python_claim),),
+    )
+    draft = ResumeDraft.create(bullets=(used_bullet, used_bullet))
+
+    result = validate_draft(draft, claims=(python_claim,), for_publication=True)
+
+    assert result.output is not None
+    assert len(result.evidence) == 1
+    assert result.evidence[0].source_id == python_claim.id
+    assert result.evidence[0].locator == second.locator
+    assert result.evidence[0].snippet == second.exact_text
+
+
+def test_long_used_source_span_retains_locator_without_snippet_overflow() -> None:
+    long_text = "Python " + ("production-service " * 80)
+    long_claim = claim(
+        ClaimValueKind.SKILL,
+        "Python",
+        exact_text=long_text,
+        predicate=ClaimPredicate.HAS_SKILL,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (long_claim,),
+                transformation=DraftTransformation.VERBATIM,
+                after_text=long_text,
+                asserted_facts=(fact(long_claim),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(long_claim,), for_publication=True)
+
+    assert result.output is not None
+    assert result.evidence[0].locator == long_claim.source_spans[0].locator
+    assert result.evidence[0].snippet is not None
+    assert len(result.evidence[0].snippet) <= 1000

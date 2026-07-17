@@ -26,6 +26,7 @@ def draft_from_matches(match_result: CareerMatchResult) -> ResumeDraft:
                         kind=claim.object.kind,
                         value=claim.object.value,
                         unit=claim.object.unit,
+                        measure=claim.object.measure,
                         source_claim_ids=(claim.id,),
                     ),
                 ),

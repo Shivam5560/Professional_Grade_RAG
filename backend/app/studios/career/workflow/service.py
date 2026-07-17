@@ -21,6 +21,7 @@ from app.studios.career.domain.matching import (
     CandidateEdge,
     CareerMatchResult,
 )
+from app.studios.career.domain.provenance import safe_evidence_snippet
 from app.studios.career.domain.requirements import RoleRequirement
 from app.studios.career.matching import match_requirements
 from app.studios.career.validation import validate_draft
@@ -127,11 +128,12 @@ def _inferred_result(
         evidence=tuple(
             EvidenceReference(
                 source_id=claim.id,
-                locator=claim.source_spans[0].locator,
-                snippet=claim.source_spans[0].exact_text,
+                locator=span.locator,
+                snippet=safe_evidence_snippet(span.exact_text),
                 relevance=1.0,
             )
             for claim in claims
+            for span in claim.source_spans
         ),
         quality=QualityMetadata(
             algorithm_versions={"career-specialist": "1.0.0"},

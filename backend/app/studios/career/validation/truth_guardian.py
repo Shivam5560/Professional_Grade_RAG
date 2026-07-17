@@ -16,6 +16,7 @@ from app.studios.career.domain.claims import (
     CareerClaim,
     ClaimValueKind,
     JsonScalar,
+    SourceSpan,
 )
 from app.studios.career.domain.drafts import (
     AssertedFact,
@@ -23,8 +24,43 @@ from app.studios.career.domain.drafts import (
     DraftTransformation,
     ResumeDraft,
 )
+from app.studios.career.domain.provenance import safe_evidence_snippet
 
 _NUMBER_PATTERN = re.compile(r"(?<![\w.])[-+]?\d+(?:,\d{3})*(?:\.\d+)?%?")
+_DATE_PATTERN = re.compile(
+    r"\b(?:19|20)\d{2}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?\b"
+)
+_WORD_PATTERN = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
+_CLAUSE_DELIMITER = re.compile(r"[.;,\n]|\band\b", re.IGNORECASE)
+_NEUTRAL_PROSE_TOKENS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "with",
+        "without",
+        "using",
+        "for",
+        "to",
+        "of",
+        "in",
+        "on",
+        "by",
+        "at",
+        "from",
+        "as",
+        "across",
+        "through",
+        "into",
+        "within",
+        "during",
+        "via",
+        "per",
+    }
+)
 _UNSUPPORTED_CODE = {
     ClaimValueKind.EMPLOYER: "unsupported-employer",
     ClaimValueKind.TITLE: "unsupported-title",
@@ -33,6 +69,8 @@ _UNSUPPORTED_CODE = {
     ClaimValueKind.DEGREE: "unsupported-degree",
     ClaimValueKind.METRIC: "metric-altered",
 }
+
+UsedSpan = tuple[CareerClaim, SourceSpan]
 
 
 def _critical(code: str, message: str) -> ValidationIssue:
@@ -46,6 +84,24 @@ def _critical(code: str, message: str) -> ValidationIssue:
 
 def _normalized_text(value: str) -> str:
     return " ".join(value.casefold().split())
+
+
+def _word_tokens(value: str) -> tuple[str, ...]:
+    return tuple(match.group(0).casefold() for match in _WORD_PATTERN.finditer(value))
+
+
+def _phrase_is_present(text: str, phrase: str) -> bool:
+    if phrase.strip() == "%":
+        return "%" in text
+    phrase_tokens = _word_tokens(phrase)
+    text_tokens = _word_tokens(text)
+    if not phrase_tokens:
+        return False
+    width = len(phrase_tokens)
+    return any(
+        text_tokens[index : index + width] == phrase_tokens
+        for index in range(len(text_tokens) - width + 1)
+    )
 
 
 def _values_match(left: JsonScalar, right: JsonScalar) -> bool:
@@ -62,6 +118,8 @@ def _fact_is_supported(fact: AssertedFact, claims: tuple[CareerClaim, ...]) -> b
         and _values_match(claim.object.value, fact.value)
         and _normalized_text(claim.object.unit or "")
         == _normalized_text(fact.unit or "")
+        and _normalized_text(claim.object.measure or "")
+        == _normalized_text(fact.measure or "")
         for claim in claims
     )
 
@@ -80,25 +138,163 @@ def _claim_supports_keyword(claim: CareerClaim, keyword: str) -> bool:
     return any(pattern.search(_normalized_text(candidate)) for candidate in candidates)
 
 
-def _decimal_numbers(text: str) -> set[Decimal]:
-    numbers: set[Decimal] = set()
-    for raw in _NUMBER_PATTERN.findall(text):
-        normalized = raw.rstrip("%").replace(",", "")
-        try:
-            numbers.add(Decimal(normalized))
-        except InvalidOperation:
+def _decimal(raw: str | int | float) -> Decimal | None:
+    normalized = str(raw).rstrip("%").replace(",", "")
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
+
+
+def _date_matches(text: str) -> tuple[re.Match[str], ...]:
+    return tuple(_DATE_PATTERN.finditer(text))
+
+
+def _mention_context(text: str, start: int, end: int) -> str:
+    delimiters = tuple(_CLAUSE_DELIMITER.finditer(text))
+    context_start = max(
+        (match.end() for match in delimiters if match.end() <= start),
+        default=0,
+    )
+    context_end = min(
+        (match.start() for match in delimiters if match.start() >= end),
+        default=len(text),
+    )
+    return text[context_start:context_end]
+
+
+def _number_mentions(text: str) -> tuple[tuple[Decimal, str], ...]:
+    date_ranges = tuple((item.start(), item.end()) for item in _date_matches(text))
+    mentions: list[tuple[Decimal, str]] = []
+    for match in _NUMBER_PATTERN.finditer(text):
+        if any(
+            match.start() >= date_start and match.end() <= date_end
+            for date_start, date_end in date_ranges
+        ):
             continue
-    return numbers
+        value = _decimal(match.group(0))
+        if value is not None:
+            mentions.append(
+                (value, _mention_context(text, match.start(), match.end()))
+            )
+    return tuple(mentions)
 
 
-def _allowed_numbers(claims: tuple[CareerClaim, ...]) -> set[Decimal]:
-    values: set[Decimal] = set()
-    for claim in claims:
-        for span in claim.source_spans:
-            values.update(_decimal_numbers(span.exact_text))
-        if claim.object.kind is ClaimValueKind.METRIC:
-            values.update(_decimal_numbers(str(claim.object.value)))
-    return values
+def _metric_mention_is_supported(
+    value: Decimal,
+    context: str,
+    claims: tuple[CareerClaim, ...],
+) -> bool:
+    matching_claims = tuple(
+        claim
+        for claim in claims
+        if claim.object.kind is ClaimValueKind.METRIC
+        and _decimal(claim.object.value) == value
+    )
+    return any(
+        claim.object.unit is not None
+        and claim.object.measure is not None
+        and _phrase_is_present(context, claim.object.unit)
+        and _phrase_is_present(context, claim.object.measure)
+        for claim in matching_claims
+    )
+
+
+def _numeric_text_is_supported(
+    text: str,
+    used_spans: tuple[UsedSpan, ...],
+) -> bool:
+    used_claims = tuple(
+        {claim.id: claim for claim, _ in used_spans}.values()
+    )
+    metric_claims = tuple(
+        claim
+        for claim in used_claims
+        if claim.object.kind is ClaimValueKind.METRIC
+    )
+    nonmetric_numbers = {
+        value
+        for claim, span in used_spans
+        if claim.object.kind is not ClaimValueKind.METRIC
+        for value, _ in _number_mentions(span.exact_text)
+    }
+    for value, context in _number_mentions(text):
+        matching_metric_exists = any(
+            _decimal(claim.object.value) == value for claim in metric_claims
+        )
+        if matching_metric_exists:
+            if not _metric_mention_is_supported(value, context, metric_claims):
+                return False
+        elif value not in nonmetric_numbers:
+            return False
+    return True
+
+
+def _resolve_used_spans(
+    bullet: DraftBullet,
+    resolved_claims: tuple[CareerClaim, ...],
+) -> tuple[tuple[UsedSpan, ...], tuple[str, ...]]:
+    records: dict[tuple[str, str, str, str], UsedSpan] = {}
+    unmatched: list[str] = []
+    for before_text in bullet.before_text:
+        matches = tuple(
+            (claim, span)
+            for claim in sorted(resolved_claims, key=lambda item: item.id)
+            for span in claim.source_spans
+            if span.exact_text == before_text
+        )
+        if not matches:
+            unmatched.append(before_text)
+            continue
+        for claim, span in matches:
+            records[(claim.id, span.source_id, span.locator, span.exact_text)] = (
+                claim,
+                span,
+            )
+    return tuple(records[key] for key in sorted(records)), tuple(unmatched)
+
+
+def _unsupported_dates(
+    text: str,
+    used_spans: tuple[UsedSpan, ...],
+) -> tuple[str, ...]:
+    allowed = {
+        match.group(0)
+        for _, span in used_spans
+        for match in _date_matches(span.exact_text)
+    }
+    allowed.update(
+        match.group(0)
+        for claim, _ in used_spans
+        if claim.object.kind is ClaimValueKind.DATE
+        for match in _date_matches(str(claim.object.value))
+    )
+    return tuple(
+        sorted(
+            {
+                match.group(0)
+                for match in _date_matches(text)
+                if match.group(0) not in allowed
+            }
+        )
+    )
+
+
+def _unsupported_prose_tokens(
+    bullet: DraftBullet,
+    used_spans: tuple[UsedSpan, ...],
+    supported_keywords: tuple[str, ...],
+) -> tuple[str, ...]:
+    allowed = set(_NEUTRAL_PROSE_TOKENS)
+    for claim, span in used_spans:
+        allowed.update(_word_tokens(span.exact_text))
+        allowed.update(_word_tokens(str(claim.object.value)))
+        allowed.update(_word_tokens(claim.subject.label))
+        allowed.update(_word_tokens(claim.object.unit or ""))
+        allowed.update(_word_tokens(claim.object.measure or ""))
+    for keyword in supported_keywords:
+        allowed.update(_word_tokens(keyword))
+    return tuple(sorted(set(_word_tokens(bullet.after_text)) - allowed))
 
 
 def _claims_are_compatible(left: CareerClaim, right: CareerClaim) -> bool:
@@ -154,7 +350,7 @@ def _quality(
 ) -> QualityMetadata:
     has_critical = any(issue.critical for issue in issues)
     return QualityMetadata(
-        algorithm_versions={"career-truth-guardian": "1.0.0"},
+        algorithm_versions={"career-truth-guardian": "1.1.0"},
         model_versions={},
         prompt_versions={},
         confidence_components={"truth": 0.0 if has_critical else 1.0},
@@ -178,13 +374,13 @@ def validate_draft(
     for_publication: bool,
     trace_id: str = "career-truth-guardian",
 ) -> AIResult[ResumeDraft]:
-    """Resolve every structured assertion to canonical evidence or abstain."""
+    """Independently reconcile draft text and metadata to canonical evidence."""
 
     if len({claim.id for claim in claims}) != len(claims):
         raise ValueError("canonical claims must have unique identifiers")
     claim_by_id = {claim.id: claim for claim in claims}
     issues: list[ValidationIssue] = []
-    evidence_claim_ids: set[str] = set()
+    evidence_spans: dict[tuple[str, str, str, str], UsedSpan] = {}
 
     if not draft.bullets:
         issues.append(_critical("missing-provenance", "draft contains no evidence bullets"))
@@ -224,7 +420,6 @@ def validate_draft(
                 )
                 continue
             resolved.append(claim)
-            evidence_claim_ids.add(claim.id)
             if (
                 for_publication
                 and claim.verification_status is not VerificationStatus.VERIFIED
@@ -238,38 +433,40 @@ def validate_draft(
 
         resolved_claims = tuple(resolved)
         issues.extend(_validate_combination(bullet, resolved_claims))
-
-        source_texts = {
-            span.exact_text
-            for claim in resolved_claims
-            for span in claim.source_spans
-        }
-        if any(text not in source_texts for text in bullet.before_text):
+        used_spans, unmatched_before_text = _resolve_used_spans(
+            bullet,
+            resolved_claims,
+        )
+        for claim, span in used_spans:
+            evidence_spans[(claim.id, span.source_id, span.locator, span.exact_text)] = (
+                claim,
+                span,
+            )
+        if unmatched_before_text:
             issues.append(
                 _critical(
                     "source-text-mismatch",
                     f"bullet {bullet_index} before text does not resolve to its claims",
                 )
             )
+        used_claim_ids = {claim.id for claim, _ in used_spans}
+        unused_claim_ids = set(bullet.source_claim_ids) - used_claim_ids
+        if unused_claim_ids:
+            issues.append(
+                _critical(
+                    "missing-provenance",
+                    f"bullet {bullet_index} does not identify a used span for every claim",
+                )
+            )
+        used_source_texts = {span.exact_text for _, span in used_spans}
         if (
             bullet.transformation is DraftTransformation.VERBATIM
-            and bullet.after_text not in source_texts
+            and bullet.after_text not in used_source_texts
         ):
             issues.append(
                 _critical(
                     "source-text-mismatch",
                     f"verbatim bullet {bullet_index} changed its source text",
-                )
-            )
-
-        unsupported_numbers = _decimal_numbers(bullet.after_text) - _allowed_numbers(
-            resolved_claims
-        )
-        if unsupported_numbers:
-            issues.append(
-                _critical(
-                    "metric-altered",
-                    f"bullet {bullet_index} introduces or changes numeric values",
                 )
             )
 
@@ -304,6 +501,7 @@ def validate_draft(
                     )
                 )
 
+        supported_keywords: list[str] = []
         for keyword_index, added in enumerate(bullet.added_keywords):
             if not added.source_claim_ids:
                 issues.append(
@@ -325,16 +523,47 @@ def validate_draft(
                 for claim_id in added.source_claim_ids
                 if claim_id in claim_by_id
             )
-            if not any(
+            if any(
                 _claim_supports_keyword(claim, added.keyword)
                 for claim in keyword_claims
             ):
+                supported_keywords.append(added.keyword)
+            else:
                 issues.append(
                     _critical(
                         "unsupported-keyword",
                         f"keyword {added.keyword!r} in bullet {bullet_index} lacks factual support",
                     )
                 )
+
+        unsupported_dates = _unsupported_dates(bullet.after_text, used_spans)
+        if unsupported_dates:
+            issues.append(
+                _critical(
+                    "unsupported-date",
+                    f"bullet {bullet_index} introduces unsupported dates",
+                )
+            )
+        if not _numeric_text_is_supported(bullet.after_text, used_spans):
+            issues.append(
+                _critical(
+                    "metric-altered",
+                    f"bullet {bullet_index} introduces or moves a typed numeric value",
+                )
+            )
+        unsupported_tokens = _unsupported_prose_tokens(
+            bullet,
+            used_spans,
+            tuple(supported_keywords),
+        )
+        if unsupported_tokens:
+            preview = ", ".join(unsupported_tokens[:12])
+            issues.append(
+                _critical(
+                    "unsupported-text-assertion",
+                    f"bullet {bullet_index} introduces unsupported prose tokens: {preview}",
+                )
+            )
 
     deduplicated_issues = tuple(
         {
@@ -344,14 +573,16 @@ def validate_draft(
     )
     evidence = tuple(
         EvidenceReference(
-            source_id=claim_id,
-            locator=claim_by_id[claim_id].source_spans[0].locator,
-            snippet=claim_by_id[claim_id].source_spans[0].exact_text,
+            source_id=claim.id,
+            locator=span.locator,
+            snippet=safe_evidence_snippet(span.exact_text),
             relevance=1.0,
         )
-        for claim_id in sorted(evidence_claim_ids)
+        for claim, span in (
+            evidence_spans[key] for key in sorted(evidence_spans)
+        )
     )
-    has_critical = bool(deduplicated_issues)
+    has_critical = any(issue.critical for issue in deduplicated_issues)
     return AIResult[ResumeDraft](
         output=None if has_critical else draft,
         evidence=evidence,

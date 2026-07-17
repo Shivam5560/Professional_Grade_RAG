@@ -121,10 +121,34 @@ def test_claim_identity_changes_when_atomic_fact_changes() -> None:
 
 def test_claim_rejects_non_finite_metric_and_invalid_temporal_scope() -> None:
     with pytest.raises(ValidationError, match="finite"):
-        ClaimObject(kind=ClaimValueKind.METRIC, value=float("inf"), unit="percent")
+        ClaimObject(
+            kind=ClaimValueKind.METRIC,
+            value=float("inf"),
+            unit="percent",
+            measure="throughput",
+        )
 
     with pytest.raises(ValidationError, match="cannot precede"):
         TemporalScope(start=date(2025, 1, 1), end=date(2024, 1, 1))
+
+
+def test_metric_claim_requires_typed_unit_and_measure() -> None:
+    with pytest.raises(ValidationError, match="measure"):
+        ClaimObject(kind=ClaimValueKind.METRIC, value=20, unit="percent")
+
+    metric = ClaimObject(
+        kind=ClaimValueKind.METRIC,
+        value=20,
+        unit="percent",
+        measure="throughput",
+    )
+
+    assert metric.model_dump(mode="json") == {
+        "kind": "metric",
+        "value": 20,
+        "unit": "percent",
+        "measure": "throughput",
+    }
 
 
 def test_claim_requires_atomic_source_provenance_and_verifier_identity() -> None:
