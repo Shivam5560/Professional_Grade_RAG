@@ -1,7 +1,7 @@
 # Career Studio V2 Core TDD Report
 
-**Branch:** `career-studio-v2-core`  
-**Worktree:** `/home/gopal/Professional_Grade_RAG/.worktrees/career-studio-v2`  
+**Branch:** `career-studio-v2-core`
+**Worktree:** `/home/gopal/Professional_Grade_RAG/.worktrees/career-studio-v2`
 **Plan commit after final rebase:** `dfa8296 docs: plan career studio v2 core`
 
 ## Baseline
