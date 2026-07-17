@@ -1,0 +1,285 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+
+from sqlalchemy.orm import Session
+
+from app.platform.approvals import ApprovalDecision, ApprovalStatus
+from app.platform.artifacts import ArtifactRevision, create_artifact_revision
+from app.platform.evidence import ClaimEvidence
+from app.platform.persistence import (
+    StudioApprovalRepository,
+    StudioArtifactRepository,
+    StudioEvidenceRepository,
+    StudioQualityRepository,
+    StudioRunRepository,
+)
+from app.platform.runtime import StudioRun, StudioRunState
+from app.studios.career import (
+    CandidateEdge,
+    CareerSpecialist,
+    DraftTransformation,
+    REGISTERED_PUBLICATION_TRANSFORMATIONS,
+    match_requirements,
+    score_candidate_edge,
+)
+from app.studios.career.api.contracts import (
+    ClaimDecisionRequest,
+    DraftCreateRequest,
+    DraftWorkflowResponse,
+    MatchCreateRequest,
+    PublicationResponse,
+    RoleCreateRequest,
+    SourceIngestionRequest,
+    SourceIngestionResponse,
+)
+from app.studios.career.persistence import CareerDraft, CareerMatch, CareerRepository, CareerRole
+
+
+class UnsupportedCareerCapability(ValueError):
+    """A capability was deliberately omitted instead of being simulated."""
+
+
+def _digest(value: object) -> str:
+    canonical = json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class CareerApplicationService:
+    def __init__(self, session: Session, *, owner_id: int) -> None:
+        self.session = session
+        self.owner_id = owner_id
+        self.career = CareerRepository(session)
+        self.runs = StudioRunRepository(session)
+        self.evidence = StudioEvidenceRepository(session)
+        self.approvals = StudioApprovalRepository(session)
+        self.artifacts = StudioArtifactRepository(session)
+        self.quality = StudioQualityRepository(session)
+
+    @staticmethod
+    def now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    def ingest_source(self, request: SourceIngestionRequest) -> SourceIngestionResponse:
+        claims = request.require_structured_claims()
+        source_ids = {span.source_id for claim in claims for span in claim.source_spans}
+        if len(source_ids) != 1:
+            raise ValueError("structured claims must resolve to exactly one source id")
+        source_id = next(iter(source_ids))
+        payload = [claim.model_dump(mode="json") for claim in claims]
+        now = self.now()
+        source = self.career.add_source(
+            source_id=source_id,
+            owner_id=self.owner_id,
+            filename=request.filename,
+            media_type=request.media_type,
+            content_digest=_digest(payload),
+            created_at=now,
+        )
+        revisions = tuple(
+            self.career.add_claim(claim, owner_id=self.owner_id, created_at=now)
+            for claim in claims
+        )
+        return SourceIngestionResponse(source=source, claims=revisions)
+
+    def review_claim(self, logical_claim_id: str, request: ClaimDecisionRequest):
+        replacement = request.replacement.to_claim() if request.replacement else None
+        return self.career.review_claim(
+            logical_claim_id,
+            action=request.action.value,
+            owner_id=self.owner_id,
+            reviewer_id=self.owner_id,
+            now=self.now(),
+            replacement=replacement,
+        )
+
+    def create_role(self, request: RoleCreateRequest) -> CareerRole:
+        return self.career.add_role(
+            role_id=request.role_id,
+            title=request.title,
+            requirements=request.requirements,
+            owner_id=self.owner_id,
+            created_at=self.now(),
+        )
+
+    def create_match(self, request: MatchCreateRequest) -> CareerMatch:
+        role = self.career.get_role(request.role_id, owner_id=self.owner_id)
+        claims_by_id = {
+            item.claim.id: item.claim
+            for item in self.career.list_current_claims(owner_id=self.owner_id)
+        }
+        edges: list[CandidateEdge] = []
+        for edge_input in request.candidate_edges:
+            requirement = next(
+                (item for item in role.requirements if item.id == edge_input.requirement_id),
+                None,
+            )
+            claim = claims_by_id.get(edge_input.claim_id)
+            if requirement is None or claim is None:
+                raise ValueError("candidate edge references unknown owned evidence")
+            edges.append(score_candidate_edge(requirement, claim, edge_input.components))
+        result = match_requirements(
+            role.requirements,
+            tuple(claims_by_id.values()),
+            tuple(edges),
+        )
+        return self.career.add_match(
+            match_id=request.match_id,
+            role_id=request.role_id,
+            result=result,
+            owner_id=self.owner_id,
+            created_at=self.now(),
+        )
+
+    def create_draft(self, request: DraftCreateRequest, *, idempotency_key: str) -> DraftWorkflowResponse:
+        match = self.career.get_match(request.match_id, owner_id=self.owner_id)
+        role = self.career.get_role(match.role_id, owner_id=self.owner_id)
+        now = self.now()
+        fingerprint = _digest({"match_id": request.match_id, "result": match.result.model_dump(mode="json")})
+        run_id = f"career-run-{_digest([self.owner_id, idempotency_key, fingerprint])[:24]}"
+        run = self.runs.create(
+            StudioRun(
+                id=run_id,
+                owner_id=self.owner_id,
+                studio_id="career",
+                operation="draft",
+                idempotency_key=idempotency_key,
+                input_fingerprint=fingerprint,
+                created_at=now,
+                updated_at=now,
+            ),
+            owner_id=self.owner_id,
+        )
+        if run.state is not StudioRunState.QUEUED:
+            draft = self._draft_for_run(run.id)
+            approval = self.approvals.get(draft.approval_id or "", owner_id=self.owner_id)
+            return DraftWorkflowResponse(
+                run=run,
+                match=match.result,
+                draft=draft.draft,
+                approval=approval,
+                quality=self.quality.get(
+                    f"{run.id}:quality", owner_id=self.owner_id
+                ),
+            )
+
+        edges = self._edges_from_match(match)
+        response = CareerSpecialist().run(
+            run,
+            claims=match.result.selected_evidence,
+            requirements=role.requirements,
+            candidate_edges=edges,
+            now=now,
+        )
+        if response.result.output is None or response.approval is None or response.match is None:
+            raise ValueError("career specialist abstained before producing a draft")
+        self.runs.transition(run.id, StudioRunState.RUNNING, owner_id=self.owner_id, now=now, current_step="evidence-matching", progress=0.1)
+        persisted_run = self.runs.transition(run.id, StudioRunState.AWAITING_INPUT, owner_id=self.owner_id, now=now, current_step=response.run.current_step, progress=response.run.progress)
+        for claim in response.match.selected_evidence:
+            span = claim.source_spans[0]
+            self.evidence.add(
+                run.id,
+                ClaimEvidence(
+                    id=claim.id,
+                    source_id=span.source_id,
+                    locator=span.locator,
+                    snippet=span.exact_text[:1000],
+                    normalized_claim=span.exact_text,
+                    verification_status=claim.verification_status,
+                    confidence=claim.confidence,
+                ),
+                owner_id=self.owner_id,
+                created_at=now,
+            )
+        approval = self.approvals.add(response.approval, owner_id=self.owner_id)
+        saved = self.career.add_draft(
+            run_id=run.id,
+            match_id=match.id,
+            draft=response.result.output.draft,
+            owner_id=self.owner_id,
+            created_at=now,
+            truth_valid=True,
+            approval_id=approval.id,
+        )
+        self.quality.add(
+            f"{run.id}:quality",
+            run.id,
+            response.result.quality,
+            owner_id=self.owner_id,
+            created_at=now,
+        )
+        return DraftWorkflowResponse(run=persisted_run, match=response.match, draft=saved.draft, approval=approval, quality=response.result.quality)
+
+    def decide_approval(self, approval_id: str, decision: ApprovalDecision, *, comment: str | None):
+        return self.approvals.decide(approval_id, decision, owner_id=self.owner_id, now=self.now(), comment=comment)
+
+    def publish(self, draft_id: str) -> PublicationResponse:
+        saved = self.career.get_draft(draft_id, owner_id=self.owner_id)
+        if not saved.approval_id:
+            raise ValueError("draft has no bound approval")
+        approval = self.approvals.get(saved.approval_id, owner_id=self.owner_id)
+        if approval.status is not ApprovalStatus.APPROVED:
+            raise ValueError("draft approval is not approved")
+        if not saved.truth_valid:
+            raise ValueError("draft is not truth-valid")
+        if any(
+            bullet.transformation not in REGISTERED_PUBLICATION_TRANSFORMATIONS
+            or bullet.transformation is not DraftTransformation.VERBATIM
+            for bullet in saved.draft.bullets
+        ):
+            raise ValueError("draft uses an unregistered publication transformation")
+        match = self.career.get_match(saved.match_id, owner_id=self.owner_id)
+        role = self.career.get_role(match.role_id, owner_id=self.owner_id)
+        run = self.runs.get(saved.run_id, owner_id=self.owner_id)
+        now = self.now()
+        response = CareerSpecialist().run(
+            run,
+            claims=match.result.selected_evidence,
+            requirements=role.requirements,
+            candidate_edges=self._edges_from_match(match),
+            now=now,
+            approval=approval,
+        )
+        if response.result.output is None or not response.result.output.draft.publication_ready:
+            raise ValueError("truth guardian rejected publication")
+        self.runs.transition(run.id, StudioRunState.RUNNING, owner_id=self.owner_id, now=now, current_step="truth-validation")
+        succeeded = self.runs.transition(run.id, StudioRunState.SUCCEEDED, owner_id=self.owner_id, now=now, current_step="complete")
+        published = self.career.mark_published(draft_id, owner_id=self.owner_id, now=now)
+        content = response.result.output.draft.model_dump(mode="json")
+        artifact = create_artifact_revision(
+            artifact_id=f"career-{draft_id}",
+            owner_id=self.owner_id,
+            studio_id="career",
+            run_id=run.id,
+            media_type="application/vnd.nexus.resume+json",
+            content_digest=_digest(content),
+            created_at=now,
+            evidence_ids=tuple(sorted(claim.id for claim in match.result.selected_evidence)),
+        )
+        artifact = self.artifacts.create(artifact, owner_id=self.owner_id, expected_parent_revision_id=None)
+        return PublicationResponse(run=succeeded, draft=response.result.output.draft, approval=approval, artifact=artifact)
+
+    def get_artifact(self, revision_id: str) -> ArtifactRevision:
+        return self.artifacts.get_revision(revision_id, owner_id=self.owner_id)
+
+    def _draft_for_run(self, run_id: str) -> CareerDraft:
+        from app.studios.career.persistence.models import CareerDraftRecord
+        from sqlalchemy import select
+
+        record = self.session.execute(select(CareerDraftRecord.draft_id).where(CareerDraftRecord.run_id == run_id, CareerDraftRecord.owner_id == self.owner_id)).scalar_one()
+        return self.career.get_draft(record, owner_id=self.owner_id)
+
+    @staticmethod
+    def _edges_from_match(match: CareerMatch) -> tuple[CandidateEdge, ...]:
+        return tuple(
+            CandidateEdge(
+                requirement_id=item.requirement_id,
+                claim_id=item.claim_id,
+                components=item.components,
+                score=item.score,
+                strength=item.strength,
+            )
+            for item in match.result.selected_matches
+        )
