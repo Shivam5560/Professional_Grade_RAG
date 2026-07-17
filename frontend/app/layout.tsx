@@ -6,7 +6,13 @@ import { RouteProviders } from "@/components/layout/RouteProviders";
 import { themeBootstrapScript } from "@/lib/appearance";
 
 const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk", display: "swap" });
-const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", display: "swap", style: ["normal", "italic"] });
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-newsreader",
+  display: "swap",
+  style: ["normal", "italic"],
+  adjustFontFallback: false,
+});
 const mono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-ibm-plex-mono", weight: ["400", "600"], display: "swap" });
 
 export const metadata: Metadata = {
