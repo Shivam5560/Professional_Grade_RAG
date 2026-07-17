@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api';
 import { AuraSqlSession } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { cn, formatTimestamp } from '@/lib/utils';
+import { isAppEnabled, useAppCatalog } from '@/lib/apps/useAppCatalog';
 
 interface AuraSqlSidebarProps {
   currentHistoryId?: string | null;
@@ -18,6 +19,7 @@ interface AuraSqlSidebarProps {
 
 export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSession, onNewChat }: AuraSqlSidebarProps) {
   const router = useRouter();
+  const appCatalog = useAppCatalog();
   const [history, setHistory] = useState<AuraSqlSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
@@ -182,18 +184,22 @@ export function AuraSqlSidebar({ currentHistoryId, sessions = [], onSelectSessio
           <Database className="h-4 w-4" />
           Dashboard
         </Button>
-        <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2" onClick={() => router.push('/chat')}>
-          <MessageSquare className="h-4 w-4" />
-          RAG Chat
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2"
-          onClick={() => router.push('/developer')}
-        >
-          <Star className="h-4 w-4" />
-          Developer
-        </Button>
+        {isAppEnabled(appCatalog, 'knowledge-studio') ? (
+          <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2" onClick={() => router.push('/chat')}>
+            <MessageSquare className="h-4 w-4" />
+            RAG Chat
+          </Button>
+        ) : null}
+        {isAppEnabled(appCatalog, 'developer-studio') ? (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 mt-2"
+            onClick={() => router.push('/developer')}
+          >
+            <Star className="h-4 w-4" />
+            Developer
+          </Button>
+        ) : null}
       </div>
     </div>
   );

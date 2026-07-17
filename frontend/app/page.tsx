@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Badge } from '@/components/ui/badge';
@@ -8,24 +8,80 @@ import { ShaderAnimation } from '@/components/ui/shader-animation';
 import { MessageSquare, Database, Sparkles, ArrowRight, Loader2, FileText, BarChart3 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
+import { isAppEnabled, useAppCatalog } from '@/lib/apps/useAppCatalog';
+
+const LAUNCHERS = [
+  {
+    appId: 'knowledge-studio',
+    title: 'RAG Chat',
+    description: 'Grounded answers with citations and confidence scoring.',
+    icon: MessageSquare,
+    path: '/chat',
+    tone: 'bg-[hsl(var(--chart-1)/0.12)] border-[hsl(var(--chart-1)/0.28)] text-[hsl(var(--chart-1))]',
+    badge: 'RAG',
+    badge2: 'Cited',
+  },
+  {
+    appId: 'aurasql',
+    title: 'AuraSQL',
+    description: 'Schema-aware SQL generation and refinement.',
+    icon: Database,
+    path: '/aurasql',
+    tone: 'bg-[hsl(var(--chart-2)/0.12)] border-[hsl(var(--chart-2)/0.28)] text-[hsl(var(--chart-2))]',
+    badge: 'SQL',
+    badge2: 'Schema',
+  },
+  {
+    appId: 'career-studio',
+    title: 'Resume Studio',
+    description: 'ATS alignment and JD-based resume scoring.',
+    icon: Sparkles,
+    path: '/nexus',
+    tone: 'bg-[hsl(var(--chart-4)/0.12)] border-[hsl(var(--chart-4)/0.28)] text-[hsl(var(--chart-4))]',
+    badge: 'Nexus',
+    badge2: 'Scoring',
+  },
+  {
+    appId: 'career-studio',
+    title: 'ResumeGen',
+    description: 'Structured resume builder with LaTeX PDF output.',
+    icon: FileText,
+    path: '/nexus/generate',
+    tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
+    badge: 'PDF',
+    badge2: 'LaTeX',
+  },
+  {
+    appId: 'data-analyst',
+    title: 'Data Analysis',
+    description: 'Multi-agent analysis with statistical modeling and visual reports.',
+    icon: BarChart3,
+    path: '/analysis',
+    tone: 'bg-[hsl(var(--chart-3)/0.12)] border-[hsl(var(--chart-3)/0.28)] text-[hsl(var(--chart-3))]',
+    badge: 'ML',
+    badge2: 'Insights',
+  },
+] as const;
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
+  const appCatalog = useAppCatalog();
   const [isMounted, setIsMounted] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
+  const enabledLaunchers = useMemo(
+    () => LAUNCHERS.filter((launcher) => isAppEnabled(appCatalog, launcher.appId)),
+    [appCatalog],
+  );
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!isMounted || !isAuthenticated) return;
-    router.prefetch('/chat');
-    router.prefetch('/aurasql');
-    router.prefetch('/nexus');
-    router.prefetch('/analysis');
-  }, [isMounted, isAuthenticated, router]);
+    if (!isMounted || !isAuthenticated || appCatalog.status !== 'success') return;
+    enabledLaunchers.forEach((launcher) => router.prefetch(launcher.path));
+  }, [appCatalog.status, enabledLaunchers, isMounted, isAuthenticated, router]);
 
   const handleNavigate = (path: string, label: string) => {
     setNavTarget(label);
@@ -107,7 +163,9 @@ export default function DashboardPage() {
             <article className="lux-card sheen-border rounded-[30px] p-6 md:p-8 overflow-hidden min-h-[560px] md:min-h-[600px] lg:min-h-[620px]">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <Badge variant="outline" className="border-border/60">Tools</Badge>
-                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">5 Launchers</p>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                  {enabledLaunchers.length} {enabledLaunchers.length === 1 ? 'Launcher' : 'Launchers'}
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -119,53 +177,29 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3">
-                {[
-                  {
-                    title: 'RAG Chat',
-                    description: 'Grounded answers with citations and confidence scoring.',
-                    icon: MessageSquare,
-                    path: '/chat',
-                    tone: 'bg-[hsl(var(--chart-1)/0.12)] border-[hsl(var(--chart-1)/0.28)] text-[hsl(var(--chart-1))]',
-                    badge: 'RAG',
-                    badge2: 'Cited',
-                  },
-                  {
-                    title: 'AuraSQL',
-                    description: 'Schema-aware SQL generation and refinement.',
-                    icon: Database,
-                    path: '/aurasql',
-                    tone: 'bg-[hsl(var(--chart-2)/0.12)] border-[hsl(var(--chart-2)/0.28)] text-[hsl(var(--chart-2))]',
-                    badge: 'SQL',
-                    badge2: 'Schema',
-                  },
-                  {
-                    title: 'Resume Studio',
-                    description: 'ATS alignment and JD-based resume scoring.',
-                    icon: Sparkles,
-                    path: '/nexus',
-                    tone: 'bg-[hsl(var(--chart-4)/0.12)] border-[hsl(var(--chart-4)/0.28)] text-[hsl(var(--chart-4))]',
-                    badge: 'Nexus',
-                    badge2: 'Scoring',
-                  },
-                  {
-                    title: 'ResumeGen',
-                    description: 'Structured resume builder with LaTeX PDF output.',
-                    icon: FileText,
-                    path: '/nexus/generate',
-                    tone: 'bg-[hsl(var(--chart-5)/0.12)] border-[hsl(var(--chart-5)/0.28)] text-[hsl(var(--chart-5))]',
-                    badge: 'PDF',
-                    badge2: 'LaTeX',
-                  },
-                  {
-                    title: 'Data Analysis',
-                    description: 'Multi-agent analysis with statistical modeling and visual reports.',
-                    icon: BarChart3,
-                    path: '/analysis',
-                    tone: 'bg-[hsl(var(--chart-3)/0.12)] border-[hsl(var(--chart-3)/0.28)] text-[hsl(var(--chart-3))]',
-                    badge: 'ML',
-                    badge2: 'Insights',
-                  },
-                ].map((tool) => (
+                {appCatalog.status === 'loading' ? (
+                  <p
+                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Loading available applications…
+                  </p>
+                ) : appCatalog.status === 'error' ? (
+                  <p
+                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
+                    role="alert"
+                  >
+                    Application launchers are temporarily unavailable.
+                  </p>
+                ) : enabledLaunchers.length === 0 ? (
+                  <p
+                    className="rounded-2xl border border-dashed border-border/60 bg-card/60 p-5 text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    No application launchers are enabled.
+                  </p>
+                ) : enabledLaunchers.map((tool) => (
                   <article
                     key={tool.title}
                     role="button"

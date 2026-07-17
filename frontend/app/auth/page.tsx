@@ -12,6 +12,7 @@ import { Brain, Shield, Zap, MessageSquare, Database, Sparkles, Radar, LineChart
 import { useAppTheme } from "@/hooks/useAppTheme"
 import { type ThemePalette } from "@/lib/theme"
 import { useToast } from "@/hooks/useToast"
+import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +30,7 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
   const router = useRouter()
   const { toast } = useToast()
+  const appCatalog = useAppCatalog()
   const { mode, palette, toggleMode, setPalette } = useAppTheme()
   const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: 'nexus', label: 'Nexus Slate', icon: Compass },
@@ -370,17 +372,24 @@ export default function AuthPage() {
                 <div className="h-11 w-11 rounded-full logo-mark flex items-center justify-center font-black text-primary-foreground text-base shadow-lg">
                   NX
                 </div>
-                <button
-                  type="button"
-                  onClick={() => router.push('/developer')}
-                  className="text-left group"
-                >
-                  <div className="font-bold text-foreground text-sm inline-flex items-center gap-1.5">
-                    Shivam Sourav
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                {isAppEnabled(appCatalog, 'developer-studio') ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push('/developer')}
+                    className="text-left group"
+                  >
+                    <div className="font-bold text-foreground text-sm inline-flex items-center gap-1.5">
+                      Shivam Sourav
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                    <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata • View developer profile</div>
+                  </button>
+                ) : (
+                  <div className="text-left">
+                    <div className="font-bold text-foreground text-sm">Shivam Sourav</div>
+                    <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata</div>
                   </div>
-                  <div className="text-xs text-muted-foreground">SDE at Nomura Fintech, Kolkata • View developer profile</div>
-                </button>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-muted-foreground mb-0.5">Powered by</div>

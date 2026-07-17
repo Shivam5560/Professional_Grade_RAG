@@ -8,6 +8,7 @@ import { ChatSession } from "@/lib/types";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
+import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog";
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -19,6 +20,7 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
   const { user } = useAuthStore();
   const router = useRouter();
   const { confirm, toast } = useToast();
+  const appCatalog = useAppCatalog();
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -304,14 +306,16 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
 
       <div className="mt-auto p-4 border-t border-border/60">
         <div className="space-y-1">
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/workflows')}
-          >
-            <Workflow className="h-4 w-4" />
-            Workflows
-          </Button>
+          {isAppEnabled(appCatalog, 'career-studio') ? (
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+              onClick={() => router.push('/workflows')}
+            >
+              <Workflow className="h-4 w-4" />
+              Workflows
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
@@ -324,14 +328,16 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
             <Settings className="h-4 w-4" />
             Settings
           </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/developer')}
-          >
-            <HelpCircle className="h-4 w-4" />
-            Developer
-          </Button>
+          {isAppEnabled(appCatalog, 'developer-studio') ? (
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
+              onClick={() => router.push('/developer')}
+            >
+              <HelpCircle className="h-4 w-4" />
+              Developer
+            </Button>
+          ) : null}
         </div>
       </div>
       </div>

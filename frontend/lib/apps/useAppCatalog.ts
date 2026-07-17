@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { listApps } from "./client";
 import type { AppManifest } from "./types";
@@ -24,13 +34,26 @@ type CatalogSnapshot =
   | { status: "success"; apps: AppManifest[]; error: null }
   | { status: "error"; apps: []; error: Error };
 
-export function useAppCatalog(): CatalogState {
+const AppCatalogContext = createContext<CatalogState | null>(null);
+
+export function isAppEnabled(
+  catalog: CatalogState,
+  appId: AppManifest["id"],
+): boolean {
+  return (
+    catalog.status === "success" &&
+    catalog.apps.some((app) => app.id === appId)
+  );
+}
+
+export function AppCatalogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<CatalogSnapshot>({
     status: "loading",
     apps: [],
     error: null,
   });
   const mountedRef = useRef(false);
+  const initialLoadStartedRef = useRef(false);
   const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -70,13 +93,33 @@ export function useAppCatalog(): CatalogState {
 
   useEffect(() => {
     mountedRef.current = true;
-    void load();
+
+    if (!initialLoadStartedRef.current) {
+      initialLoadStartedRef.current = true;
+      void load();
+    }
 
     return () => {
       mountedRef.current = false;
-      requestIdRef.current += 1;
     };
   }, [load]);
 
-  return { ...state, retry: load };
+  const catalog = useMemo<CatalogState>(
+    () => ({ ...state, retry: load }),
+    [load, state],
+  );
+
+  return createElement(AppCatalogContext.Provider, { value: catalog }, children);
+}
+
+export function useAppCatalog(): CatalogState {
+  const catalog = useContext(AppCatalogContext);
+
+  if (catalog === null) {
+    throw new Error(
+      "useAppCatalog must be used within an AppCatalogProvider",
+    );
+  }
+
+  return catalog;
 }
