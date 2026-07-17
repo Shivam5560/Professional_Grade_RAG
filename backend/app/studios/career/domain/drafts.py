@@ -17,11 +17,18 @@ from .claims import ClaimObject, ClaimValueKind, JsonScalar
 
 
 class DraftTransformation(StrEnum):
+    """Audited draft operation; publication support is separately registered."""
+
     VERBATIM = "verbatim"
     COMPRESSED = "compressed"
     COMBINED = "combined"
     REORDERED = "reordered"
     REPHRASED = "rephrased"
+
+
+REGISTERED_PUBLICATION_TRANSFORMATIONS = frozenset(
+    {DraftTransformation.VERBATIM}
+)
 
 
 def _validate_claim_ids(value: tuple[str, ...]) -> tuple[str, ...]:

@@ -31,6 +31,7 @@ from .drafts import (
     AssertedFact,
     DraftBullet,
     DraftTransformation,
+    REGISTERED_PUBLICATION_TRANSFORMATIONS,
     ResumeDraft,
     stable_draft_id,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "CoverageSummary",
     "DraftBullet",
     "DraftTransformation",
+    "REGISTERED_PUBLICATION_TRANSFORMATIONS",
     "MatchStrength",
     "RequirementCategory",
     "RequirementPriority",

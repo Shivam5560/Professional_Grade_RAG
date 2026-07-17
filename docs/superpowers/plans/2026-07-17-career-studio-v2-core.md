@@ -16,6 +16,7 @@
 - Perform no LLM, provider, database, filesystem, or network calls from the Career Specialist core.
 - Matching is deterministic and one-to-one: one atomic claim can satisfy at most one selected requirement.
 - Publication requires verified claims, a critical-error-free Truth Guardian result, and an approved `final-resume` approval request.
+- The core publication registry contains only `DraftTransformation.VERBATIM`. Its after text must equal one exact used source span. Other transformation labels remain available for audited draft/review records but must abstain with `unsupported-transformation` until a deterministic structured renderer is separately registered and tested.
 - Every production behavior is introduced only after its focused test has failed for the expected missing-behavior reason.
 - Record every RED and GREEN command and its observed result in `.superpowers/sdd/career-studio-v2-report.md`.
 
@@ -260,8 +261,7 @@ def test_incompatible_combination_abstains():
 def test_supported_keyword_is_accepted_and_resolves_to_claim():
     result = validate_draft(
         draft_with_keyword("Python", support=(PYTHON_CLAIM.id,)),
-        claims=(PYTHON_CLAIM,),
-        for_publication=True,
+        claims=(PYTHON_CLAIM,), for_publication=False,
     )
     assert result.output is not None
     assert result.evidence[0].source_id == PYTHON_CLAIM.id
@@ -283,7 +283,7 @@ Expected: collection fails because draft and validation contracts are absent.
 
 - [ ] **Step 3: Implement provenance-carrying draft contracts and deterministic drafting**
 
-Every `DraftBullet` stores a non-empty tuple of source claim IDs, transformation enum, before text tuple, after text, typed asserted facts with their own support claim IDs, and added keywords with support claim IDs. `draft_from_matches` creates one deterministic verbatim bullet per selected claim, copying the exact source text and typed claim object; it never generates new facts or metrics.
+Every `DraftBullet` stores a non-empty tuple of source claim IDs, transformation enum, before text tuple, after text, typed asserted facts with their own support claim IDs, and added keywords with support claim IDs. Transformation labels record attempted draft operations; they do not by themselves authorize publication. `draft_from_matches` creates one deterministic verbatim bullet per selected claim, copying the exact source text and typed claim object; it never generates new facts or metrics.
 
 - [ ] **Step 4: Implement Truth Guardian critical gates and abstention**
 
@@ -291,6 +291,7 @@ Resolve every bullet source, asserted fact support ID, and keyword support ID ag
 
 - missing or unknown provenance;
 - non-verified claims in publication validation;
+- publication transformations not present in `REGISTERED_PUBLICATION_TRANSFORMATIONS`; this slice registers only exact-span `VERBATIM`;
 - unsupported employer, title, date, skill, degree, metric, or other facts;
 - created, moved, changed, or rounded-up metrics;
 - unsupported keywords;

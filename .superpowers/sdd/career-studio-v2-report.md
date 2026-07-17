@@ -2,7 +2,7 @@
 
 **Branch:** `career-studio-v2-core`  
 **Worktree:** `/home/gopal/Professional_Grade_RAG/.worktrees/career-studio-v2`  
-**Plan commit after rebase:** `7d01024 docs: plan career studio v2 core`
+**Plan commit after final rebase:** `dfa8296 docs: plan career studio v2 core`
 
 ## Baseline
 
@@ -231,10 +231,10 @@ Observed: the residue scan and whitespace check produced no findings. Every comm
 - **Section 7.2 — canonical evidence graph:** Claims are typed atomic subject/predicate/object records with one or more exact source spans, temporal scope, context, relationships, verification status, confidence, verifier identity, canonical IDs, deep freezing, and JSON serialization tests.
 - **Section 7.3 — role requirements:** Requirements retain required/preferred priority, typed category, description, exact job source span, confidence, and finite positive weight. They are never reduced to a keyword bag.
 - **Section 7.4 — matching:** All six bounded score components are retained. SciPy maximum-weight bipartite assignment uses sorted identifiers and dummy unmatched columns, prevents claim reuse, weights the objective by requirement importance, and exposes mandatory/preferred coverage ranges, categorical bands, uncertain matches, transferable matches, truthful gaps, and selected evidence.
-- **Sections 7.5-7.6 — drafting and truth:** Every bullet retains claim IDs, transformation, typed asserted facts, supported added keywords, and before/after text. Combination requires shared employer/project context and overlapping time. Publication prose is independently reconciled with a conservative supported-token policy; dates and metric scalar/unit/measure/context remain typed; unsupported text/facts/keywords, non-verified claims, incompatible combinations, and missing exact-span lineage are critical abstentions.
+- **Sections 7.5-7.6 — drafting and truth:** Every bullet retains claim IDs, transformation, typed asserted facts, supported added keywords, and before/after text. Transformation labels are audit data, not publication authority. The deterministic core publication registry contains only exact-span `VERBATIM`; compressed, combined, reordered, and rephrased bullets abstain as `unsupported-transformation` until a structured renderer is registered and tested. Independent prose, date, metric scalar/unit/measure/context, compatibility, verification, and exact-span lineage checks remain defense in depth. Currency and percent symbols normalize to their typed unit families without weakening metric measure/context binding.
 - **Section 9 — deterministic failure handling:** The service performs no I/O or model calls. Critical truth failures transition the run to failed while preserving match coverage separately; meaningful user decisions transition to awaiting input.
 - **Section 11 — release gates:** Tests witness zero double-counting, deterministic ties, fabricated metric rejection, typed fact rejection, approval binding, and claim-level draft provenance. ATS layout and artifact round-trip gates are outside this core-only assignment.
-- **Sections 14-15 — TDD vertical slice:** Eight witnessed RED/GREEN cycles cover claims/requirements, matching, drafting/truth, workflow approvals, self-review, independent adversarial review, and hardened-runtime integration. The final path is claim graph → typed requirements → weighted match → constrained draft → truth validation → approval state.
+- **Sections 14-15 — TDD vertical slice:** Nine witnessed RED/GREEN cycles cover claims/requirements, matching, drafting/truth, workflow approvals, self-review, two independent adversarial reviews, and hardened-runtime integration. The final path is claim graph → typed requirements → weighted match → constrained draft → truth validation → approval state.
 
 ## Scope and Integration Notes
 
@@ -375,3 +375,73 @@ Observed:
 ```
 
 This final combined run includes 46 owned Career Studio tests and 33 rebased shared platform contract tests.
+
+### Cycle 9 RED — deterministic publication boundary and unit aliases
+
+Command (from the worktree root):
+
+```bash
+PYTHONPATH=backend UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest backend/tests/studios/career/test_truth_guardian.py -q -k 'negation_reorder or metric_direction_swap or normalized_unit_aliases or unregistered_synonym'
+```
+
+Observed expected failures:
+
+```text
+FAILED test_negation_reorder_cannot_publish_from_same_source_tokens
+FAILED test_metric_direction_swap_cannot_publish
+FAILED test_verbatim_metric_accepts_normalized_unit_aliases[$20 revenue-USD-revenue]
+FAILED test_verbatim_metric_accepts_normalized_unit_aliases[€20 revenue-EUR-revenue]
+FAILED test_verbatim_metric_accepts_normalized_unit_aliases[₹20 revenue-INR-revenue]
+FAILED test_verbatim_metric_accepts_normalized_unit_aliases[20% throughput-percent-throughput]
+FAILED test_unregistered_synonym_rephrase_is_explicitly_non_publishable
+7 failed, 17 deselected in 22.92s
+```
+
+The failures reproduce the release blockers: token membership alone accepted a negation reversal and a metric-direction reversal; canonical unit names did not recognize symbol aliases; and a rejected synonym rephrase lacked the explicit `unsupported-transformation` classification required by the intentionally limited publication contract.
+
+### Cycle 9 GREEN — deterministic publication boundary and unit aliases
+
+Commands:
+
+```bash
+PYTHONPATH=backend UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest backend/tests/studios/career/test_truth_guardian.py -q -k 'negation_reorder or metric_direction_swap or normalized_unit_aliases or unregistered_synonym'
+PYTHONPATH=backend UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest backend/tests/studios/career -q --junitxml=/tmp/career-second-review-green.xml
+```
+
+Observed:
+
+```text
+.......                                                                  [100%]
+7 passed, 17 deselected in 1.91s
+
+.....................................................                    [100%]
+53 passed in 3.68s
+```
+
+Publication now permits only transformations in the explicit registry, which contains exact-span `VERBATIM` for this deterministic slice. Negation reordering, outcome-direction changes, arbitrary combination/rephrase, and unregistered synonyms therefore abstain with `unsupported-transformation`; the initial drafter/service path is unchanged because it already renders exact source spans. Typed units accept percent, USD, EUR, and INR word/symbol aliases while retaining exact metric scalar and measure checks.
+
+## Final Second-review Integration Verification
+
+The branch was rebased cleanly onto the current local `specialist-studios-v2` integration head `8bd2724`, which contains Data Analyst head `f6d05f0` plus the committed backend cutover plan.
+
+Combined shared-platform and specialist tests:
+
+```bash
+PYTHONPATH=backend UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with pandas --with numpy --with scipy python -m pytest backend/tests/platform backend/tests/studios/data_analyst backend/tests/studios/career -q
+```
+
+Observed:
+
+```text
+........................................................................ [ 52%]
+..................................................................       [100%]
+138 passed in 52.90s
+```
+
+Both specialist packages compile:
+
+```bash
+PYTHONPATH=backend UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache UV_OFFLINE=1 /home/gopal/.local/bin/uv run --isolated --with pydantic==2.11.5 --with pandas --with numpy --with scipy python -m compileall -q backend/app/studios/data_analyst backend/app/studios/career
+```
+
+Observed: exit code `0` with no compiler diagnostics.

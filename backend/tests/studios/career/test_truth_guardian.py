@@ -244,7 +244,10 @@ def test_incompatible_combination_abstains() -> None:
     )
 
     assert result.output is None
-    assert "incompatible-combination" in critical_codes(result)
+    assert {
+        "incompatible-combination",
+        "unsupported-transformation",
+    } <= critical_codes(result)
 
 
 def test_supported_keyword_is_accepted_and_resolves_to_claim() -> None:
@@ -270,12 +273,125 @@ def test_supported_keyword_is_accepted_and_resolves_to_claim() -> None:
         )
     )
 
-    result = validate_draft(draft, claims=(python_claim,), for_publication=True)
+    result = validate_draft(draft, claims=(python_claim,), for_publication=False)
 
     assert result.output == draft
     assert result.quality.abstention_reason is None
     assert result.evidence[0].source_id == python_claim.id
     assert result.evidence[0].locator == python_claim.source_spans[0].locator
+
+
+def test_negation_reorder_cannot_publish_from_same_source_tokens() -> None:
+    python_claim = claim(
+        ClaimValueKind.SKILL,
+        "Python",
+        exact_text="Did not use Rust; used Python.",
+        predicate=ClaimPredicate.HAS_SKILL,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (python_claim,),
+                after_text="Used Rust.",
+                asserted_facts=(fact(python_claim),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(python_claim,), for_publication=True)
+
+    assert result.output is None
+    assert "unsupported-transformation" in critical_codes(result)
+
+
+def test_metric_direction_swap_cannot_publish() -> None:
+    throughput = claim(
+        ClaimValueKind.METRIC,
+        20,
+        unit="percent",
+        measure="throughput",
+        exact_text="Reduced latency and increased throughput by 20 percent.",
+        predicate=ClaimPredicate.MEASURED,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (throughput,),
+                after_text="Reduced throughput by 20 percent.",
+                asserted_facts=(fact(throughput),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(throughput,), for_publication=True)
+
+    assert result.output is None
+    assert "unsupported-transformation" in critical_codes(result)
+
+
+@pytest.mark.parametrize(
+    "source_text,unit,measure",
+    [
+        ("$20 revenue", "USD", "revenue"),
+        ("€20 revenue", "EUR", "revenue"),
+        ("₹20 revenue", "INR", "revenue"),
+        ("20% throughput", "percent", "throughput"),
+    ],
+)
+def test_verbatim_metric_accepts_normalized_unit_aliases(
+    source_text: str,
+    unit: str,
+    measure: str,
+) -> None:
+    metric_claim = claim(
+        ClaimValueKind.METRIC,
+        20,
+        unit=unit,
+        measure=measure,
+        exact_text=source_text,
+        predicate=ClaimPredicate.MEASURED,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (metric_claim,),
+                transformation=DraftTransformation.VERBATIM,
+                after_text=source_text,
+                asserted_facts=(fact(metric_claim),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(metric_claim,), for_publication=True)
+
+    assert result.output == draft
+    assert result.quality.abstention_reason is None
+
+
+def test_unregistered_synonym_rephrase_is_explicitly_non_publishable() -> None:
+    responsibility = claim(
+        ClaimValueKind.RESPONSIBILITY,
+        "Built Python APIs",
+        exact_text="Built Python APIs.",
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            bullet(
+                (responsibility,),
+                after_text="Developed Python APIs.",
+                asserted_facts=(fact(responsibility),),
+            ),
+        )
+    )
+
+    result = validate_draft(
+        draft,
+        claims=(responsibility,),
+        for_publication=True,
+    )
+
+    assert result.output is None
+    assert "unsupported-transformation" in critical_codes(result)
 
 
 def test_publishable_draft_rejects_inferred_claim_and_missing_provenance() -> None:

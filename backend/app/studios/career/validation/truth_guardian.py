@@ -22,6 +22,7 @@ from app.studios.career.domain.drafts import (
     AssertedFact,
     DraftBullet,
     DraftTransformation,
+    REGISTERED_PUBLICATION_TRANSFORMATIONS,
     ResumeDraft,
 )
 from app.studios.career.domain.provenance import safe_evidence_snippet
@@ -61,6 +62,13 @@ _NEUTRAL_PROSE_TOKENS = frozenset(
         "per",
     }
 )
+_UNIT_ALIAS_FAMILIES = (
+    frozenset({"percent", "percentage", "%"}),
+    frozenset({"usd", "dollar", "dollars", "$"}),
+    frozenset({"eur", "euro", "euros", "€"}),
+    frozenset({"inr", "rupee", "rupees", "₹"}),
+)
+_SYMBOL_UNIT_ALIASES = frozenset({"%", "$", "€", "₹"})
 _UNSUPPORTED_CODE = {
     ClaimValueKind.EMPLOYER: "unsupported-employer",
     ClaimValueKind.TITLE: "unsupported-title",
@@ -101,6 +109,24 @@ def _phrase_is_present(text: str, phrase: str) -> bool:
     return any(
         text_tokens[index : index + width] == phrase_tokens
         for index in range(len(text_tokens) - width + 1)
+    )
+
+
+def _unit_is_present(text: str, unit: str) -> bool:
+    normalized_unit = _normalized_text(unit)
+    aliases = next(
+        (
+            family
+            for family in _UNIT_ALIAS_FAMILIES
+            if normalized_unit in family
+        ),
+        frozenset({normalized_unit}),
+    )
+    return any(
+        alias in text
+        if alias in _SYMBOL_UNIT_ALIASES
+        else _phrase_is_present(text, alias)
+        for alias in aliases
     )
 
 
@@ -194,7 +220,7 @@ def _metric_mention_is_supported(
     return any(
         claim.object.unit is not None
         and claim.object.measure is not None
-        and _phrase_is_present(context, claim.object.unit)
+        and _unit_is_present(context, claim.object.unit)
         and _phrase_is_present(context, claim.object.measure)
         for claim in matching_claims
     )
@@ -350,7 +376,7 @@ def _quality(
 ) -> QualityMetadata:
     has_critical = any(issue.critical for issue in issues)
     return QualityMetadata(
-        algorithm_versions={"career-truth-guardian": "1.1.0"},
+        algorithm_versions={"career-truth-guardian": "1.2.0"},
         model_versions={},
         prompt_versions={},
         confidence_components={"truth": 0.0 if has_critical else 1.0},
@@ -386,6 +412,17 @@ def validate_draft(
         issues.append(_critical("missing-provenance", "draft contains no evidence bullets"))
 
     for bullet_index, bullet in enumerate(draft.bullets):
+        if (
+            for_publication
+            and bullet.transformation
+            not in REGISTERED_PUBLICATION_TRANSFORMATIONS
+        ):
+            issues.append(
+                _critical(
+                    "unsupported-transformation",
+                    f"bullet {bullet_index} uses unregistered publication transformation {bullet.transformation.value}",
+                )
+            )
         if not bullet.source_claim_ids:
             issues.append(
                 _critical(
