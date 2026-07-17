@@ -136,3 +136,25 @@ def test_caller_rollback_removes_partial_analysis_records(session: Session) -> N
     with pytest.raises(RecordNotFound):
         repo.get_snapshot(result.profile.dataset_snapshot_id, owner_id=7)
 
+
+def test_repository_rejects_payload_that_no_longer_matches_frozen_digest(session: Session) -> None:
+    result = _result()
+    repo = DataAnalystRepository(session)
+    repo.add_snapshot(
+        snapshot_id=result.profile.dataset_snapshot_id,
+        owner_id=7,
+        filename="metrics.csv",
+        media_type="text/csv",
+        byte_size=42,
+        content_digest="a" * 64,
+        storage_key="opaque/key",
+        profile=result.profile,
+        created_at=NOW,
+    )
+    repo.persist_run_result(result, owner_id=7, created_at=NOW)
+    row = session.get(DataComputationRecord, result.computations[0].id)
+    row.payload = {**row.payload, "warnings": ["tampered"]}
+    session.flush()
+
+    with pytest.raises(ValueError, match="digest mismatch"):
+        repo.list_computations("run-1", owner_id=7)

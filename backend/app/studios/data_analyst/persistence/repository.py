@@ -50,6 +50,12 @@ def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
+def _hydrate(row, contract_type):
+    if _digest(row.payload) != row.payload_digest:
+        raise ValueError("stored analysis payload digest mismatch")
+    return contract_type.model_validate(row.payload)
+
+
 @dataclass(frozen=True)
 class DatasetSnapshot:
     id: str
@@ -119,9 +125,7 @@ class DataAnalystRepository:
         if row is None:
             raise RecordNotFound("dataset snapshot not found")
         snapshot, profile = row
-        hydrated = DatasetProfile.model_validate(profile.payload)
-        if _digest(_payload(hydrated)) != profile.payload_digest:
-            raise ValueError("stored dataset profile digest mismatch")
+        hydrated = _hydrate(profile, DatasetProfile)
         return DatasetSnapshot(snapshot.id, snapshot.owner_id, snapshot.filename, snapshot.media_type, snapshot.byte_size, snapshot.content_digest, snapshot.storage_key, hydrated, _aware(snapshot.created_at))
 
     def persist_run_result(self, result: DataAnalystRunResult, *, owner_id: int, created_at: datetime) -> None:
@@ -171,14 +175,14 @@ class DataAnalystRepository:
         row = self.session.execute(select(DataAnalysisPlanRecord).where(DataAnalysisPlanRecord.run_id == run_id, DataAnalysisPlanRecord.owner_id == owner_id)).scalar_one_or_none()
         if row is None:
             raise RecordNotFound("analysis plan not found")
-        return AnalysisPlan.model_validate(row.payload)
+        return _hydrate(row, AnalysisPlan)
 
     def list_computations(self, run_id: str, *, owner_id: int) -> tuple[ComputationRecord, ...]:
         StudioRunRepository(self.session).get(run_id, owner_id=owner_id)
         rows = self.session.execute(select(DataComputationRecord).where(DataComputationRecord.run_id == run_id, DataComputationRecord.owner_id == owner_id).order_by(DataComputationRecord.sequence, DataComputationRecord.id)).scalars()
-        return tuple(ComputationRecord.model_validate(row.payload) for row in rows)
+        return tuple(_hydrate(row, ComputationRecord) for row in rows)
 
     def list_claims(self, run_id: str, *, owner_id: int) -> tuple[FindingClaim, ...]:
         StudioRunRepository(self.session).get(run_id, owner_id=owner_id)
         rows = self.session.execute(select(DataFindingClaimRecord).where(DataFindingClaimRecord.run_id == run_id, DataFindingClaimRecord.owner_id == owner_id).order_by(DataFindingClaimRecord.sequence, DataFindingClaimRecord.id)).scalars()
-        return tuple(FindingClaim.model_validate(row.payload) for row in rows)
+        return tuple(_hydrate(row, FindingClaim) for row in rows)
