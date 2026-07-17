@@ -1,0 +1,44 @@
+# Data Analyst V2 Core TDD Report
+
+## Scope
+
+Implementation is restricted to the Data Analyst v2 core domain vertical slice. It adds no API, persistence, frontend, legacy-analysis changes, model calls, or network calls.
+
+## Baseline
+
+Command:
+
+```text
+cd backend && UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache PYTHONPATH=. uv run --isolated --with pytest --with pydantic==2.11.5 --with pandas --with numpy --with scipy pytest tests/platform -q
+```
+
+Output:
+
+```text
+....................                                                     [100%]
+20 passed in 0.44s
+```
+
+## RED/GREEN Log
+
+### 1. Domain contracts — RED
+
+Command:
+
+```text
+cd backend && UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache PYTHONPATH=. uv run --isolated --with pytest --with pydantic==2.11.5 --with pandas --with numpy --with scipy pytest tests/studios/data_analyst/test_contracts.py -q
+```
+
+Expected failure:
+
+```text
+ModuleNotFoundError: No module named 'app.studios'
+1 error in 0.42s
+```
+
+### 1. Domain contracts — GREEN
+
+```text
+.......                                                                  [100%]
+7 passed in 0.88s
+```
