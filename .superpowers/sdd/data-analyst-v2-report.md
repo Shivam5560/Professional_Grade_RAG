@@ -70,3 +70,17 @@ ModuleNotFoundError: No module named 'app.studios.data_analyst.planning'
 ........                                                                 [100%]
 8 passed in 3.89s
 ```
+
+### 4. Registered method execution — RED
+
+```text
+ModuleNotFoundError: No module named 'app.studios.data_analyst.execution'
+1 error in 1.52s
+```
+
+### 4. Registered method execution — GREEN
+
+```text
+......                                                                   [100%]
+6 passed in 6.95s
+```

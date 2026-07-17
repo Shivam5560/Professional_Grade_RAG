@@ -265,6 +265,8 @@ class ComputationRecord(FrozenContract):
     assumption_results: tuple[AssumptionResult, ...] = ()
     output: Mapping[str, Any]
     output_digest: str = Field(pattern=DIGEST_PATTERN)
+    warnings: tuple[str, ...] = ()
+    artifact_ids: tuple[str, ...] = ()
     evidence: ComputationEvidence
 
     @field_validator("parameters", "output")
@@ -275,6 +277,15 @@ class ComputationRecord(FrozenContract):
     @field_serializer("parameters", "output")
     def serialize_payload(self, value: Mapping[str, Any]) -> dict[str, Any]:
         return thaw_json(value)
+
+    @field_validator("warnings", "artifact_ids")
+    @classmethod
+    def validate_unique_strings(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not item.strip() for item in value):
+            raise ValueError("computation entries must not be blank")
+        if len(value) != len(set(value)):
+            raise ValueError("computation entries must be unique")
+        return value
 
     @model_validator(mode="after")
     def validate_evidence(self) -> "ComputationRecord":
@@ -296,6 +307,8 @@ class ComputationRecord(FrozenContract):
             raise ValueError("computation evidence does not match its record")
         if thaw_json(self.parameters) != thaw_json(self.evidence.parameters):
             raise ValueError("computation evidence parameters do not match")
+        if self.artifact_ids != self.evidence.artifact_ids:
+            raise ValueError("computation evidence artifacts do not match")
         return self
 
 
