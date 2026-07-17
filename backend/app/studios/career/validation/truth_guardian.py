@@ -197,6 +197,13 @@ def validate_draft(
                     f"bullet {bullet_index} has no source claim identifiers",
                 )
             )
+        if not bullet.before_text:
+            issues.append(
+                _critical(
+                    "missing-provenance",
+                    f"bullet {bullet_index} has no before-text transformation history",
+                )
+            )
         if not bullet.asserted_facts:
             issues.append(
                 _critical(

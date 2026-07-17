@@ -376,3 +376,28 @@ def test_unknown_claim_and_unsupported_keyword_abstain() -> None:
 
     assert result.output is None
     assert {"unknown-claim", "unsupported-keyword"} <= critical_codes(result)
+
+
+def test_missing_before_text_abstains_as_missing_provenance() -> None:
+    python_claim = claim(
+        ClaimValueKind.SKILL,
+        "Python",
+        exact_text="Used Python in production.",
+        predicate=ClaimPredicate.HAS_SKILL,
+    )
+    draft = ResumeDraft.create(
+        bullets=(
+            DraftBullet(
+                source_claim_ids=(python_claim.id,),
+                transformation=DraftTransformation.REPHRASED,
+                before_text=(),
+                after_text="Built Python services.",
+                asserted_facts=(fact(python_claim),),
+            ),
+        )
+    )
+
+    result = validate_draft(draft, claims=(python_claim,), for_publication=True)
+
+    assert result.output is None
+    assert "missing-provenance" in critical_codes(result)
