@@ -129,8 +129,10 @@ def transition_run(
         raise InvalidRunTransition("failed transition requires a failure_code")
     if target is not StudioRunState.FAILED and failure_code is not None:
         raise InvalidRunTransition("failure_code is only valid for failed transitions")
-    if run.cancellation_requested and target is StudioRunState.SUCCEEDED:
-        raise InvalidRunTransition("a cancellation-requested run cannot succeed")
+    if run.cancellation_requested and target is not StudioRunState.CANCELLED:
+        raise InvalidRunTransition(
+            "a cancellation-requested run can only transition to cancelled"
+        )
 
     updates: dict[str, object] = {"state": target, "updated_at": now}
     if current_step is not None:

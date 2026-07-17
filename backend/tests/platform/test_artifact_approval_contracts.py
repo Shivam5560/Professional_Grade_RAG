@@ -195,6 +195,36 @@ def test_decided_approval_requires_reviewer():
         )
 
 
+def test_decided_approval_model_requires_owner_as_reviewer():
+    owner_decision = ApprovalRequest(
+        id="approval-owner",
+        run_id="run-1",
+        owner_id=7,
+        decision_type="final-resume",
+        proposed_changes=("draft-1",),
+        evidence_ids=("claim-1",),
+        status=ApprovalStatus.APPROVED,
+        reviewer_id=7,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    assert owner_decision.reviewer_id == owner_decision.owner_id
+
+    with pytest.raises(ValidationError, match="owner"):
+        ApprovalRequest(
+            id="approval-cross-owner",
+            run_id="run-1",
+            owner_id=7,
+            decision_type="final-resume",
+            proposed_changes=("draft-1",),
+            evidence_ids=("claim-1",),
+            status=ApprovalStatus.APPROVED,
+            reviewer_id=8,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
 def test_approval_decision_rejects_backdated_or_cross_owner_actor():
     later = datetime(2026, 7, 17, 12, 1, tzinfo=timezone.utc)
     pending = make_approval().model_copy(update={"updated_at": later})

@@ -65,6 +65,8 @@ class ApprovalRequest(BaseModel):
             raise ValueError("pending approval cannot have a reviewer")
         if self.status is not ApprovalStatus.PENDING and self.reviewer_id is None:
             raise ValueError("decided approval requires a reviewer")
+        if self.reviewer_id is not None and self.reviewer_id != self.owner_id:
+            raise ValueError("approval reviewer must be the run owner")
         if (
             self.status is ApprovalStatus.REVISION_REQUESTED
             and not (self.comment or "").strip()

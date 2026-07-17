@@ -150,3 +150,24 @@ def test_cancellation_request_is_distinct_from_cancelled_completion():
     cancelled = transition_run(requested, StudioRunState.CANCELLED, now=NOW)
     assert cancelled.state is StudioRunState.CANCELLED
     assert cancelled.cancellation_requested is True
+
+
+def test_cancellation_requested_queued_run_can_only_be_cancelled():
+    requested = request_run_cancellation(make_run(), now=NOW)
+
+    with pytest.raises(InvalidRunTransition, match="cancellation-requested"):
+        transition_run(requested, StudioRunState.RUNNING, now=NOW)
+
+    cancelled = transition_run(requested, StudioRunState.CANCELLED, now=NOW)
+    assert cancelled.state is StudioRunState.CANCELLED
+
+
+def test_cancellation_requested_running_run_can_only_be_cancelled():
+    running = transition_run(make_run(), StudioRunState.RUNNING, now=NOW)
+    requested = request_run_cancellation(running, now=NOW)
+
+    with pytest.raises(InvalidRunTransition, match="cancellation-requested"):
+        transition_run(requested, StudioRunState.AWAITING_INPUT, now=NOW)
+
+    cancelled = transition_run(requested, StudioRunState.CANCELLED, now=NOW)
+    assert cancelled.state is StudioRunState.CANCELLED
