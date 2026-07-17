@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Newsreader, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/layout/ClientProviders";
-import { JobProvider } from "@/components/providers/JobProvider";
-import { AppCatalogProvider } from "@/lib/apps/useAppCatalog";
+import { RouteProviders } from "@/components/layout/RouteProviders";
 import { themeBootstrapScript } from "@/lib/appearance";
 
 const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk", display: "swap" });
@@ -21,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head><script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} /></head>
       <body>
         <ClientProviders>
-          <AppCatalogProvider><JobProvider>{children}</JobProvider></AppCatalogProvider>
+          <RouteProviders>{children}</RouteProviders>
         </ClientProviders>
       </body>
     </html>
