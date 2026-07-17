@@ -52,3 +52,37 @@ Observed:
 ...........                                                              [100%]
 11 passed in 0.64s
 ```
+
+### Cycle 2 RED — bounded scoring and one-to-one matching
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_matching.py -q
+```
+
+Observed expected failure:
+
+```text
+E   ImportError: cannot import name 'CoverageBand' from 'app.studios.career.domain'
+1 error in 0.99s
+```
+
+The test suite could not collect because score, match, and calibrated coverage contracts had not been implemented.
+
+### Cycle 2 GREEN — bounded scoring and one-to-one matching
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_matching.py -q -rA
+```
+
+Observed:
+
+```text
+............                                                             [100%]
+12 passed in 29.38s
+```
+
+The passing cases include bounded component validation, preserved score breakdowns, no claim double-counting, deterministic tie behavior across input order, weighted coverage ranges, truthful unmatched requirements, inferred-evidence rejection, and edge integrity checks.
