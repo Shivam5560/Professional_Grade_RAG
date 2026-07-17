@@ -6,6 +6,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
+from app.db.database import get_db
+from app.db.models import User
 from app.platform.approvals import InvalidApprovalDecision
 from app.platform.persistence import (
     IdempotencyConflict,
@@ -155,3 +158,13 @@ def create_career_router(
         return _translate(lambda: app.get_artifact(revision_id))
 
     return router
+
+
+def _current_owner_id(current_user: User = Depends(get_current_user)) -> int:
+    return int(current_user.id)
+
+
+router = create_career_router(
+    session_dependency=get_db,
+    owner_dependency=_current_owner_id,
+)

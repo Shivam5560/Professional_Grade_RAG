@@ -21,16 +21,14 @@ ROUTER_SPECS = {
     "documents": RouterSpec("app.api.routes.documents", "/api/v1"),
     "history": RouterSpec("app.api.routes.history", "/api/v1/history", ("History",)),
     "aurasql": RouterSpec("app.api.routes.aurasql", "/api/v1", ("AuraSQL",)),
-    "analysis": RouterSpec("app.api.routes.analysis", "/api/v1", ("Analysis",)),
+    "data-analyst-v2": RouterSpec("app.studios.data_analyst.api.router", ""),
     "presentation": RouterSpec(
         "app.api.routes.analysis",
         "/api/v1",
         ("Analysis",),
         router_name="presentation_router",
     ),
-    "nexus-resume": RouterSpec("app.api.routes.nexus_resume", "/api/v1", ("Nexus Resume",)),
-    "resume-generator": RouterSpec("app.api.routes.resumegen", "/api/v1", ("Resume Generator",)),
-    "workflows": RouterSpec("app.api.routes.workflows", "/api/v1", ("Workflows",)),
+    "career-v2": RouterSpec("app.studios.career.api.router", ""),
 }
 
 
