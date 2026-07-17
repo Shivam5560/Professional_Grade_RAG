@@ -97,6 +97,11 @@ def test_verifier_rejects_unknown_evidence_invalid_path_and_value_mismatch() -> 
         "leads to higher",
         "has an effect on",
         "impacts",
+        "results in higher",
+        "is responsible for",
+        "determines",
+        "influences",
+        "has a causal relationship with",
     ],
 )
 def test_verifier_rejects_causal_language_for_association_evidence(
@@ -136,3 +141,22 @@ def test_synthesizer_abstains_from_failed_correlation_value() -> None:
         for claim in claims
     )
     assert all(check.accepted for check in verify_claims(claims, records))
+
+
+def test_claim_paths_support_arbitrary_valid_column_names() -> None:
+    frame = pd.DataFrame(
+        {
+            "gross.margin / usd": [1.0, 2.0, 3.0, 4.0],
+            "net.revenue": [2.0, 4.0, 6.0, 8.0],
+        }
+    )
+    records = computation_records(frame)
+
+    claims = synthesize_claims(records)
+
+    assert claims
+    assert all(check.accepted for check in verify_claims(claims, records))
+    for claim in claims:
+        link = claim.evidence_links[0]
+        record = next(item for item in records if item.evidence.id == link.evidence_id)
+        assert resolve_evidence_value(record, link.value_path) == claim.value

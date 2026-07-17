@@ -86,7 +86,7 @@ Expected: collection fails because `app.studios.data_analyst` does not exist.
 
 - [ ] **Step 3: Implement the minimal immutable contracts**
 
-Use `ConfigDict(frozen=True, validate_default=True)`, tuples instead of lists, mapping proxies for payloads, field serializers that thaw mappings for JSON, and a depth-first DAG validator. Restrict identifiers and semantic versions with the same kebab-case/semver patterns used by the shared contracts. Represent evidence paths as dot-separated mapping keys/list indexes beginning with `output`.
+Use `ConfigDict(frozen=True, validate_default=True)`, tuples instead of lists, mapping proxies for payloads, field serializers that thaw mappings for JSON, and a depth-first DAG validator. Restrict identifiers and semantic versions with the same kebab-case/semver patterns used by the shared contracts. Represent evidence paths as escaped JSON Pointers beginning with `/output/` so arbitrary valid column names remain addressable.
 
 - [ ] **Step 4: Verify GREEN**
 

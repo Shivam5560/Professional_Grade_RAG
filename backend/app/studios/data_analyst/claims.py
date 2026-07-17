@@ -20,7 +20,9 @@ _CORRELATION_METHODS = frozenset(
 )
 _CAUSAL_LANGUAGE = re.compile(
     r"\b(?:caus(?:e|es|ed|ing)|driv(?:e|es|en|ing)|"
-    r"leads?\s+to|effects?|impacts?)\b",
+    r"leads?\s+to|results?\s+in|responsible\s+for|"
+    r"determin(?:e|es|ed|ing)|influenc(?:e|es|ed|ing)|"
+    r"causal(?:ly)?|effects?|impacts?)\b",
     re.IGNORECASE,
 )
 
@@ -29,10 +31,24 @@ class EvidenceResolutionError(ValueError):
     """Raised when a claim path cannot be resolved safely."""
 
 
+def _pointer(*tokens: str | int) -> str:
+    escaped = [
+        str(token).replace("~", "~0").replace("/", "~1")
+        for token in tokens
+    ]
+    return "/" + "/".join(escaped)
+
+
+def _unescape_pointer_token(token: str) -> str:
+    if re.search(r"~(?![01])", token):
+        raise EvidenceResolutionError("evidence path contains an invalid escape")
+    return token.replace("~1", "/").replace("~0", "~")
+
+
 def resolve_evidence_value(record: ComputationRecord, value_path: str) -> Any:
-    parts = value_path.split(".")
-    if not parts or parts[0] != "output":
-        raise EvidenceResolutionError("evidence value paths must start with output")
+    if not value_path.startswith("/output/"):
+        raise EvidenceResolutionError("evidence value paths must start with /output/")
+    parts = [_unescape_pointer_token(token) for token in value_path.split("/")[1:]]
 
     current: Any = record.output
     for token in parts[1:]:
@@ -106,7 +122,7 @@ def synthesize_claims(
                     value=record.output["row_count"],
                     scope={"statistic": "row-count"},
                     record=record,
-                    value_path="output.row_count",
+                    value_path=_pointer("output", "row_count"),
                     language_class=FindingLanguageClass.OBSERVATION,
                     method_validity=1.0,
                 )
@@ -122,7 +138,7 @@ def synthesize_claims(
                         value=mean,
                         scope={"statistic": "mean"},
                         record=record,
-                        value_path=f"output.columns.{column_name}.mean",
+                        value_path=_pointer("output", "columns", column_name, "mean"),
                         language_class=FindingLanguageClass.OBSERVATION,
                         method_validity=1.0,
                     )
@@ -140,7 +156,14 @@ def synthesize_claims(
                         value=top["count"],
                         scope={"category": top["value"]},
                         record=record,
-                        value_path=f"output.columns.{column_name}.frequencies.0.count",
+                        value_path=_pointer(
+                            "output",
+                            "columns",
+                            column_name,
+                            "frequencies",
+                            0,
+                            "count",
+                        ),
                         language_class=FindingLanguageClass.OBSERVATION,
                         method_validity=1.0,
                     )
@@ -163,7 +186,9 @@ def synthesize_claims(
                         value=coefficient,
                         scope={"method": pair["method"]},
                         record=record,
-                        value_path=f"output.pairs.{index}.coefficient",
+                        value_path=_pointer(
+                            "output", "pairs", index, "coefficient"
+                        ),
                         language_class=FindingLanguageClass.ASSOCIATION,
                         method_validity=validity,
                     )

@@ -314,7 +314,7 @@ class ComputationRecord(FrozenContract):
 
 class EvidenceLink(FrozenContract):
     evidence_id: str = Field(min_length=1)
-    value_path: str = Field(pattern=r"^output(?:\.[A-Za-z0-9_-]+)+$")
+    value_path: str = Field(pattern=r"^/output(?:/(?:[^~/]|~0|~1)+)+$")
 
     @field_validator("evidence_id")
     @classmethod
