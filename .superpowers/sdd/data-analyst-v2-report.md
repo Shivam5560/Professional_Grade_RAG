@@ -98,3 +98,100 @@ ModuleNotFoundError: No module named 'app.studios.data_analyst.claims'
 .........                                                                [100%]
 9 passed in 2.76s
 ```
+
+### 6. End-to-end specialist service — RED
+
+```text
+ImportError: cannot import name 'DataAnalystSpecialist' from 'app.studios.data_analyst'
+1 error in 0.97s
+```
+
+### 6. End-to-end specialist service — GREEN
+
+```text
+....                                                                     [100%]
+4 passed in 9.61s
+```
+
+### 7. Review regression: arbitrary column-name evidence paths — RED
+
+Root cause: synthesis interpolated raw column names into dot-delimited locators, and `EvidenceLink` allowed only alphanumeric dot tokens. A valid column named `gross.margin / usd` therefore could not produce a claim.
+
+```text
+FAILED tests/studios/data_analyst/test_claims.py::test_claim_paths_support_arbitrary_valid_column_names
+String should match pattern '^output(?:\.[A-Za-z0-9_-]+)+$'
+1 failed in 2.17s
+```
+
+### 8. Review regression: expanded causal overreach vocabulary — RED
+
+```text
+5 failed, 5 passed in 4.22s
+Missing rejections: results in, responsible for, determines, influences, causal relationship
+```
+
+### 7–8. Review regressions — GREEN
+
+```text
+...........                                                              [100%]
+11 passed in 2.94s
+```
+
+### 9. Review regression: executor input-type preflight — RED
+
+```text
+ImportError: cannot import name 'MethodPrerequisiteError'
+1 error in 4.49s
+```
+
+### 9. Executor input-type preflight — GREEN
+
+```text
+.                                                                        [100%]
+1 passed in 5.26s
+```
+
+## Final Verification
+
+Syntax/import compilation:
+
+```text
+cd backend && UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache PYTHONPATH=. uv run --isolated --with pydantic==2.11.5 --with pandas --with numpy --with scipy python -m compileall -q app/studios/data_analyst
+exit 0
+```
+
+Complete owned suite:
+
+```text
+cd backend && UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache PYTHONPATH=. uv run --isolated --with pytest --with pydantic==2.11.5 --with pandas --with numpy --with scipy pytest tests/studios/data_analyst -q
+...............................................                          [100%]
+47 passed in 3.10s
+```
+
+Shared platform compatibility:
+
+```text
+cd backend && UV_CACHE_DIR=/tmp/data-analyst-v2-uv-cache PYTHONPATH=. uv run --isolated --with pytest --with pydantic==2.11.5 --with pandas --with numpy --with scipy pytest tests/platform -q
+....................                                                     [100%]
+20 passed in 0.23s
+```
+
+Repository checks:
+
+```text
+git diff --check
+exit 0
+```
+
+The changed-path audit against `3a6fd55` contains only the assigned plan, `backend/app/studios/data_analyst/**`, `backend/tests/studios/data_analyst/**`, and this report.
+
+## Design Self-Review
+
+- Sections 1–5: the slice consumes only the existing frozen runtime, evidence, and quality contracts; no shared-platform or reverse studio dependency was added.
+- Section 6: covered by immutable profiles/intents/methods/plans/computations/claims, deterministic profiling, a four-method registry, DAG and method-input preflight, pandas/SciPy execution, canonical digests, computation evidence, synthesis, and analytical verification.
+- Section 9: the in-memory core uses explicit queued → running → succeeded/failed transitions and critically abstains instead of publishing a failed claim. Durable leases/retry/persistence remain outside this core-only assignment.
+- Section 11: fixtures verify method choice, assumption diagnostics, deterministic reruns, exact numerical evidence resolution, arbitrary-column locators, and adversarial causal-language rejection.
+- Section 14: each production unit and every review regression has a witnessed RED/GREEN cycle above; all output contracts serialize without non-finite JSON values.
+- Section 15: the executable path is snapshot/fingerprint → profile → registered plan → computations/evidence → verified `AIResult`, with no LLM or network dependency.
+
+Deliberately excluded as required by the initial core boundary: persistence, APIs, UI, editable-plan endpoints, artifacts/notebooks/reports, broad statistical/ML/time-series catalogs, and durable worker retry/cancellation. No requested core scope is known to be missing.
