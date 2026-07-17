@@ -233,19 +233,22 @@ def verify_claims(
 
         if (
             len(resolved_values) == len(claim.evidence_links)
-            and not any(_same_json_value(value, claim.value) for value in resolved_values)
+            and any(
+                not _same_json_value(value, claim.value)
+                for value in resolved_values
+            )
         ):
             add_issue("unsupported-value")
 
         association_only = any(
             record.method_id in _CORRELATION_METHODS for record in supporting_records
         )
+        language = f"{claim.subject} {claim.predicate}"
+        if _CAUSAL_LANGUAGE.search(language):
+            add_issue("causal-language")
         if association_only:
             if claim.language_class is not FindingLanguageClass.ASSOCIATION:
                 add_issue("invalid-language-class")
-            language = f"{claim.subject} {claim.predicate}"
-            if _CAUSAL_LANGUAGE.search(language):
-                add_issue("causal-language")
 
         verifications.append(
             ClaimVerification(

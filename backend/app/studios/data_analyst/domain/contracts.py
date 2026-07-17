@@ -18,7 +18,7 @@ from app.platform.evidence import ComputationEvidence
 from app.platform.quality import AIResult
 from app.platform.runtime import StudioRun
 
-from .json_values import freeze_json, thaw_json
+from .json_values import canonical_digest, freeze_json, thaw_json
 
 SEMVER_PATTERN = r"^\d+\.\d+\.\d+$"
 KEBAB_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
@@ -289,6 +289,8 @@ class ComputationRecord(FrozenContract):
 
     @model_validator(mode="after")
     def validate_evidence(self) -> "ComputationRecord":
+        if self.output_digest != canonical_digest(self.output):
+            raise ValueError("output digest does not match computation output")
         expected = (
             self.run_id,
             self.dataset_snapshot_id,
@@ -307,6 +309,11 @@ class ComputationRecord(FrozenContract):
             raise ValueError("computation evidence does not match its record")
         if thaw_json(self.parameters) != thaw_json(self.evidence.parameters):
             raise ValueError("computation evidence parameters do not match")
+        expected_assumptions = {
+            result.name: result.status.value for result in self.assumption_results
+        }
+        if expected_assumptions != thaw_json(self.evidence.assumptions):
+            raise ValueError("computation evidence assumptions do not match")
         if self.artifact_ids != self.evidence.artifact_ids:
             raise ValueError("computation evidence artifacts do not match")
         return self

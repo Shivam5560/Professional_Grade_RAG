@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from app.platform.evidence import ComputationEvidence
 from app.studios.data_analyst.domain import (
     AnalysisPlan,
+    AssumptionResult,
+    AssumptionStatus,
     ColumnProfile,
     ColumnSemanticType,
     ComputationRecord,
@@ -36,6 +38,15 @@ def make_step(
 
 
 def make_record() -> ComputationRecord:
+    output = {"row_count": 3, "columns": {"revenue": {"mean": 2.0}}}
+    output_digest = canonical_digest(output)
+    assumption_results = (
+        AssumptionResult(
+            name="minimum-sample-size",
+            status=AssumptionStatus.PASS,
+            detail="The minimum sample size is satisfied.",
+        ),
+    )
     evidence = ComputationEvidence(
         id="evidence-1",
         run_id="run-1",
@@ -44,7 +55,7 @@ def make_record() -> ComputationRecord:
         method_version="1.0.0",
         parameters={"columns": ["revenue"]},
         assumptions={"minimum-sample-size": "pass"},
-        output_digest="a" * 64,
+        output_digest=output_digest,
     )
     return ComputationRecord(
         id="computation-1",
@@ -56,9 +67,9 @@ def make_record() -> ComputationRecord:
         parameters={"columns": ["revenue"]},
         random_seed=None,
         code_digest="b" * 64,
-        assumption_results=(),
-        output={"row_count": 3, "columns": {"revenue": {"mean": 2.0}}},
-        output_digest="a" * 64,
+        assumption_results=assumption_results,
+        output=output,
+        output_digest=output_digest,
         evidence=evidence,
     )
 
@@ -167,6 +178,35 @@ def test_computation_record_requires_matching_evidence() -> None:
     with pytest.raises(ValidationError, match="evidence"):
         ComputationRecord.model_validate(
             {**record.model_dump(mode="python"), "evidence": mismatched}
+        )
+
+
+def test_computation_record_rejects_digest_forged_for_unchanged_output() -> None:
+    record = make_record()
+    forged_digest = "e" * 64
+    forged_evidence = record.evidence.model_copy(
+        update={"output_digest": forged_digest}
+    )
+
+    with pytest.raises(ValidationError, match="output digest"):
+        ComputationRecord.model_validate(
+            {
+                **record.model_dump(mode="python"),
+                "output_digest": forged_digest,
+                "evidence": forged_evidence,
+            }
+        )
+
+
+def test_computation_record_requires_exact_evidence_assumption_results() -> None:
+    record = make_record()
+    forged_evidence = record.evidence.model_copy(
+        update={"assumptions": {"minimum-sample-size": "warning"}}
+    )
+
+    with pytest.raises(ValidationError, match="assumptions"):
+        ComputationRecord.model_validate(
+            {**record.model_dump(mode="python"), "evidence": forged_evidence}
         )
 
 

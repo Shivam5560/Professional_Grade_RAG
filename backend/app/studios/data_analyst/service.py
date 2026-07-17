@@ -149,9 +149,7 @@ class DataAnalystSpecialist:
                 now=now,
                 current_step="verify-claims",
                 progress=0.9,
-            )
-            failed = StudioRun.model_validate(
-                {**failed.model_dump(), "failure_code": failure_code}
+                failure_code=failure_code,
             )
             validation = ValidationIssue(
                 code="claim-resolution",

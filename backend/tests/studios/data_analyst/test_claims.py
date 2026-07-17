@@ -89,6 +89,21 @@ def test_verifier_rejects_unknown_evidence_invalid_path_and_value_mismatch() -> 
     )
 
 
+def test_verifier_requires_every_evidence_link_to_support_the_claim_value() -> None:
+    claim, records = correlation_claim_and_records()
+    contradictory_link = claim.evidence_links[0].model_copy(
+        update={"value_path": "/output/pairs/0/sample_count"}
+    )
+    mixed = claim.model_copy(
+        update={"evidence_links": (*claim.evidence_links, contradictory_link)}
+    )
+
+    result = verify_claims((mixed,), records)[0]
+
+    assert result.accepted is False
+    assert result.issue_codes == ("unsupported-value",)
+
+
 @pytest.mark.parametrize(
     "predicate",
     [
@@ -114,6 +129,21 @@ def test_verifier_rejects_causal_language_for_association_evidence(
 
     assert result.accepted is False
     assert "causal-language" in result.issue_codes
+
+
+def test_verifier_rejects_causal_language_for_descriptive_evidence() -> None:
+    records = computation_records()
+    observation = next(
+        claim
+        for claim in synthesize_claims(records)
+        if claim.language_class is FindingLanguageClass.OBSERVATION
+    )
+    causal = observation.model_copy(update={"predicate": "drives revenue growth"})
+
+    result = verify_claims((causal,), records)[0]
+
+    assert result.accepted is False
+    assert result.issue_codes == ("causal-language",)
 
 
 def test_verifier_requires_association_language_class_for_correlation() -> None:

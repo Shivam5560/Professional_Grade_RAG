@@ -276,6 +276,13 @@ def _preflight_steps(
     ordered = _topological_steps(plan)
     for step in ordered:
         method = registry.get(step.method_id, step.method_version)
+        if (
+            method.id in {"pearson-correlation", "spearman-correlation"}
+            and len(step.input_columns) < 2
+        ):
+            raise MethodPrerequisiteError(
+                f"{method.id} requires at least two numeric input columns"
+            )
         missing_columns = set(step.input_columns) - set(frame.columns)
         if missing_columns:
             raise MethodPrerequisiteError(
@@ -345,7 +352,7 @@ def execute_analysis_plan(
             dataset_snapshot_id=profile.dataset_snapshot_id,
             method_id=method.id,
             method_version=method.version,
-            parameters=step.parameters,
+            parameters=step.model_dump(mode="json")["parameters"],
             random_seed=None,
             assumptions={
                 result.name: result.status.value for result in assumption_results

@@ -195,3 +195,93 @@ The changed-path audit against `3a6fd55` contains only the assigned plan, `backe
 - Section 15: the executable path is snapshot/fingerprint → profile → registered plan → computations/evidence → verified `AIResult`, with no LLM or network dependency.
 
 Deliberately excluded as required by the initial core boundary: persistence, APIs, UI, editable-plan endpoints, artifacts/notebooks/reports, broad statistical/ML/time-series catalogs, and durable worker retry/cancellation. No requested core scope is known to be missing.
+
+## Independent Review Fix Pass
+
+The branch was rebased onto hardened shared-platform head `b337298` before this
+pass so the regressions exercised the current runtime and evidence invariants.
+
+### Hardened runtime failure transition — RED
+
+The existing failure-path service test first exposed that frozen plan parameters
+had to be serialized to JSON containers for the hardened `ComputationEvidence`.
+After that compatibility boundary was corrected, the same regression reached the
+target runtime failure:
+
+```text
+InvalidRunTransition: failed transition requires a failure_code
+1 failed
+```
+
+### Hardened runtime failure transition — GREEN
+
+`failure_code` is now supplied atomically to `transition_run`; the post-transition
+model reconstruction was removed.
+
+```text
+1 passed
+```
+
+### Exact multi-link resolution and global causal guard — RED
+
+```text
+FAILED test_verifier_requires_every_evidence_link_to_support_the_claim_value
+FAILED test_verifier_rejects_causal_language_for_descriptive_evidence
+2 failed
+```
+
+### Exact multi-link resolution and global causal guard — GREEN
+
+Each link must now resolve exactly to the claim value. Causal wording is rejected
+for every initial registered method because none of those methods identifies a
+causal effect.
+
+```text
+1 passed
+1 passed
+```
+
+### Computation integrity — RED
+
+```text
+FAILED test_computation_record_rejects_digest_forged_for_unchanged_output
+FAILED test_computation_record_requires_exact_evidence_assumption_results
+2 failed
+```
+
+### Computation integrity — GREEN
+
+`ComputationRecord` now recomputes its canonical output digest and requires its
+evidence assumption map to equal the record's typed assumption results exactly.
+
+```text
+1 passed
+1 passed
+```
+
+### Correlation input preflight — RED
+
+```text
+FAILED test_execution_preflights_two_numeric_inputs_for_correlation
+1 failed
+```
+
+### Correlation input preflight — GREEN
+
+Correlation steps with fewer than two numeric inputs are rejected before method
+execution, preventing an empty pair set from producing vacuous PASS assumptions.
+
+```text
+1 passed
+```
+
+### Review-pass combined verification
+
+```text
+........................................................................ [ 84%]
+.............                                                            [100%]
+85 passed in 6.45s
+```
+
+This combined run covers the complete owned Data Analyst suite and the hardened
+shared-platform suite.
