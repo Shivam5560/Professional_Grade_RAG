@@ -52,4 +52,3 @@ def test_size_row_column_and_field_limits_are_enforced() -> None:
         parse_bounded_csv(b"a,b\n1,2\n", filename="data.csv", media_type="text/csv", policy=CsvUploadPolicy(max_columns=1))
     with pytest.raises(UnsafeDatasetUpload, match="field-too-large"):
         parse_bounded_csv(b"a\n12345\n", filename="data.csv", media_type="text/csv", policy=CsvUploadPolicy(max_field_bytes=3))
-
