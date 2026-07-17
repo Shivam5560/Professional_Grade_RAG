@@ -90,7 +90,7 @@ class StudioArtifactRecord(Base):
         CheckConstraint(
             "(revision = 1 AND supersedes_revision_id IS NULL) OR "
             "(revision > 1 AND supersedes_revision_id = "
-            "artifact_id || ':r' || CAST(revision - 1 AS VARCHAR))",
+            "artifact_id || ':' || 'r' || CAST(revision - 1 AS VARCHAR))",
             name="ck_studio_artifacts_immediate_parent",
         ),
         Index("ix_studio_artifacts_owner_artifact", "owner_id", "artifact_id"),
@@ -114,6 +114,7 @@ class StudioArtifactRecord(Base):
     media_type = Column(String(255), nullable=False)
     content_digest = Column(String(64), nullable=False)
     evidence_ids = Column(JSON, nullable=False)
+    is_current = Column(Boolean, nullable=False, default=True)
     supersedes_revision_id = Column(
         String(255),
         ForeignKey("studio_artifacts.revision_id"),

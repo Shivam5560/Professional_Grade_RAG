@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS studio_artifacts (
     media_type VARCHAR(255) NOT NULL,
     content_digest VARCHAR(64) NOT NULL,
     evidence_ids JSONB NOT NULL,
+    is_current BOOLEAN NOT NULL DEFAULT TRUE,
     supersedes_revision_id VARCHAR(255)
         REFERENCES studio_artifacts(revision_id),
     created_at TIMESTAMPTZ NOT NULL,
@@ -60,7 +61,7 @@ CREATE TABLE IF NOT EXISTS studio_artifacts (
         OR (
             revision > 1
             AND supersedes_revision_id =
-                artifact_id || ':r' || CAST(revision - 1 AS VARCHAR)
+                artifact_id || ':' || 'r' || CAST(revision - 1 AS VARCHAR)
         )
     )
 );
@@ -69,6 +70,8 @@ CREATE INDEX IF NOT EXISTS ix_studio_artifacts_run_id
     ON studio_artifacts(run_id);
 CREATE INDEX IF NOT EXISTS ix_studio_artifacts_owner_artifact
     ON studio_artifacts(owner_id, artifact_id);
+CREATE INDEX IF NOT EXISTS ix_studio_artifacts_current
+    ON studio_artifacts(owner_id, artifact_id, is_current);
 
 CREATE TABLE IF NOT EXISTS studio_approvals (
     id VARCHAR(255) PRIMARY KEY,
