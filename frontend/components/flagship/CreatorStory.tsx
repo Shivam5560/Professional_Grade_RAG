@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { CREATOR_SUMMARY } from "@/lib/flagship-content";
+import { CREATOR_PROFILE } from "@/lib/creator-profile";
 
 export function CreatorStory() {
   return (
@@ -11,14 +11,14 @@ export function CreatorStory() {
         </p>
         <div>
           <h2 className="text-4xl font-bold tracking-tight">
-            {CREATOR_SUMMARY.heading}
+            Built end to end by {CREATOR_PROFILE.name}
           </h2>
           <p className="mt-5 max-w-2xl leading-7 opacity-70">
-            {CREATOR_SUMMARY.body}
+            {CREATOR_PROFILE.ownership}
           </p>
           <Link
             className="mt-7 inline-flex rounded-sm font-semibold text-[hsl(var(--signal))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--signal))] focus-visible:ring-offset-2 focus-visible:ring-offset-foreground"
-            href={CREATOR_SUMMARY.href}
+            href="/developer"
           >
             Read the engineering story →
           </Link>

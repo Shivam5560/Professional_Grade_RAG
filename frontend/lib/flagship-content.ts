@@ -43,10 +43,3 @@ export const PROOF_POINTS = [
   ["Data", "Schema-aware SQL generation and execution"],
   ["Operations", "Observable long-running analysis workflows"],
 ] as const;
-
-export const CREATOR_SUMMARY = {
-  name: "Shivam Sourav",
-  heading: "Built end to end by Shivam Sourav",
-  body: "A solo-engineered AI platform spanning product design, retrieval, data systems, workflow orchestration, observability, and deployment.",
-  href: "/developer",
-} as const;
