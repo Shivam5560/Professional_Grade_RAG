@@ -22,7 +22,11 @@ from .domain import (
     MethodDefinition,
     PlanStep,
 )
-from .execution import DatasetFingerprintMismatch, execute_analysis_plan
+from .execution import (
+    DatasetFingerprintMismatch,
+    MethodPrerequisiteError,
+    execute_analysis_plan,
+)
 from .planning import build_analysis_plan, parse_intent
 from .profiling import fingerprint_dataframe, profile_dataframe
 from .registry import MethodRegistry, UnregisteredMethodError
@@ -47,6 +51,7 @@ __all__ = [
     "FindingClaim",
     "FindingLanguageClass",
     "MethodDefinition",
+    "MethodPrerequisiteError",
     "MethodRegistry",
     "PlanStep",
     "UnregisteredMethodError",

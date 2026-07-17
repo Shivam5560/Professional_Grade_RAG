@@ -31,6 +31,10 @@ class DatasetFingerprintMismatch(ValueError):
     """Raised when execution data differs from the planned snapshot."""
 
 
+class MethodPrerequisiteError(ValueError):
+    """Raised before execution when a registered method cannot consume its inputs."""
+
+
 def _finite_float(value: Any) -> float | None:
     result = float(value)
     return result if isfinite(result) else None
@@ -262,6 +266,31 @@ def _topological_steps(plan: AnalysisPlan) -> tuple[PlanStep, ...]:
     return tuple(ordered)
 
 
+def _preflight_steps(
+    frame: pd.DataFrame,
+    profile: DatasetProfile,
+    plan: AnalysisPlan,
+    registry: MethodRegistry,
+) -> tuple[PlanStep, ...]:
+    profiles = {column.name: column for column in profile.columns}
+    ordered = _topological_steps(plan)
+    for step in ordered:
+        method = registry.get(step.method_id, step.method_version)
+        missing_columns = set(step.input_columns) - set(frame.columns)
+        if missing_columns:
+            raise MethodPrerequisiteError(
+                f"planned columns are missing: {sorted(missing_columns)}"
+            )
+        for name in step.input_columns:
+            semantic_type = profiles[name].semantic_type
+            if semantic_type not in method.supported_semantic_types:
+                raise MethodPrerequisiteError(
+                    f"column {name} has unsupported {semantic_type.value} type "
+                    f"for {method.id}"
+                )
+    return ordered
+
+
 def execute_analysis_plan(
     frame: pd.DataFrame,
     profile: DatasetProfile,
@@ -271,19 +300,23 @@ def execute_analysis_plan(
     registry: MethodRegistry | None = None,
 ) -> tuple[ComputationRecord, ...]:
     active_registry = registry or MethodRegistry.initial()
-    active_registry.validate_plan(plan)
-    if plan.dataset_snapshot_id != profile.dataset_snapshot_id:
+    validated_plan = AnalysisPlan.model_validate(plan.model_dump(mode="python"))
+    active_registry.validate_plan(validated_plan)
+    if validated_plan.dataset_snapshot_id != profile.dataset_snapshot_id:
         raise DatasetFingerprintMismatch("plan and profile snapshot IDs differ")
     if fingerprint_dataframe(frame) != profile.fingerprint:
         raise DatasetFingerprintMismatch(
             "dataframe fingerprint does not match the planned dataset snapshot"
         )
 
+    ordered_steps = _preflight_steps(
+        frame,
+        profile,
+        validated_plan,
+        active_registry,
+    )
     records: list[ComputationRecord] = []
-    for step in _topological_steps(plan):
-        missing_columns = set(step.input_columns) - set(frame.columns)
-        if missing_columns:
-            raise ValueError(f"planned columns are missing: {sorted(missing_columns)}")
+    for step in ordered_steps:
         method = active_registry.get(step.method_id, step.method_version)
         if method.id == "descriptive-summary":
             output, assumption_results, warnings = _execute_descriptive(

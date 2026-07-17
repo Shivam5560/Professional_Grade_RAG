@@ -8,6 +8,7 @@ import pytest
 from app.studios.data_analyst.domain import AssumptionStatus, canonical_digest
 from app.studios.data_analyst.execution import (
     DatasetFingerprintMismatch,
+    MethodPrerequisiteError,
     execute_analysis_plan,
 )
 from app.studios.data_analyst.planning import build_analysis_plan, parse_intent
@@ -155,3 +156,24 @@ def test_execution_rejects_dataset_that_does_not_match_profile() -> None:
 
     with pytest.raises(DatasetFingerprintMismatch, match="fingerprint"):
         execute_analysis_plan(changed, profile, plan, run_id="run-1")
+
+
+def test_execution_preflights_supported_input_types_before_running() -> None:
+    frame = relationship_frame()
+    profile = profile_dataframe(frame)
+    plan = build_analysis_plan(profile, parse_intent("relationship between x and y"))
+    changed_steps = tuple(
+        step.model_copy(update={"input_columns": ("x", "region")})
+        if step.method_id == "pearson-correlation"
+        else step
+        for step in plan.steps
+    )
+    invalid_plan = plan.model_copy(update={"steps": changed_steps})
+
+    with pytest.raises(MethodPrerequisiteError, match="region.*categorical"):
+        execute_analysis_plan(
+            frame,
+            profile,
+            invalid_plan,
+            run_id="run-1",
+        )
