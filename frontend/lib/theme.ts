@@ -1,59 +1,16 @@
-export type ThemeMode = 'light' | 'dark';
-export type ThemePalette =
-  | 'nexus'
-  | 'ocean'
-  | 'ember'
-  | 'graphite'
-  | 'forest'
-  | 'royal'
-  | 'sunset'
-  | 'mono';
+import { applyResolvedTheme, persistThemePreference, readThemePreference, resolveTheme, type ResolvedTheme } from "./appearance";
 
-const MODE_KEY = 'theme-mode';
-const PALETTE_KEY = 'theme-palette';
-const PALETTE_CLASSES: ThemePalette[] = [
-  'nexus',
-  'ocean',
-  'ember',
-  'graphite',
-  'forest',
-  'royal',
-  'sunset',
-  'mono',
-];
+export type ThemeMode = ResolvedTheme;
 
 export function readThemeMode(): ThemeMode {
-  if (typeof window === 'undefined') return 'dark';
-  const stored = window.localStorage.getItem(MODE_KEY);
-  return stored === 'dark' || stored === 'light' ? stored : 'dark';
+  if (typeof window === "undefined") return "dark";
+  return resolveTheme(readThemePreference(window.localStorage), matchMedia("(prefers-color-scheme: dark)").matches);
 }
 
-export function readThemePalette(): ThemePalette {
-  if (typeof window === 'undefined') return 'graphite';
-  const stored = window.localStorage.getItem(PALETTE_KEY);
-  return stored && PALETTE_CLASSES.includes(stored as ThemePalette)
-    ? (stored as ThemePalette)
-    : 'graphite';
+export function applyTheme(mode: ThemeMode): void {
+  if (typeof document !== "undefined") applyResolvedTheme(document.documentElement, mode, mode);
 }
 
-export function applyTheme(mode: ThemeMode, palette: ThemePalette): void {
-  if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  root.classList.toggle('dark', mode === 'dark');
-  PALETTE_CLASSES.forEach((name) => root.classList.remove(`theme-${name}`));
-  root.classList.add(`theme-${palette}`);
-  root.setAttribute('data-theme-mode', mode);
-  root.setAttribute('data-theme-palette', palette);
-}
-
-export function persistTheme(mode: ThemeMode, palette: ThemePalette): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(MODE_KEY, mode);
-  window.localStorage.setItem(PALETTE_KEY, palette);
-}
-
-export function nextPalette(current: ThemePalette): ThemePalette {
-  const idx = PALETTE_CLASSES.indexOf(current);
-  const nextIndex = idx === -1 ? 0 : (idx + 1) % PALETTE_CLASSES.length;
-  return PALETTE_CLASSES[nextIndex];
+export function persistTheme(mode: ThemeMode): void {
+  if (typeof window !== "undefined") persistThemePreference(window.localStorage, mode);
 }

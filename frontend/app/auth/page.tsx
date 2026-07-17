@@ -8,21 +8,10 @@ import { motion } from "framer-motion"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { ShaderAnimation } from "@/components/ui/shader-animation"
-import { Brain, Shield, Zap, MessageSquare, Database, Sparkles, Radar, LineChart, FileSearch, Sun, Moon, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast, ArrowRight, Loader2 } from "lucide-react"
-import { useAppTheme } from "@/hooks/useAppTheme"
-import { type ThemePalette } from "@/lib/theme"
+import { Brain, Shield, Zap, MessageSquare, Database, Sparkles, Radar, LineChart, FileSearch, ArrowRight, Loader2 } from "lucide-react"
+import { AppearanceControl } from "@/components/theme/AppearanceControl"
 import { useToast } from "@/hooks/useToast"
 import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -31,17 +20,6 @@ export default function AuthPage() {
   const router = useRouter()
   const { toast } = useToast()
   const appCatalog = useAppCatalog()
-  const { mode, palette, toggleMode, setPalette } = useAppTheme()
-  const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { value: 'nexus', label: 'Nexus Slate', icon: Compass },
-    { value: 'ocean', label: 'Arctic Cyan', icon: Waves },
-    { value: 'ember', label: 'Solar Ember', icon: Flame },
-    { value: 'graphite', label: 'Graphite Mint', icon: Hexagon },
-    { value: 'forest', label: 'Verdant Core', icon: Leaf },
-    { value: 'royal', label: 'Royal Flux', icon: Crown },
-    { value: 'sunset', label: 'Amber Dusk', icon: Sunset },
-    { value: 'mono', label: 'Mono Steel', icon: Contrast },
-  ]
 
   const inlineSvgs = {
     groq: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 100 100" width="14" height="14"><g clip-path="url(#a)"><path fill="currentColor" d="M46.596 60.752H17L65.572 0 53.313 39.248h29.59L34.338 100z"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h100v100H0z"/></clipPath></defs></svg>`,
@@ -224,35 +202,7 @@ export default function AuthPage() {
 
       {/* Brand - Top Right Corner */}
       <div className="absolute top-4 right-4 lg:top-6 lg:right-8 z-50 flex items-center space-x-2 lg:space-x-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
-              aria-label="Theme options"
-            >
-              <Palette className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-background/95 border-border/70 backdrop-blur-xl w-56">
-            <DropdownMenuLabel>Theme</DropdownMenuLabel>
-            <DropdownMenuItem onClick={toggleMode} className="cursor-pointer">
-              {mode === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-              {mode === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border/60" />
-            <DropdownMenuLabel>Palette</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={palette} onValueChange={(value) => setPalette(value as ThemePalette)}>
-              {paletteOptions.map((item) => (
-                <DropdownMenuRadioItem key={item.value} value={item.value}>
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AppearanceControl />
         <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-2xl logo-mark flex items-center justify-center shadow-2xl pulse-glow">
           <span className="text-primary-foreground font-black text-sm tracking-[0.2em]">NX</span>
         </div>

@@ -1,22 +1,19 @@
 'use client';
 
-import { Bell, User, LogOut, Sun, Moon, PanelLeftOpen, PanelLeftClose, Palette, Compass, Waves, Flame, Hexagon, Leaf, Crown, Sunset, Contrast, Menu, X } from "lucide-react";
+import { Bell, User, LogOut, PanelLeftOpen, PanelLeftClose, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { useAppTheme } from "@/hooks/useAppTheme";
-import { type ThemePalette } from "@/lib/theme";
 import { JobCenter } from "@/components/layout/JobCenter";
 import { AppNavigation } from "@/components/platform/AppNavigation";
 import { useAppCatalog } from "@/lib/apps/useAppCatalog";
+import { AppearanceControl } from "@/components/theme/AppearanceControl";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -46,17 +43,6 @@ export function Header({
   const [llmHealthy, setLlmHealthy] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const appCatalog = useAppCatalog();
-  const { mode, palette, setPalette, toggleMode } = useAppTheme();
-  const paletteOptions: Array<{ value: ThemePalette; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { value: 'nexus', label: 'Nexus Slate', icon: Compass },
-    { value: 'ocean', label: 'Arctic Cyan', icon: Waves },
-    { value: 'ember', label: 'Solar Ember', icon: Flame },
-    { value: 'graphite', label: 'Graphite Mint', icon: Hexagon },
-    { value: 'forest', label: 'Verdant Core', icon: Leaf },
-    { value: 'royal', label: 'Royal Flux', icon: Crown },
-    { value: 'sunset', label: 'Amber Dusk', icon: Sunset },
-    { value: 'mono', label: 'Mono Steel', icon: Contrast },
-  ];
 
   useEffect(() => {
     // Listen for custom events from chat component about LLM health.
@@ -173,36 +159,7 @@ export function Header({
           <Bell className="h-5 w-5" />
         </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
-              aria-label="Theme options"
-              title="Theme options"
-            >
-              <Palette className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-background/95 border-border/70 backdrop-blur-xl w-56">
-            <DropdownMenuLabel>Theme</DropdownMenuLabel>
-            <DropdownMenuItem onClick={toggleMode} className="cursor-pointer">
-              {mode === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-              {mode === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border/60" />
-            <DropdownMenuLabel>Palette</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={palette} onValueChange={(value) => setPalette(value as ThemePalette)}>
-              {paletteOptions.map((item) => (
-                <DropdownMenuRadioItem key={item.value} value={item.value}>
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AppearanceControl />
 
         {user ? (
           <DropdownMenu>
