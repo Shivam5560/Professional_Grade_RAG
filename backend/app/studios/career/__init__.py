@@ -31,13 +31,21 @@ from .domain import (
 from .matching import match_requirements, score_candidate_edge
 from .validation import validate_draft
 from .writing import draft_from_matches
+from .workflow import (
+    CareerDeliverable,
+    CareerSpecialist,
+    CareerSpecialistResponse,
+)
 
 __all__ = [
     "AddedKeyword",
     "AssertedFact",
     "CareerClaim",
+    "CareerDeliverable",
     "CandidateEdge",
     "CareerMatchResult",
+    "CareerSpecialist",
+    "CareerSpecialistResponse",
     "ClaimContext",
     "ClaimObject",
     "ClaimPredicate",

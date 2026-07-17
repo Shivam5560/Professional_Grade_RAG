@@ -120,3 +120,37 @@ Observed:
 ```
 
 The passing adversarial cases cover verbatim provenance, fabricated and upward-rounded metrics (including metrics omitted from structured facts), incompatible employer/project and temporal combinations, supported keywords, inferred claims, missing/unknown provenance, and typed employer/title/date/skill/degree additions.
+
+### Cycle 4 RED — approval-gated Career Specialist service
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_service.py -q
+```
+
+Observed expected failure:
+
+```text
+E   ModuleNotFoundError: No module named 'app.studios.career.workflow'
+1 error in 5.03s
+```
+
+The workflow suite could not collect because the Career Specialist service and approval-gated state composition had not been implemented.
+
+### Cycle 4 GREEN — approval-gated Career Specialist service
+
+Command:
+
+```bash
+/home/gopal/.local/bin/uv run --isolated --with pytest --with pydantic==2.11.5 --with scipy python -m pytest tests/studios/career/test_service.py -q
+```
+
+Observed:
+
+```text
+.....                                                                    [100%]
+5 passed in 1.45s
+```
+
+The passing workflow cases cover inferred-claim review, final-resume approval, exact approval binding to run/draft/owner/evidence, publication-ready provenance resolution, and critical truth abstention when no evidence can support a draft.
