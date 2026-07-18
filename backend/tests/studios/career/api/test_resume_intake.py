@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -45,6 +46,13 @@ def client() -> Iterator[TestClient]:
 def test_uploads_a_resume_and_returns_inferred_source_claims(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    async def stored_resume(**_kwargs):
+        return SimpleNamespace(
+            resume_id="JANE-20260718-TEST",
+            filename="resume.txt",
+            status="uploaded",
+        )
+
     monkeypatch.setattr(
         "app.studios.career.extraction.resume_source.extract_resume_data",
         lambda _text: {
@@ -59,6 +67,10 @@ def test_uploads_a_resume_and_returns_inferred_source_claims(
             ],
             "keywords": ["Python", "SQL"],
         },
+    )
+    monkeypatch.setattr(
+        "app.studios.career.api.router.store_resume_source",
+        stored_resume,
     )
 
     response = client.post(
@@ -75,6 +87,7 @@ def test_uploads_a_resume_and_returns_inferred_source_claims(
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["source"]["filename"] == "resume.txt"
+    assert body["resume"]["resume_id"] == "JANE-20260718-TEST"
     assert body["claims"]
     assert all(
         item["claim"]["verification_status"] == "inferred"
@@ -131,3 +144,49 @@ def test_parses_a_plain_job_description(
         "Python",
         "SQL",
     }
+
+
+def test_scores_a_stored_resume_without_accepting_an_authoritative_user_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def scored_resume(**kwargs):
+        return SimpleNamespace(
+            id="analysis-1",
+            resume_id=kwargs["resume_id"],
+            overall_score=82.0,
+            analysis={"ats_analysis": {"score": 90}, "match_analysis": {"overall_fit": "Strong"}},
+            refined_recommendations=["Add one supported SQL outcome"],
+            refined_justifications=["Strong skill coverage"],
+            resume_data={"name": "Jane Doe"},
+            created_at=None,
+        )
+
+    monkeypatch.setattr(
+        "app.studios.career.api.router.score_stored_resume",
+        scored_resume,
+    )
+
+    response = client.post(
+        "/api/v2/career/scores",
+        json={
+            "resume_id": "JANE-20260718-TEST",
+            "job_description": "We need a data engineer with Python and SQL.",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["overall_score"] == 82.0
+    assert response.json()["resume_id"] == "JANE-20260718-TEST"
+
+
+def test_rejects_score_payloads_that_try_to_choose_an_owner(client: TestClient) -> None:
+    response = client.post(
+        "/api/v2/career/scores",
+        json={
+            "owner_id": 99,
+            "resume_id": "resume-1",
+            "job_description": "A sufficiently detailed job description.",
+        },
+    )
+
+    assert response.status_code == 422
