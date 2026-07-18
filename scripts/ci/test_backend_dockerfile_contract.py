@@ -1,10 +1,56 @@
 from pathlib import Path
+import shlex
 import unittest
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = REPOSITORY_ROOT / "backend" / "Dockerfile"
 JENKINSFILE = REPOSITORY_ROOT / "Jenkinsfile"
+CONTRACT_COMMAND = "python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v"
+EXPECTED_CONTRACT_STAGE_LINES = [
+    "stage('CI Contract Tests') {",
+    "steps {",
+    f'sh "{CONTRACT_COMMAND}"',
+    "}",
+    "}",
+]
+EXPECTED_BACKEND_BUILD = [
+    "docker",
+    "build",
+    "--label",
+    "org.opencontainers.image.revision=${SOURCE_COMMIT}",
+    "--label",
+    "org.opencontainers.image.source=${REPO_URL}",
+    "--tag",
+    "nexusmind-backend:${IMAGE_TAG}",
+    "backend",
+]
+EXPECTED_BACKEND_SMOKE = [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--read-only",
+    "--cap-drop=ALL",
+    "--security-opt",
+    "no-new-privileges",
+    "--entrypoint",
+    "gunicorn",
+    "nexusmind-backend:${IMAGE_TAG}",
+    "--version",
+]
+EXPECTED_FRONTEND_BUILD = [
+    "docker",
+    "build",
+    "--label",
+    "org.opencontainers.image.revision=${SOURCE_COMMIT}",
+    "--label",
+    "org.opencontainers.image.source=${REPO_URL}",
+    "--tag",
+    "nexusmind-frontend:${IMAGE_TAG}",
+    "frontend",
+]
 
 
 class BackendDockerfileContractTest(unittest.TestCase):
@@ -12,6 +58,46 @@ class BackendDockerfileContractTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.dockerfile = DOCKERFILE.read_text(encoding="utf-8")
         cls.pipeline = JENKINSFILE.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _stage_block(pipeline: str, stage_name: str, next_stage_name: str) -> str:
+        start = pipeline.index(f"stage('{stage_name}')")
+        end = pipeline.index(f"stage('{next_stage_name}')", start)
+        return pipeline[start:end]
+
+    @classmethod
+    def _contract_stage_lines(cls, pipeline: str) -> list[str]:
+        stage = cls._stage_block(pipeline, "CI Contract Tests", "Backend Tests")
+        return [line.strip() for line in stage.splitlines() if line.strip()]
+
+    @classmethod
+    def _docker_build_commands(cls, pipeline: str) -> list[list[str]]:
+        stage = cls._stage_block(
+            pipeline,
+            "Build Docker Images",
+            "Package Deployment Artifacts",
+        )
+        shell_marker = "sh '''"
+        shell_start = stage.index(shell_marker) + len(shell_marker)
+        shell_end = stage.index("'''", shell_start)
+        shell_body = stage[shell_start:shell_end]
+
+        commands: list[list[str]] = []
+        command_parts: list[str] = []
+        for raw_line in shell_body.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.endswith("\\"):
+                command_parts.append(line[:-1].rstrip())
+                continue
+            command_parts.append(line)
+            commands.append(shlex.split(" ".join(command_parts)))
+            command_parts = []
+
+        if command_parts:
+            raise AssertionError("Jenkins shell block ends with an incomplete command")
+        return commands
 
     def test_dependency_install_is_fail_fast_and_tolerates_slow_downloads(self) -> None:
         install_start = self.dockerfile.index("RUN uv venv /opt/venv")
@@ -28,14 +114,6 @@ class BackendDockerfileContractTest(unittest.TestCase):
             )
         )
         self.assertIn(expected_install, install_block)
-        self.assertLess(
-            install_block.index("uv venv /opt/venv"),
-            install_block.index("uv pip install"),
-        )
-        self.assertLess(
-            install_block.index("uv pip install"),
-            install_block.index("test -x /opt/venv/bin/gunicorn"),
-        )
 
     def test_optional_cleanup_cannot_mask_dependency_install_failure(self) -> None:
         cleanup_start = self.dockerfile.index("RUN (find /opt/venv")
@@ -46,34 +124,55 @@ class BackendDockerfileContractTest(unittest.TestCase):
         self.assertTrue(cleanup_block.startswith("RUN ("))
         self.assertTrue(cleanup_block.endswith(") || true"))
 
-    def test_contract_tests_are_invoked_before_docker_builds(self) -> None:
-        contract_command = "python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v"
-        self.assertIn(contract_command, self.pipeline)
-        self.assertLess(
-            self.pipeline.index(contract_command),
-            self.pipeline.index("stage('Build Docker Images')"),
+    def test_contract_stage_executes_suite_before_every_build_stage(self) -> None:
+        self.assertEqual(
+            EXPECTED_CONTRACT_STAGE_LINES,
+            self._contract_stage_lines(self.pipeline),
+        )
+        contract_stage = self.pipeline.index("stage('CI Contract Tests')")
+        for stage_name in (
+            "Frontend Tests and Build",
+            "MCP Build",
+            "Build Docker Images",
+        ):
+            with self.subTest(stage=stage_name):
+                self.assertLess(
+                    contract_stage,
+                    self.pipeline.index(f"stage('{stage_name}')"),
+                )
+
+    def test_contract_stage_parser_rejects_echo_only_mutation(self) -> None:
+        mutated = self.pipeline.replace(
+            f'sh "{CONTRACT_COMMAND}"',
+            f'echo "{CONTRACT_COMMAND}"',
+            1,
+        )
+        self.assertNotEqual(
+            EXPECTED_CONTRACT_STAGE_LINES,
+            self._contract_stage_lines(mutated),
         )
 
-    def test_backend_smoke_check_immediately_follows_backend_build(self) -> None:
-        build_stage = self.pipeline.index("stage('Build Docker Images')")
-        package_stage = self.pipeline.index("stage('Package Deployment Artifacts')")
-        build_block = self.pipeline[build_stage:package_stage]
+    def test_backend_smoke_is_exact_command_immediately_after_backend_build(self) -> None:
+        commands = self._docker_build_commands(self.pipeline)
+        self.assertEqual(
+            [
+                EXPECTED_BACKEND_BUILD,
+                EXPECTED_BACKEND_SMOKE,
+                EXPECTED_FRONTEND_BUILD,
+            ],
+            commands,
+        )
 
-        backend_tag = build_block.index('--tag "nexusmind-backend:${IMAGE_TAG}"')
-        smoke_start = build_block.index("docker run --rm", backend_tag)
-        frontend_tag = build_block.index('--tag "nexusmind-frontend:${IMAGE_TAG}"')
-        smoke_block = build_block[smoke_start:frontend_tag]
-
-        self.assertLess(backend_tag, smoke_start)
-        self.assertLess(smoke_start, frontend_tag)
-        self.assertIn("backend\n                    docker run --rm", build_block)
-        self.assertIn("--network none", smoke_block)
-        self.assertIn("--read-only", smoke_block)
-        self.assertIn("--cap-drop=ALL", smoke_block)
-        self.assertIn("--security-opt no-new-privileges", smoke_block)
-        self.assertIn("--entrypoint gunicorn", smoke_block)
-        self.assertIn('"nexusmind-backend:${IMAGE_TAG}"', smoke_block)
-        self.assertIn("--version", smoke_block)
+    def test_smoke_parser_rejects_wrong_image_with_backend_comment_mutation(self) -> None:
+        mutated = self.pipeline.replace(
+            '"nexusmind-backend:${IMAGE_TAG}" \\\n                        --version',
+            '"nexusmind-frontend:${IMAGE_TAG}" \\\n'
+            '                        --version\n'
+            '                    # "nexusmind-backend:${IMAGE_TAG}"',
+            1,
+        )
+        commands = self._docker_build_commands(mutated)
+        self.assertNotEqual(EXPECTED_BACKEND_SMOKE, commands[1])
 
 
 if __name__ == "__main__":
