@@ -151,8 +151,32 @@ def test_drafter_copies_selected_evidence_with_complete_provenance() -> None:
     assert draft.bullets[0].source_claim_ids == (python_claim.id,)
     assert draft.bullets[0].transformation is DraftTransformation.COMPRESSED
     assert draft.bullets[0].before_text == ("Used Python in production.",)
-    assert draft.bullets[0].after_text == "Python."
+    assert draft.bullets[0].after_text == "Using Python."
     assert draft.bullets[0].asserted_facts == (fact(python_claim),)
+
+
+def test_drafter_prioritizes_requirement_language_without_adding_facts() -> None:
+    responsibility = claim(
+        ClaimValueKind.RESPONSIBILITY,
+        "Built production data pipelines",
+        exact_text="Built production data pipelines",
+    )
+    requirement = RoleRequirement(
+        id="req-pipelines",
+        priority=RequirementPriority.REQUIRED,
+        category=RequirementCategory.RESPONSIBILITY,
+        description="Own production data pipelines",
+        source_span=SourceSpan(source_id="jd", locator="1", exact_text="Own production data pipelines"),
+        confidence=0.95,
+        weight=2.0,
+    )
+    components = ScoreComponents(semantic_relevance=1.0, evidence_strength=1.0, recency=0.8, duration_seniority=0.8, transferability=1.0, specificity=1.0)
+    match = match_requirements((requirement,), (responsibility,), (score_candidate_edge(requirement, responsibility, components),))
+
+    draft = draft_from_matches(match, requirements=(requirement,))
+
+    assert draft.bullets[0].after_text == "production data pipelines — Built."
+    assert "Own" not in draft.bullets[0].after_text
 
 
 def test_fabricated_or_rounded_up_metric_abstains() -> None:

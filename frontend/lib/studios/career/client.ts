@@ -254,6 +254,11 @@ export interface CareerDraftWorkflowResponseWire {
   quality: QualityMetadataWire;
 }
 
+export interface CareerDraftRefinementResponseWire extends CareerDraftWorkflowResponseWire {
+  supersedes_run_id: string;
+  refinement_note: string;
+}
+
 export interface CareerDraftWire {
   id: string;
   run_id: string;
@@ -284,6 +289,7 @@ export interface CareerPublicationResponseWire {
   draft: ResumeDraftWire;
   approval: ApprovalRequestWire;
   artifact: ArtifactRevisionWire;
+  artifact_content: Record<string, unknown>;
 }
 
 export class CareerStudioClient extends StudioHttpClient {
@@ -304,6 +310,7 @@ export class CareerStudioClient extends StudioHttpClient {
   createDraft(matchId: string, idempotencyKey = crypto.randomUUID()): Promise<CareerDraftWorkflowResponseWire> { return this.request("/drafts", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ match_id: matchId }) }); }
   getDraft(draftId: string): Promise<CareerDraftWire> { return this.request(`/drafts/${encodeURIComponent(draftId)}`); }
   decideApproval(approvalId: string, decision: "approve" | "reject" | "revise", note?: string): Promise<ApprovalRequestWire> { return this.request(`/approvals/${encodeURIComponent(approvalId)}/decisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, comment: note }) }); }
+  refineDraft(draftId: string, comment: string): Promise<CareerDraftRefinementResponseWire> { return this.request(`/drafts/${encodeURIComponent(draftId)}/refine`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment }) }); }
   publishDraft(draftId: string): Promise<CareerPublicationResponseWire> { return this.request(`/drafts/${encodeURIComponent(draftId)}/publish`, { method: "POST" }); }
 }
 

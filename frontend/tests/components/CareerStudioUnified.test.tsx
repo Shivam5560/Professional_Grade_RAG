@@ -6,18 +6,19 @@ import { ResumeIntake } from "@/components/studios/career/ResumeIntake";
 import { TailorWorkspace } from "@/components/studios/career/TailorWorkspace";
 import { ResumeCreator } from "@/components/studios/career/ResumeCreator";
 
-const { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval } = vi.hoisted(() => ({
+const { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval, refineDraft } = vi.hoisted(() => ({
   ingestStoredResume: vi.fn().mockResolvedValue({ source: { id: "source-1" }, claims: [{ logical_claim_id: "claim-1", claim: { object: { value: "Python" }, predicate: "has-skill", verification_status: "inferred" } }] }),
   decideClaim: vi.fn().mockResolvedValue({ logical_claim_id: "claim-1", claim: { object: { value: "Python" }, predicate: "has-skill", verification_status: "verified" } }),
   prepareTailoring: vi.fn().mockResolvedValue({ approval: { id: "approval-1", status: "pending" }, draft: { id: "draft-1", bullets: [] }, match: { unmatched_requirements: [] } }),
   createSource: vi.fn().mockResolvedValue({ source: { id: "source-json" }, claims: [] }),
   decideApproval: vi.fn().mockResolvedValue({ id: "approval-1", status: "revision_requested" }),
+  refineDraft: vi.fn().mockResolvedValue({ supersedes_run_id: "run-1", refinement_note: "Focus on platform ownership", approval: { id: "approval-2", status: "pending" }, draft: { id: "draft-2", bullets: [] }, match: { unmatched_requirements: [] } }),
 }));
 
 vi.mock("@/lib/api", () => ({
   apiClient: {},
 }));
-vi.mock("@/lib/studios/career/client", () => ({ careerStudioClient: { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval } }));
+vi.mock("@/lib/studios/career/client", () => ({ careerStudioClient: { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval, refineDraft } }));
 
 it("presents score, explicit tailor, and create as separate Career workflows", async () => {
   const user = userEvent.setup();
@@ -64,7 +65,8 @@ it("does not start tailoring until the reviewed plan is explicitly confirmed", a
   await user.type(await screen.findByLabelText("Revision note"), "Focus on platform ownership");
   await user.click(screen.getByRole("button", { name: "Request changes" }));
   expect(decideApproval).toHaveBeenCalledWith("approval-1", "revise", "Focus on platform ownership");
-  expect(await screen.findByRole("button", { name: "Start tailoring" })).toBeVisible();
+  expect(refineDraft).toHaveBeenCalledWith("draft-1", "Focus on platform ownership");
+  expect(await screen.findByText(/Revised from run run-1/)).toBeVisible();
 });
 
 it("scopes resume creator autosave to the signed-in owner", async () => {

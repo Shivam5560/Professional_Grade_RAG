@@ -6,7 +6,7 @@ import { Check, FileCheck2, Loader2, Send, ShieldCheck, Sparkles, X } from "luci
 import { ResumeIntake } from "./ResumeIntake";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { careerStudioClient, type CareerClaimRevisionWire, type CareerDraftWorkflowResponseWire } from "@/lib/studios/career/client";
+import { careerStudioClient, type CareerClaimRevisionWire, type CareerDraftWorkflowResponseWire, type CareerPublicationResponseWire } from "@/lib/studios/career/client";
 import type { ResumeFileInfo } from "@/lib/types";
 
 type BusyAction = "review" | "tailor" | "approve" | "revise" | "abort" | "publish" | string;
@@ -21,15 +21,17 @@ export function TailorWorkspace({ initialJobDescription = "", initialResumeId = 
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
   const [published, setPublished] = useState(false);
+  const [publication, setPublication] = useState<CareerPublicationResponseWire | null>(null);
+  const [supersedesRunId, setSupersedesRunId] = useState<string | null>(null);
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const resetReview = () => { setSourceId(""); setClaims([]); setResult(null); setApprovalStatus(null); setPublished(false); };
+  const resetReview = () => { setSourceId(""); setClaims([]); setResult(null); setApprovalStatus(null); setPublished(false); setPublication(null); setSupersedesRunId(null); };
   const review = async () => {
     setBusy("review"); setError(null);
     try {
       const ingested = file ? await careerStudioClient.uploadResume(file) : await careerStudioClient.ingestStoredResume(resumeId);
-      setSourceId(ingested.source.id); setClaims(ingested.claims); setResult(null); setApprovalStatus(null); setPublished(false);
+      setSourceId(ingested.source.id); setClaims(ingested.claims); setResult(null); setApprovalStatus(null); setPublished(false); setPublication(null); setSupersedesRunId(null);
       if (ingested.resume) setResumeId(ingested.resume.resume_id);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Resume preparation failed"); }
     finally { setBusy(null); }
@@ -56,8 +58,8 @@ export function TailorWorkspace({ initialJobDescription = "", initialResumeId = 
       const approval = await careerStudioClient.decideApproval(result.approval.id, decision, revisionNote.trim() || undefined);
       setApprovalStatus(approval.status);
       if (decision === "revise") {
-        setJobDescription((description) => revisionNote.trim() ? `${description.trim()}\n\nRevision direction: ${revisionNote.trim()}` : description);
-        setResult(null);
+        const refined = await careerStudioClient.refineDraft(result.draft.id, revisionNote.trim());
+        setResult(refined); setApprovalStatus(refined.approval.status); setSupersedesRunId(refined.supersedes_run_id); setRevisionNote("");
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Approval update failed"); }
     finally { setBusy(null); }
@@ -65,7 +67,7 @@ export function TailorWorkspace({ initialJobDescription = "", initialResumeId = 
   const publish = async () => {
     if (!result) return;
     setBusy("publish"); setError(null);
-    try { await careerStudioClient.publishDraft(result.draft.id); setPublished(true); }
+    try { const response = await careerStudioClient.publishDraft(result.draft.id); setPublication(response); setPublished(true); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Publication failed"); }
     finally { setBusy(null); }
   };
@@ -86,22 +88,21 @@ export function TailorWorkspace({ initialJobDescription = "", initialResumeId = 
       {!sourceId ? <div className="mt-8 border-y border-border py-14 text-center text-sm text-muted-foreground">Review a resume to see the claims that may be used.</div> : <>
         <div className="mt-5 flex items-center justify-between rounded-lg bg-workspace-inset p-3"><span className="text-sm"><strong>{verifiedCount}</strong> of {claims.length} claims verified</span><ShieldCheck className="h-5 w-5 text-muted-foreground" /></div>
         <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">{claims.map((item) => <article className="rounded-lg border border-border bg-workspace-inset p-3" key={item.logical_claim_id}><p className="text-sm font-medium">{String(item.claim.object.value)}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{item.claim.predicate.replaceAll("-", " ")} · {item.claim.verification_status}</p><div className="mt-3 flex gap-2"><Button disabled={Boolean(busy)} onClick={() => decideClaim(item.logical_claim_id, "verify")} size="sm" variant={item.claim.verification_status === "verified" ? "default" : "outline"}><Check className="mr-1 h-3.5 w-3.5" />Verify</Button><Button disabled={Boolean(busy)} onClick={() => decideClaim(item.logical_claim_id, "reject")} size="sm" variant="ghost"><X className="mr-1 h-3.5 w-3.5" />Reject</Button></div></article>)}</div>
-        {!result ? <div className="mt-5 rounded-xl border border-border bg-workspace-inset p-4"><h3 className="font-semibold">Evidence-grounded strategy</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">Prioritize verified experience, add only supported keywords, and preserve unmet requirements as honest gaps.</p><Button className="mt-4" disabled={Boolean(busy) || verifiedCount === 0} onClick={start}>{busy === "tailor" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Start tailoring</Button>{verifiedCount === 0 ? <p className="mt-2 text-xs text-muted-foreground">Verify at least one claim to continue.</p> : null}</div> : <DraftReview result={result} approvalStatus={approvalStatus} revisionNote={revisionNote} setRevisionNote={setRevisionNote} busy={busy} published={published} decideApproval={decideApproval} publish={publish} />}
+        {!result ? <div className="mt-5 rounded-xl border border-border bg-workspace-inset p-4"><h3 className="font-semibold">Evidence-grounded strategy</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">Prioritize verified experience, add only supported keywords, and preserve unmet requirements as honest gaps.</p><Button className="mt-4" disabled={Boolean(busy) || verifiedCount === 0} onClick={start}>{busy === "tailor" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Start tailoring</Button>{verifiedCount === 0 ? <p className="mt-2 text-xs text-muted-foreground">Verify at least one claim to continue.</p> : null}</div> : <DraftReview result={result} approvalStatus={approvalStatus} revisionNote={revisionNote} setRevisionNote={setRevisionNote} busy={busy} published={published} publication={publication} supersedesRunId={supersedesRunId} decideApproval={decideApproval} publish={publish} />}
       </>}
     </section>
   </div>;
 }
 
-function DraftReview({ result, approvalStatus, revisionNote, setRevisionNote, busy, published, decideApproval, publish }: { result: CareerDraftWorkflowResponseWire; approvalStatus: string | null; revisionNote: string; setRevisionNote(value: string): void; busy: BusyAction | null; published: boolean; decideApproval(decision: "approve" | "revise" | "reject"): void; publish(): void }) {
-  return <div className="mt-5 space-y-4"><div className="rounded-xl border border-border bg-workspace-inset p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Proposed revision</h3><span className="rounded-full border border-border px-2 py-1 text-xs capitalize">{approvalStatus?.replace("_", " ")}</span></div><div className="mt-4 space-y-4">{result.draft.bullets.map((bullet, index) => <div className="border-l-2 border-foreground/25 pl-3" key={index}><p className="text-xs font-semibold uppercase text-muted-foreground">Before</p><p className="mt-1 text-sm text-muted-foreground">{bullet.before_text.join(" ") || "New evidence-backed bullet"}</p><p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">After</p><p className="mt-1 text-sm font-medium">{bullet.after_text}</p></div>)}</div>{result.match.unmatched_requirements.length ? <div className="mt-5 border-t border-border pt-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Truthful gaps</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{result.match.unmatched_requirements.map((item) => <li key={item.id}>{item.description}</li>)}</ul></div> : null}</div>
+function DraftReview({ result, approvalStatus, revisionNote, setRevisionNote, busy, published, publication, supersedesRunId, decideApproval, publish }: { result: CareerDraftWorkflowResponseWire; approvalStatus: string | null; revisionNote: string; setRevisionNote(value: string): void; busy: BusyAction | null; published: boolean; publication: CareerPublicationResponseWire | null; supersedesRunId: string | null; decideApproval(decision: "approve" | "revise" | "reject"): void; publish(): void }) {
+  return <div className="mt-5 space-y-4">{supersedesRunId ? <p className="rounded-lg border border-border bg-workspace-inset p-3 text-xs text-muted-foreground">Revised from run {supersedesRunId}. Your feedback is part of this revision lineage.</p> : null}<div className="rounded-xl border border-border bg-workspace-inset p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Proposed revision</h3><span className="rounded-full border border-border px-2 py-1 text-xs capitalize">{approvalStatus?.replace("_", " ")}</span></div><div className="mt-4 space-y-4">{result.draft.bullets.map((bullet, index) => <div className="border-l-2 border-foreground/25 pl-3" key={index}><p className="text-xs font-semibold uppercase text-muted-foreground">Before</p><p className="mt-1 text-sm text-muted-foreground">{bullet.before_text.join(" ") || "New evidence-backed bullet"}</p><p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">After</p><p className="mt-1 text-sm font-medium">{bullet.after_text}</p></div>)}</div>{result.match.unmatched_requirements.length ? <div className="mt-5 border-t border-border pt-4"><p className="text-xs font-semibold uppercase text-muted-foreground">Truthful gaps</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{result.match.unmatched_requirements.map((item) => <li key={item.id}>{item.description}</li>)}</ul></div> : null}</div>
     {approvalStatus === "pending" ? <><Textarea aria-label="Revision note" placeholder="Describe the focus or change you want before another draft" value={revisionNote} onChange={(event) => setRevisionNote(event.target.value)} /><div className="flex flex-wrap gap-2"><Button disabled={Boolean(busy)} onClick={() => decideApproval("approve")}><Check className="mr-2 h-4 w-4" />Approve</Button><Button disabled={Boolean(busy) || !revisionNote.trim()} onClick={() => decideApproval("revise")} variant="outline">Request changes</Button><Button disabled={Boolean(busy)} onClick={() => decideApproval("reject")} variant="ghost">Abort</Button></div></> : null}
     {approvalStatus === "approved" && !published ? <Button disabled={Boolean(busy)} onClick={publish}>{busy === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Publish approved draft</Button> : null}
-    {published ? <div className="rounded-lg border border-border bg-workspace-inset p-3"><p className="flex items-center gap-2 text-sm font-medium"><Check className="h-4 w-4" />Approved draft published.</p><Button className="mt-3" onClick={() => downloadDraft(result)} size="sm" variant="outline">Download tailored revision</Button></div> : null}
+    {published && publication ? <div className="rounded-lg border border-border bg-workspace-inset p-3"><p className="flex items-center gap-2 text-sm font-medium"><Check className="h-4 w-4" />Approved draft published.</p><Button className="mt-3" onClick={() => downloadArtifact(publication)} size="sm" variant="outline">Download published artifact</Button></div> : null}
   </div>;
 }
 
-function downloadDraft(result: CareerDraftWorkflowResponseWire): void {
-  const content = ["TAILORED RESUME REVISION", "", ...result.draft.bullets.flatMap((bullet, index) => [`${index + 1}. ${bullet.after_text}`, `   Source: ${bullet.before_text.join(" ")}`, ""]), ...(result.match.unmatched_requirements.length ? ["TRUTHFUL GAPS", ...result.match.unmatched_requirements.map((item) => `- ${item.description}`)] : [])].join("\n");
-  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
-  const link = document.createElement("a"); link.href = url; link.download = "tailored-resume-revision.txt"; link.click(); URL.revokeObjectURL(url);
+function downloadArtifact(publication: CareerPublicationResponseWire): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(publication.artifact_content, null, 2)], { type: "application/vnd.nexus.resume+json" }));
+  const link = document.createElement("a"); link.href = url; link.download = `${publication.artifact.artifact_id}.json`; link.click(); URL.revokeObjectURL(url);
 }

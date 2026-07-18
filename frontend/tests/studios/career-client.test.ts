@@ -49,4 +49,13 @@ describe("CareerStudioClient", () => {
     expect(fetcher.mock.calls[1][0]).toBe("http://localhost:8000/api/v2/career/tailoring/prepare");
     expect(fetcher.mock.calls[1][1]).toEqual(expect.objectContaining({ body: JSON.stringify({ source_id: "source-1", job_description: "A detailed platform engineering role" }) }));
   });
+
+  it("creates a lineage-aware refinement through the Career facade", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ supersedes_run_id: "run-1", draft: { id: "draft-2" } }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const client = new CareerStudioClient({ fetcher });
+
+    await client.refineDraft("draft-1", "Prioritize platform ownership");
+
+    expect(fetcher).toHaveBeenCalledWith("http://localhost:8000/api/v2/career/drafts/draft-1/refine", expect.objectContaining({ method: "POST", body: JSON.stringify({ comment: "Prioritize platform ownership" }) }));
+  });
 });

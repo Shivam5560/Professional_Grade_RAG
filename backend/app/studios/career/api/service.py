@@ -27,10 +27,12 @@ from app.studios.career import (
     match_requirements,
     score_candidate_edge,
     ScoreComponents,
+    validate_draft,
 )
 from app.studios.career.api.contracts import (
     ClaimDecisionRequest,
     DraftCreateRequest,
+    DraftRefinementResponse,
     DraftWorkflowResponse,
     MatchCreateRequest,
     PublicationResponse,
@@ -200,11 +202,11 @@ class CareerApplicationService:
             idempotency_key=f"tailoring-{suffix}",
         )
 
-    def create_draft(self, request: DraftCreateRequest, *, idempotency_key: str) -> DraftWorkflowResponse:
+    def create_draft(self, request: DraftCreateRequest, *, idempotency_key: str, refinement_note: str | None = None) -> DraftWorkflowResponse:
         match = self.career.get_match(request.match_id, owner_id=self.owner_id)
         role = self.career.get_role(match.role_id, owner_id=self.owner_id)
         now = self.now()
-        fingerprint = _digest({"match_id": request.match_id, "result": match.result.model_dump(mode="json")})
+        fingerprint = _digest({"match_id": request.match_id, "result": match.result.model_dump(mode="json"), "refinement_note": refinement_note})
         run_id = f"career-run-{_digest([self.owner_id, idempotency_key, fingerprint])[:24]}"
         run = self.runs.create(
             StudioRun(
@@ -233,10 +235,14 @@ class CareerApplicationService:
             )
 
         edges = self._edges_from_match(match)
+        requirements = role.requirements
+        if refinement_note:
+            note_tokens = _career_tokens(refinement_note)
+            requirements = tuple(sorted(requirements, key=lambda item: (-len(_career_tokens(item.description) & note_tokens), item.id)))
         response = CareerSpecialist().run(
             run,
             claims=match.result.selected_evidence,
-            requirements=role.requirements,
+            requirements=requirements,
             candidate_edges=edges,
             now=now,
         )
@@ -244,12 +250,14 @@ class CareerApplicationService:
             raise ValueError("career specialist abstained before producing a draft")
         self.runs.transition(run.id, StudioRunState.RUNNING, owner_id=self.owner_id, now=now, current_step="evidence-matching", progress=0.1)
         persisted_run = self.runs.transition(run.id, StudioRunState.AWAITING_INPUT, owner_id=self.owner_id, now=now, current_step=response.run.current_step, progress=response.run.progress)
+        persisted_evidence_ids: list[str] = []
         for claim in response.match.selected_evidence:
             span = claim.source_spans[0]
+            evidence_id = f"{run.id}:{claim.id}"[:255]
             self.evidence.add(
                 run.id,
                 ClaimEvidence(
-                    id=claim.id,
+                    id=evidence_id,
                     source_id=span.source_id,
                     locator=span.locator,
                     snippet=span.exact_text[:1000],
@@ -260,7 +268,9 @@ class CareerApplicationService:
                 owner_id=self.owner_id,
                 created_at=now,
             )
-        approval = self.approvals.add(response.approval, owner_id=self.owner_id)
+            persisted_evidence_ids.append(evidence_id)
+        approval_request = response.approval.model_copy(update={"evidence_ids": tuple(sorted(persisted_evidence_ids))})
+        approval = self.approvals.add(approval_request, owner_id=self.owner_id)
         saved = self.career.add_draft(
             run_id=run.id,
             match_id=match.id,
@@ -282,6 +292,27 @@ class CareerApplicationService:
     def decide_approval(self, approval_id: str, decision: ApprovalDecision, *, comment: str | None):
         return self.approvals.decide(approval_id, decision, owner_id=self.owner_id, now=self.now(), comment=comment)
 
+    def refine_draft(self, draft_id: str, *, comment: str) -> DraftRefinementResponse:
+        note = comment.strip()
+        if not note:
+            raise ValueError("refinement comment is required")
+        previous = self.career.get_draft(draft_id, owner_id=self.owner_id)
+        if not previous.approval_id:
+            raise ValueError("draft has no bound approval")
+        approval = self.approvals.get(previous.approval_id, owner_id=self.owner_id)
+        if approval.status is not ApprovalStatus.REVISION_REQUESTED:
+            raise ValueError("request changes on the current draft before refining")
+        response = self.create_draft(
+            DraftCreateRequest(match_id=previous.match_id),
+            idempotency_key=f"refine-{previous.run_id}-{_digest(note)[:16]}",
+            refinement_note=note,
+        )
+        return DraftRefinementResponse(
+            **response.model_dump(),
+            supersedes_run_id=previous.run_id,
+            refinement_note=note,
+        )
+
     def publish(self, draft_id: str) -> PublicationResponse:
         saved = self.career.get_draft(draft_id, owner_id=self.owner_id)
         if not saved.approval_id:
@@ -297,23 +328,24 @@ class CareerApplicationService:
         ):
             raise ValueError("draft uses an unregistered publication transformation")
         match = self.career.get_match(saved.match_id, owner_id=self.owner_id)
-        role = self.career.get_role(match.role_id, owner_id=self.owner_id)
         run = self.runs.get(saved.run_id, owner_id=self.owner_id)
         now = self.now()
-        response = CareerSpecialist().run(
-            run,
+        persisted_evidence_ids = tuple(item.id for item in self.evidence.list_for_run(run.id, owner_id=self.owner_id))
+        if approval.run_id != run.id or approval.proposed_changes != (saved.draft.id,) or approval.evidence_ids != persisted_evidence_ids:
+            raise ValueError("draft approval does not match the current revision")
+        truth_result = validate_draft(
+            saved.draft,
             claims=match.result.selected_evidence,
-            requirements=role.requirements,
-            candidate_edges=self._edges_from_match(match),
-            now=now,
-            approval=approval,
+            for_publication=True,
+            trace_id=f"{run.id}:truth-guardian-publication",
         )
-        if response.result.output is None or not response.result.output.draft.publication_ready:
+        if truth_result.output is None:
             raise ValueError("truth guardian rejected publication")
+        publication_draft = truth_result.output.mark_publication_ready()
         self.runs.transition(run.id, StudioRunState.RUNNING, owner_id=self.owner_id, now=now, current_step="truth-validation")
         succeeded = self.runs.transition(run.id, StudioRunState.SUCCEEDED, owner_id=self.owner_id, now=now, current_step="complete")
         published = self.career.mark_published(draft_id, owner_id=self.owner_id, now=now)
-        content = response.result.output.draft.model_dump(mode="json")
+        content = publication_draft.model_dump(mode="json")
         artifact = create_artifact_revision(
             artifact_id=f"career-{draft_id}",
             owner_id=self.owner_id,
@@ -325,7 +357,7 @@ class CareerApplicationService:
             evidence_ids=tuple(sorted(claim.id for claim in match.result.selected_evidence)),
         )
         artifact = self.artifacts.create(artifact, owner_id=self.owner_id, expected_parent_revision_id=None)
-        return PublicationResponse(run=succeeded, draft=response.result.output.draft, approval=approval, artifact=artifact)
+        return PublicationResponse(run=succeeded, draft=publication_draft, approval=approval, artifact=artifact, artifact_content=content)
 
     def get_artifact(self, revision_id: str) -> ArtifactRevision:
         return self.artifacts.get_revision(revision_id, owner_id=self.owner_id)

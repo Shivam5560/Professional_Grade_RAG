@@ -284,7 +284,7 @@ class CareerSpecialist:
             )
 
         match = match_requirements(requirements, claims, candidate_edges)
-        draft = draft_from_matches(match)
+        draft = draft_from_matches(match, requirements=requirements)
         is_approved_publication = approval is not None
         truth_result = validate_draft(
             draft,

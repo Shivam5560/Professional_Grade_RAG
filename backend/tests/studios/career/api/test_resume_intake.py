@@ -294,3 +294,16 @@ def test_tailoring_requires_reviewed_evidence_and_returns_an_approval_bound_draf
     assert prepared.json()["approval"]["status"] == "pending"
     assert prepared.json()["draft"]["bullets"][0]["source_claim_ids"]
     assert prepared.json()["draft"]["bullets"][0]["before_text"][0] != prepared.json()["draft"]["bullets"][0]["after_text"]
+
+    requested = client.post(
+        f"/api/v2/career/approvals/{prepared.json()['approval']['id']}/decisions",
+        json={"decision": "revise", "comment": "Prioritize Python"},
+    )
+    assert requested.status_code == 200
+    refined = client.post(
+        f"/api/v2/career/drafts/{prepared.json()['draft']['id']}/refine",
+        json={"comment": "Prioritize Python"},
+    )
+    assert refined.status_code == 201, refined.text
+    assert refined.json()["supersedes_run_id"] == prepared.json()["run"]["id"]
+    assert refined.json()["run"]["id"] != prepared.json()["run"]["id"]

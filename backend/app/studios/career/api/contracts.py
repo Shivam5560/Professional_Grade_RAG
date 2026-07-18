@@ -175,6 +175,10 @@ class ApprovalDecisionRequest(StrictRequest):
     comment: str | None = Field(default=None, max_length=2000)
 
 
+class DraftRefinementRequest(StrictRequest):
+    comment: str = Field(min_length=1, max_length=2000)
+
+
 class DraftWorkflowResponse(BaseModel):
     run: StudioRun
     match: CareerMatchResult
@@ -183,11 +187,17 @@ class DraftWorkflowResponse(BaseModel):
     quality: QualityMetadata
 
 
+class DraftRefinementResponse(DraftWorkflowResponse):
+    supersedes_run_id: str
+    refinement_note: str
+
+
 class PublicationResponse(BaseModel):
     run: StudioRun
     draft: ResumeDraft
     approval: ApprovalRequest
     artifact: ArtifactRevision
+    artifact_content: dict[str, Any]
 
 
 class CapabilityErrorResponse(BaseModel):

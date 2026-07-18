@@ -24,6 +24,7 @@ from app.studios.career.api.contracts import (
     CareerScoreResponse,
     ClaimDecisionRequest,
     DraftCreateRequest,
+    DraftRefinementRequest,
     MatchCreateRequest,
     JobDescriptionParseRequest,
     ParsedRoleResponse,
@@ -275,6 +276,14 @@ def create_career_router(
         app: CareerApplicationService = Depends(service),
     ):
         return _translate(lambda: app.career.get_draft(draft_id, owner_id=app.owner_id))
+
+    @router.post("/drafts/{draft_id}/refine", status_code=status.HTTP_201_CREATED)
+    def refine_draft(
+        draft_id: str,
+        request: DraftRefinementRequest,
+        app: CareerApplicationService = Depends(service),
+    ):
+        return _translate(lambda: app.refine_draft(draft_id, comment=request.comment))
 
     @router.post("/approvals/{approval_id}/decisions")
     def decide_approval(
