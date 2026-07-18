@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { NexusAperture } from "@/components/brand/NexusAperture";
@@ -40,18 +39,20 @@ export function FlagshipHero() {
             Grounded research, data intelligence, and high-stakes output in one authored system.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Link
-              href="/showcase"
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("nexusmind:auth", { detail: "login" }))}
               className={`inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 font-semibold text-primary-foreground transition-opacity hover:opacity-90 ${focusRing}`}
             >
-              Explore showcase <ArrowRight aria-hidden className="h-4 w-4" />
-            </Link>
-            <Link
-              href="/auth"
+              Enter the workspace <ArrowRight aria-hidden className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => document.querySelector("#capabilities")?.scrollIntoView({ behavior: "smooth" })}
               className={`rounded-full border border-border px-5 py-3 font-semibold transition-colors hover:bg-muted ${focusRing}`}
             >
-              Launch live workspace
-            </Link>
+              Explore capabilities
+            </button>
           </div>
         </div>
         <div className="relative mx-auto grid min-h-80 w-full place-items-center motion-safe:animate-[reveal-up_1.1s_ease_forwards]">

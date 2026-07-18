@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { CAPABILITIES } from "@/lib/flagship-content";
 
 export function CapabilityStory() {
@@ -19,7 +17,7 @@ export function CapabilityStory() {
           {CAPABILITIES.map((item, index) => (
             <article
               key={item.id}
-              className="grid gap-6 py-9 md:grid-cols-[5rem_1fr_1fr_auto] md:items-center"
+              className="grid gap-6 py-9 md:grid-cols-[5rem_1fr_1fr] md:items-center"
             >
               <span className="font-mono text-sm text-muted-foreground">
                 0{index + 1}
@@ -29,12 +27,6 @@ export function CapabilityStory() {
                 <p className="text-muted-foreground">{item.statement}</p>
                 <p className="mt-2 text-sm">{item.proof.join(" · ")}</p>
               </div>
-              <Link
-                className="rounded-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                href={item.showcaseHref}
-              >
-                Experience →
-              </Link>
             </article>
           ))}
         </div>

@@ -26,8 +26,10 @@ describe("AppearanceProvider", () => {
 
   it("lets the user select light mode accessibly", async () => {
     render(<AppearanceProvider><AppearanceControl /><Probe /></AppearanceProvider>);
-    await userEvent.click(screen.getByRole("button", { name: /appearance/i }));
-    await userEvent.click(screen.getByRole("menuitemradio", { name: /light/i }));
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: /appearance/i }),
+      "light",
+    );
     expect(screen.getByText("light:light")).toBeInTheDocument();
     expect(document.documentElement).not.toHaveClass("dark");
   });

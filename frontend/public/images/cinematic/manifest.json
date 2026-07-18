@@ -1,0 +1,94 @@
+{
+  "assets": [
+    {
+      "file": "platform-dark.jpg",
+      "application": "platform",
+      "mode": "dark",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "72% 48%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: interconnected workspaces expressed as monumental precise architecture. Ultra-wide 16:9 composition with architectural depth, a right-weighted focal subject, quiet left-side UI-safe space, authored graphite exposure, pearl surfaces, and restrained mint, cyan, and copper light. No text, logos, screens, people, purple gradients, stock staging, or bokeh decoration."
+    },
+    {
+      "file": "platform-light.jpg",
+      "application": "platform",
+      "mode": "light",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "73% 47%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: interconnected workspaces expressed as monumental precise architecture. Ultra-wide 16:9 composition with architectural depth, a right-weighted focal subject, and quiet left-side UI-safe space. Use porcelain, paper, ink, forest mint, deep cyan, and oxidized copper with physical depth and crisp daylight contrast. No text, logos, screens, people, purple gradients, stock staging, beige monotony, or bokeh decoration."
+    },
+    {
+      "file": "knowledge-dark.jpg",
+      "application": "knowledge",
+      "mode": "dark",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 50%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: layered archival material and illuminated evidence connections. Ultra-wide 16:9 composition with realistic paper, metal, and ink texture, a right-weighted evidence field, quiet left-side UI-safe space, dark authored graphite exposure, and restrained cyan and copper illumination. No readable text, logos, screens, people, purple gradients, stock staging, or bokeh decoration."
+    },
+    {
+      "file": "knowledge-light.jpg",
+      "application": "knowledge",
+      "mode": "light",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 49%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: layered archival material and illuminated evidence connections. Ultra-wide 16:9 composition with realistic paper, ink, glass, and copper texture, a right-weighted evidence field, and quiet left-side UI-safe space. Use porcelain, paper, forest mint, deep cyan, and oxidized copper with clear daylight contrast. No readable text, logos, screens, people, purple gradients, stock staging, beige monotony, or bokeh decoration."
+    },
+    {
+      "file": "aurasql-dark.jpg",
+      "application": "aurasql",
+      "mode": "dark",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "73% 50%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: structured architectural grids and flowing relational data. Ultra-wide 16:9 composition with precise stone volumes and fine physical connection lines, a right-weighted data structure, quiet left-side UI-safe space, graphite exposure, and restrained cyan and copper illumination. No text, logos, screens, people, purple gradients, stock staging, or bokeh decoration."
+    },
+    {
+      "file": "aurasql-light.jpg",
+      "application": "aurasql",
+      "mode": "light",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 50%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: structured architectural grids and flowing relational data. Ultra-wide 16:9 composition with precise marble volumes and fine copper connection lines, a right-weighted data structure, and quiet left-side UI-safe space. Use porcelain, ink, forest mint, deep cyan, and oxidized copper with crisp daylight contrast. No text, logos, screens, people, purple gradients, stock staging, beige monotony, or bokeh decoration."
+    },
+    {
+      "file": "analysis-dark.jpg",
+      "application": "analysis",
+      "mode": "dark",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 47%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: observational structures separating a strong signal from surrounding complexity. Ultra-wide 16:9 composition with monumental layered stone planes and one precise illuminated focal signal, quiet left-side UI-safe space, dark graphite exposure, forest mint depth, and restrained copper light. No text, logos, screens, people, purple gradients, stock staging, or bokeh decoration."
+    },
+    {
+      "file": "analysis-light.jpg",
+      "application": "analysis",
+      "mode": "light",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 48%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: observational structures separating a strong signal from surrounding complexity. Ultra-wide 16:9 composition with layered stone planes and one oxidized-copper focal signal, a right-weighted structure, and quiet left-side UI-safe space. Use porcelain, ink, forest mint, deep cyan, and copper with physical depth and daylight contrast. No text, logos, screens, people, purple gradients, stock staging, beige monotony, or bokeh decoration."
+    },
+    {
+      "file": "career-dark.jpg",
+      "application": "career",
+      "mode": "dark",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "75% 53%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: human craft, verified documents, and professional transformation without a posed portrait. Ultra-wide 16:9 still life with tactile paper, a subtle verification seal, precision instruments, and architectural materials on the right, quiet left-side UI-safe space, dark graphite exposure, and restrained mint and copper light. No readable text, logos, screens, people, purple gradients, stock staging, or bokeh decoration."
+    },
+    {
+      "file": "career-light.jpg",
+      "application": "career",
+      "mode": "light",
+      "width": 2400,
+      "height": 1350,
+      "focalPoint": "76% 52%",
+      "prompt": "Create a premium cinematic editorial photograph for a sophisticated AI product interface. Subject: human craft, verified documents, and professional transformation without a posed portrait. Ultra-wide 16:9 still life with tactile paper, a subtle verification seal, natural foliage, and precision materials on the right with quiet left-side UI-safe space. Use porcelain, paper, ink, forest mint, deep cyan, and oxidized copper with clear daylight contrast. No readable text, logos, screens, people, purple gradients, stock staging, beige monotony, or bokeh decoration."
+    }
+  ]
+}

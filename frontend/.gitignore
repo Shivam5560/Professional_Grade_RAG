@@ -29,6 +29,9 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+blob-report/
+playwright-report/
+test-results/
 
 # Misc
 *.log

@@ -25,12 +25,100 @@ export class CatalogDataError extends Error {
   }
 }
 
-async function readJson<T>(response: Response): Promise<T> {
+function isJsonResponse(response: Response): boolean {
+  const mediaType = response.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+
+  if (!mediaType) return false;
+
+  return (
+    mediaType === "application/json" ||
+    (mediaType.startsWith("application/") && mediaType.endsWith("+json"))
+  );
+}
+
+async function readCatalogJson(response: Response): Promise<unknown> {
   if (!response.ok) {
     throw new CatalogHttpError(response.status);
   }
 
-  return response.json() as Promise<T>;
+  if (!isJsonResponse(response)) {
+    throw new CatalogDataError(
+      "Application catalog returned a non-JSON response",
+    );
+  }
+
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new CatalogDataError("Application catalog returned invalid JSON");
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isAppManifest(value: unknown): value is AppManifest {
+  if (!isRecord(value)) return false;
+
+  const stringFields = [
+    "id",
+    "version",
+    "name",
+    "summary",
+    "category",
+    "icon",
+    "frontend_route",
+    "health_check_id",
+  ] as const;
+  if (stringFields.some((field) => typeof value[field] !== "string")) {
+    return false;
+  }
+
+  const stringArrayFields = [
+    "backend_route_prefixes",
+    "backend_router_ids",
+    "required_capabilities",
+    "optional_capabilities",
+    "required_permissions",
+    "required_env_keys",
+    "packaging_paths",
+  ] as const;
+  if (stringArrayFields.some((field) => !isStringArray(value[field]))) {
+    return false;
+  }
+
+  if (
+    !Array.isArray(value.dependencies) ||
+    !value.dependencies.every(
+      (dependency) =>
+        isRecord(dependency) &&
+        typeof dependency.app_id === "string" &&
+        typeof dependency.minimum_version === "string",
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.demo_scenarios) &&
+    value.demo_scenarios.every(
+      (scenario) =>
+        isRecord(scenario) &&
+        typeof scenario.id === "string" &&
+        typeof scenario.title === "string" &&
+        typeof scenario.description === "string" &&
+        typeof scenario.starter_prompt === "string",
+    )
+  );
 }
 
 function validateFrontendRoute(app: AppManifest): AppManifest {
@@ -53,7 +141,14 @@ export async function listApps(
     headers: JSON_HEADERS,
   });
 
-  const apps = await readJson<AppManifest[]>(response);
+  const payload = await readCatalogJson(response);
+  if (!Array.isArray(payload) || !payload.every(isAppManifest)) {
+    throw new CatalogDataError(
+      "Application catalog returned an invalid manifest list",
+    );
+  }
+
+  const apps = payload;
   return apps.map(validateFrontendRoute);
 }
 
@@ -66,6 +161,13 @@ export async function getApp(
     { headers: JSON_HEADERS },
   );
 
-  const app = await readJson<AppManifest>(response);
+  const payload = await readCatalogJson(response);
+  if (!isAppManifest(payload)) {
+    throw new CatalogDataError(
+      "Application catalog returned an invalid manifest",
+    );
+  }
+
+  const app = payload;
   return validateFrontendRoute(app);
 }

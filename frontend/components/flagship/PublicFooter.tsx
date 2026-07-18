@@ -12,11 +12,8 @@ export function PublicFooter() {
           <Link className={focusRing} href="/developer">
             Developer
           </Link>
-          <Link className={focusRing} href="/showcase">
-            Showcase
-          </Link>
-          <Link className={focusRing} href="/auth">
-            Live
+          <Link className={focusRing} href="/?auth=login">
+            Workspace access
           </Link>
           <Link className={focusRing} href="/apps">
             Apps

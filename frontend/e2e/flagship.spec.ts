@@ -1,52 +1,56 @@
 import { expect, test } from "@playwright/test";
 
-test("flagship leads to a deterministic showcase", async ({ page }) => {
+test("flagship presents the product without a separate showcase", async ({ page }, testInfo) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(
     page.getByRole("heading", { name: /intelligence, made tangible/i }),
   ).toBeVisible();
-  const showcaseLink = page
-    .getByRole("link", { name: /explore showcase/i })
-    .first();
-  await expect(showcaseLink).toHaveAttribute("href", "/showcase");
-  await showcaseLink.click();
-  await expect(page).toHaveURL(/\/showcase$/);
-  await expect(page.getByRole("status")).toContainText(
-    /precomputed demonstration/i,
-  );
-  const auraSqlLink = page.getByRole("link", {
-    name: /move from intent/i,
+  await expect(page.getByRole("link", { name: /explore showcase/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "AuraSQL" })).toBeVisible();
+  const screenshot = await page.screenshot({
+    path: `/tmp/nexusmind-flagship-${testInfo.project.name}.png`,
+    fullPage: true,
   });
-  await expect(auraSqlLink).toHaveAttribute("href", "/showcase/aurasql");
-  await auraSqlLink.click();
-  await expect(page).toHaveURL(/showcase\/aurasql/);
-  await page
-    .getByRole("button", { name: /continue demonstration/i })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Review", exact: true }),
-  ).toBeVisible();
+  expect(screenshot.byteLength).toBeGreaterThan(25_000);
 });
 
 test("appearance persists across public routes", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: /appearance/i }).click();
-  await page.getByRole("menuitemradio", { name: /light/i }).click();
+  await page.getByRole("combobox", { name: /appearance/i }).selectOption("light");
   await page.getByRole("link", { name: /read the engineering story/i }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme-mode", "light");
 });
 
-test("live CTA reaches focused authentication", async ({ page }) => {
+test("authentication opens inside the flagship", async ({ page }, testInfo) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  const liveWorkspaceLink = page
-    .getByRole("link", { name: /launch live workspace/i })
-    .first();
-  await expect(liveWorkspaceLink).toHaveAttribute("href", "/auth");
-  await liveWorkspaceLink.click();
-  await expect(page).toHaveURL(/\/auth$/);
+  await page.getByRole("link", { name: /log in/i }).click();
+  await expect(page).toHaveURL(/\?auth=login/);
+  await expect(page.getByRole("dialog", { name: /enter nexusmind/i })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /enter nexusmind/i }),
   ).toBeVisible();
+  const screenshot = await page.screenshot({
+    path: `/tmp/nexusmind-auth-${testInfo.project.name}.png`,
+  });
+  expect(screenshot.byteLength).toBeGreaterThan(20_000);
+});
+
+test("reduced motion omits the ambient WebGL scene", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+
+  await expect(
+    page.getByRole("heading", { name: /intelligence, made tangible/i }),
+  ).toBeVisible();
+  await expect(page.locator("canvas")).toHaveCount(0);
+});
+
+test("legacy public routes redirect to the flagship", async ({ page }) => {
+  await page.goto("/auth", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\?auth=login/);
+  await expect(page.getByRole("dialog", { name: /enter nexusmind/i })).toBeVisible();
+  await page.goto("/showcase", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("public experiences make no live API requests", async ({ page }) => {
@@ -58,13 +62,11 @@ test("public experiences make no live API requests", async ({ page }) => {
 
   for (const route of [
     "/",
-    "/showcase",
-    "/showcase/knowledge",
     "/developer",
     "/auth",
   ]) {
     await page.goto(route, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator("body")).toBeVisible();
   }
 
   expect(apiRequests).toEqual([]);

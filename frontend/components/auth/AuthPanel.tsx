@@ -16,12 +16,13 @@ export interface RegisterValues extends LoginValues {
 }
 
 interface AuthPanelProps {
+  initialMode?: "login" | "register";
   onLogin(values: LoginValues): Promise<void>;
   onRegister(values: RegisterValues): Promise<void>;
 }
 
-export function AuthPanel({ onLogin, onRegister }: AuthPanelProps) {
-  const [tab, setTab] = useState("login");
+export function AuthPanel({ initialMode = "login", onLogin, onRegister }: AuthPanelProps) {
+  const [tab, setTab] = useState(initialMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -81,7 +82,7 @@ export function AuthPanel({ onLogin, onRegister }: AuthPanelProps) {
     <Tabs
       value={tab}
       onValueChange={(value) => {
-        setTab(value);
+        if (value === "login" || value === "register") setTab(value);
         setError("");
       }}
     >

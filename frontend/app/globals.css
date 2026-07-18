@@ -13,24 +13,24 @@
     --font-sans: var(--font-space-grotesk);
     --font-editorial: var(--font-newsreader);
     --font-mono: var(--font-ibm-plex-mono);
-    --background: 41 31% 92%;
-    --foreground: 80 6% 9%;
-    --card: 40 53% 97%;
-    --card-foreground: 80 6% 9%;
-    --popover: 40 53% 97%;
-    --popover-foreground: 80 6% 9%;
+    --background: 210 20% 96%;
+    --foreground: 216 16% 10%;
+    --card: 210 24% 99%;
+    --card-foreground: 216 16% 10%;
+    --popover: 210 24% 99%;
+    --popover-foreground: 216 16% 10%;
     --primary: 158 74% 27%;
-    --primary-foreground: 40 53% 97%;
-    --secondary: 39 24% 87%;
-    --secondary-foreground: 80 6% 9%;
-    --muted: 39 24% 87%;
-    --muted-foreground: 36 8% 39%;
+    --primary-foreground: 210 24% 99%;
+    --secondary: 210 15% 90%;
+    --secondary-foreground: 216 16% 10%;
+    --muted: 210 15% 90%;
+    --muted-foreground: 215 9% 38%;
     --accent: 19 64% 40%;
-    --accent-foreground: 40 53% 97%;
+    --accent-foreground: 210 24% 99%;
     --destructive: 4 68% 45%;
-    --destructive-foreground: 40 53% 97%;
-    --border: 36 20% 81%;
-    --input: 36 20% 81%;
+    --destructive-foreground: 210 24% 99%;
+    --border: 214 14% 82%;
+    --input: 214 14% 82%;
     --ring: 158 74% 27%;
     --signal: 158 74% 27%;
     --copper: 19 64% 40%;
@@ -48,8 +48,8 @@
     --sidebar-accent-foreground: 38 41% 93%;
     --sidebar-border: 225 10% 23%;
     --sidebar-ring: 148 89% 85%;
-    --bubble-bot: 40 53% 97%;
-    --bubble-user: 39 24% 87%;
+    --bubble-bot: 210 24% 99%;
+    --bubble-user: 210 15% 90%;
     --radius: 0.75rem;
     color-scheme: light;
   }
@@ -102,8 +102,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-width: 20rem;
+    overflow-x: clip;
     font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  ::selection {
+    background-color: hsl(var(--signal) / 0.24);
+    color: hsl(var(--foreground));
   }
 }
 
@@ -414,6 +421,48 @@
     .nexus-orbit,
     .nexus-breathe {
       animation: none;
+    }
+
+    main[aria-label="Application dashboard"] *,
+    div:has(> [data-testid="cinematic-veil"]) * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media (prefers-reduced-data: reduce) {
+    .float-slow,
+    .float-slower,
+    .float-slowest,
+    .pulse-glow,
+    .intro-sheen,
+    .marquee-track,
+    .nexus-orbit,
+    .nexus-breathe,
+    .reveal-up,
+    main[aria-label="Application dashboard"] *,
+    div:has(> [data-testid="cinematic-veil"]) * {
+      animation: none !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media (max-width: 767px) {
+    nav[aria-label="Mobile applications"] {
+      padding-left: max(0.5rem, env(safe-area-inset-left));
+      padding-right: max(0.5rem, env(safe-area-inset-right));
+    }
+
+    aside:has(> nav[aria-label="Mobile applications"]) {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    main[aria-label="Application dashboard"] {
+      min-height: 100svh;
+      scroll-padding-bottom: calc(4rem + env(safe-area-inset-bottom));
     }
   }
 }

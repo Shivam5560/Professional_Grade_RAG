@@ -1,45 +1,36 @@
 "use client";
 
-import { Laptop, Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useAppearance } from "./AppearanceProvider";
-import type { ThemePreference } from "@/lib/appearance";
+import { Moon, Sun } from "lucide-react";
 
-const choices = [
-  { value: "system", label: "System", icon: Laptop },
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-] satisfies Array<{ value: ThemePreference; label: string; icon: typeof Sun }>;
+import type { ThemePreference } from "@/lib/appearance";
+import { useAppearance } from "./AppearanceProvider";
+
+const choices: Array<{ value: ThemePreference; label: string }> = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 export function AppearanceControl() {
-  const { preference, resolvedTheme, setPreference } = useAppearance();
-  const Icon = resolvedTheme === "dark" ? Moon : Sun;
+  const { preference, setPreference } = useAppearance();
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button aria-label="Appearance" size="icon" variant="ghost">
-          <Icon className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={preference} onValueChange={(value) => setPreference(value as ThemePreference)}>
-          {choices.map(({ value, label, icon: ChoiceIcon }) => (
-            <DropdownMenuRadioItem key={value} value={value}>
-              <ChoiceIcon className="mr-2 h-4 w-4" />{label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <label className="relative grid h-10 w-10 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-within:ring-2 focus-within:ring-ring">
+      <span className="sr-only">Appearance</span>
+      <Sun aria-hidden className="h-4 w-4 dark:hidden" />
+      <Moon aria-hidden className="hidden h-4 w-4 dark:block" />
+      <select
+        aria-label="Appearance"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        onChange={(event) => setPreference(event.target.value as ThemePreference)}
+        value={preference}
+      >
+        {choices.map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

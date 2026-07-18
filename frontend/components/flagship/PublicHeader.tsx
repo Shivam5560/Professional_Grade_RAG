@@ -35,12 +35,21 @@ export function PublicHeader() {
           </Link>
         </nav>
         <AppearanceControl />
-        <Link
-          className={`rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-85 ${focusRing}`}
-          href={isAuthenticated ? "/apps" : "/auth"}
-        >
-          {isAuthenticated ? "Open workspace" : "Launch live"}
-        </Link>
+        {isAuthenticated ? (
+          <Link
+            className={`rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-85 ${focusRing}`}
+            href="/apps"
+          >
+            Open workspace
+          </Link>
+        ) : (
+          <Link
+            href="/?auth=login"
+            className={`rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-85 ${focusRing}`}
+          >
+            Log in
+          </Link>
+        )}
       </div>
     </header>
   );

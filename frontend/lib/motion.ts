@@ -24,3 +24,22 @@ export const staggerContainer = {
     },
   },
 };
+
+export const motionTokens = {
+  ease: [0.22, 1, 0.36, 1] as const,
+  route: { duration: 0.72 },
+  reveal: { duration: 0.58 },
+  quick: { duration: 0.2 },
+  spring: {
+    type: "spring" as const,
+    stiffness: 260,
+    damping: 30,
+    mass: 0.8,
+  },
+};
+
+export const routeVariants = {
+  initial: { opacity: 0, y: 16, filter: "blur(10px)" },
+  enter: { opacity: 1, y: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, y: -10, filter: "blur(8px)" },
+};

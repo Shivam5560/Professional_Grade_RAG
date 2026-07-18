@@ -5,6 +5,9 @@ vi.mock("@/lib/store", () => ({ useAuthStore: () => ({ isAuthenticated: false })
 vi.mock("@/components/theme/AppearanceControl", () => ({
   AppearanceControl: () => <button aria-label="Appearance">Appearance</button>,
 }));
+vi.mock("@/hooks/useCinematicEffects", () => ({
+  useCinematicEffects: () => ({ enabled: false, visible: true }),
+}));
 
 describe("DeveloperPage", () => {
   it("states solo ownership and shows engineering breadth", () => {
@@ -16,10 +19,10 @@ describe("DeveloperPage", () => {
     }
   });
 
-  it("returns visitors to product proof and showcase", () => {
+  it("returns visitors to the product without adding another public experience", () => {
     render(<DeveloperPage />);
     expect(screen.getByRole("link", { name: /view product/i })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: /explore showcase/i })).toHaveAttribute("href", "/showcase");
+    expect(screen.queryByRole("link", { name: /explore showcase/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /github/i })).toHaveAttribute("href", "https://github.com/Shivam5560");
     expect(screen.getByRole("link", { name: /linkedin/i })).toHaveAttribute("href", "https://linkedin.com/in/shivam-sourav-b889aa204/");
   });

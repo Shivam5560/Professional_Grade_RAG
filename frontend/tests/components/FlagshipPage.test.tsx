@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import FlagshipPage from "@/app/page";
 
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
@@ -9,6 +10,11 @@ vi.mock("@/hooks/useCinematicEffects", () => ({
 vi.mock("@/components/theme/AppearanceControl", () => ({
   AppearanceControl: () => <button aria-label="Appearance">Appearance</button>,
 }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 describe("FlagshipPage", () => {
   it("explains the product before presenting creator attribution", () => {
@@ -18,10 +24,15 @@ describe("FlagshipPage", () => {
     expect(product.compareDocumentPosition(creator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("offers showcase and live-workspace paths", () => {
+  it("opens authentication from the flagship without a separate auth page", async () => {
+    const user = userEvent.setup();
     render(<FlagshipPage />);
-    expect(screen.getByRole("link", { name: /explore showcase/i })).toHaveAttribute("href", "/showcase");
-    expect(screen.getByRole("link", { name: /launch live workspace/i })).toHaveAttribute("href", "/auth");
+    expect(screen.getByRole("link", { name: /log in/i })).toHaveAttribute("href", "/?auth=login");
+    await user.click(screen.getByRole("button", { name: /enter the workspace/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /enter nexusmind/i })).toBeVisible(),
+    );
+    expect(screen.queryByRole("link", { name: /explore showcase/i })).not.toBeInTheDocument();
   });
 
   it.each(["Knowledge", "AuraSQL", "Analysis", "Career Studio"])("shows %s", (name) => {
