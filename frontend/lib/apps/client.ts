@@ -4,7 +4,10 @@ const API_BASE = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-const JSON_HEADERS = { Accept: "application/json" };
+const JSON_HEADERS = {
+  Accept: "application/json",
+  "ngrok-skip-browser-warning": "true",
+};
 
 const SAFE_FRONTEND_ROUTE = /^\/(?!\/)[a-z0-9/_\-\[\]]*$/;
 
