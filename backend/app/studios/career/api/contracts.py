@@ -124,6 +124,15 @@ class RoleCreateRequest(StrictRequest):
     requirements: tuple[RoleRequirement, ...] = Field(min_length=1, max_length=200)
 
 
+class JobDescriptionParseRequest(StrictRequest):
+    job_description: str = Field(min_length=10, max_length=30_000)
+
+
+class ParsedRoleResponse(BaseModel):
+    title: str
+    requirements: tuple[RoleRequirement, ...]
+
+
 class CandidateEdgeInput(StrictRequest):
     requirement_id: str = Field(min_length=1)
     claim_id: str = Field(min_length=1)

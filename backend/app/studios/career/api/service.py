@@ -64,6 +64,9 @@ class CareerApplicationService:
 
     def ingest_source(self, request: SourceIngestionRequest) -> SourceIngestionResponse:
         claims = request.require_structured_claims()
+        return self.ingest_claims(filename=request.filename, media_type=request.media_type, claims=claims)
+
+    def ingest_claims(self, *, filename: str, media_type: str, claims) -> SourceIngestionResponse:
         source_ids = {span.source_id for claim in claims for span in claim.source_spans}
         if len(source_ids) != 1:
             raise ValueError("structured claims must resolve to exactly one source id")
@@ -73,8 +76,8 @@ class CareerApplicationService:
         source = self.career.add_source(
             source_id=source_id,
             owner_id=self.owner_id,
-            filename=request.filename,
-            media_type=request.media_type,
+            filename=filename,
+            media_type=media_type,
             content_digest=_digest(payload),
             created_at=now,
         )

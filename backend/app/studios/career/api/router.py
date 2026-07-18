@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Generator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
+from pathlib import PurePath
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -21,9 +22,13 @@ from app.studios.career.api.contracts import (
     ClaimDecisionRequest,
     DraftCreateRequest,
     MatchCreateRequest,
+    JobDescriptionParseRequest,
+    ParsedRoleResponse,
     RoleCreateRequest,
     SourceIngestionRequest,
 )
+from app.studios.career.extraction import extract_resume_source, parse_job_description
+from app.utils.validators import validate_file_extension, validate_file_size
 from app.studios.career.api.service import CareerApplicationService, UnsupportedCareerCapability
 from app.studios.career.persistence import InvalidCareerState
 
@@ -75,6 +80,25 @@ def create_career_router(
     ):
         return _translate(lambda: app.career.get_source(source_id, owner_id=app.owner_id))
 
+    @router.post("/sources/upload", status_code=status.HTTP_201_CREATED)
+    async def upload_source(
+        file: UploadFile = File(...),
+        app: CareerApplicationService = Depends(service),
+    ):
+        filename = file.filename or ""
+        if filename != PurePath(filename).name or ".." in filename or not validate_file_extension(filename, [".pdf", ".doc", ".docx", ".txt"]):
+            raise HTTPException(status_code=400, detail="Upload a PDF, DOC, DOCX, or TXT resume with a safe filename")
+        content = await file.read()
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="Resume file is empty")
+        if not validate_file_size(len(content), 10):
+            raise HTTPException(status_code=413, detail="Resume file exceeds the 10 MB limit")
+        try:
+            extracted = extract_resume_source(filename, content)
+            return _translate(lambda: app.ingest_claims(filename=filename, media_type=file.content_type or "application/octet-stream", claims=extracted.claims))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.post("/claims/{logical_claim_id}/decisions")
     def decide_claim(
         logical_claim_id: str,
@@ -89,6 +113,14 @@ def create_career_router(
         app: CareerApplicationService = Depends(service),
     ):
         return _translate(lambda: app.create_role(request))
+
+    @router.post("/roles/parse", response_model=ParsedRoleResponse)
+    def parse_role(request: JobDescriptionParseRequest):
+        try:
+            title, requirements = parse_job_description(request.job_description)
+            return ParsedRoleResponse(title=title, requirements=requirements)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.get("/roles/{role_id}")
     def get_role(
