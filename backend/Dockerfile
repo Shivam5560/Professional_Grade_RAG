@@ -19,8 +19,8 @@ RUN uv venv /opt/venv && \
     test -x /opt/venv/bin/gunicorn
 
 # Keep cleanup separate so it can never mask a failed dependency installation.
-RUN find /opt/venv -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
-    find /opt/venv -depth -type d -name "__pycache__" -empty -delete
+RUN (find /opt/venv -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
+    find /opt/venv -depth -type d -name "__pycache__" -empty -delete) || true
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim

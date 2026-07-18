@@ -41,6 +41,12 @@ pipeline {
             }
         }
 
+        stage('CI Contract Tests') {
+            steps {
+                sh "python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v"
+            }
+        }
+
         stage('Backend Tests') {
             steps {
                 dir('backend') {
@@ -90,15 +96,19 @@ pipeline {
                         --label "org.opencontainers.image.source=${REPO_URL}" \
                         --tag "nexusmind-backend:${IMAGE_TAG}" \
                         backend
+                    docker run --rm \
+                        --network none \
+                        --read-only \
+                        --cap-drop=ALL \
+                        --security-opt no-new-privileges \
+                        --entrypoint gunicorn \
+                        "nexusmind-backend:${IMAGE_TAG}" \
+                        --version
                     docker build \
                         --label "org.opencontainers.image.revision=${SOURCE_COMMIT}" \
                         --label "org.opencontainers.image.source=${REPO_URL}" \
                         --tag "nexusmind-frontend:${IMAGE_TAG}" \
                         frontend
-                    docker run --rm \
-                        --entrypoint gunicorn \
-                        "nexusmind-backend:${IMAGE_TAG}" \
-                        --version
                 '''
             }
         }
