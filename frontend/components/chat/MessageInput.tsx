@@ -41,7 +41,7 @@ export function MessageInput({
   useEffect(() => {
     if (!textareaRef.current) return;
     textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 320)}px`;
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 192)}px`;
   }, [currentValue]);
 
   const handleSend = () => {
@@ -78,14 +78,14 @@ export function MessageInput({
             }
             // Auto-resize textarea
             e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 320) + 'px';
+            e.target.style.height = Math.min(e.target.scrollHeight, 192) + 'px';
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled || isSending}
           aria-label="Message"
           enterKeyHint="send"
-          className="flex-1 min-h-[56px] max-h-[320px] resize-none rounded-2xl border-border/70 bg-muted/70 px-5 py-4 text-foreground placeholder:text-muted-foreground transition-all focus:border-foreground/30 focus:ring-2 focus:ring-foreground/20"
+          className="min-h-[56px] max-h-48 flex-1 resize-none overflow-y-auto rounded-2xl border-border/70 bg-workspace-inset px-5 py-4 text-foreground placeholder:text-muted-foreground transition-all focus:border-foreground/30 focus:ring-2 focus:ring-foreground/20"
           rows={1}
         />
         <Button

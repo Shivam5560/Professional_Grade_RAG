@@ -109,7 +109,7 @@ export function MessageList({
   }
 
   return (
-    <ScrollArea className="h-full px-4">
+    <ScrollArea data-scroll-owner="messages" data-testid="knowledge-message-scroll" className="h-full px-4">
       <div className="flex flex-col gap-6 py-6">
         <AnimatePresence initial={false}>
           {messages.map((message, index) => {

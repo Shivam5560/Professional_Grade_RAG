@@ -249,7 +249,7 @@ export function ChatInterface({
   const ModeIcon = modeMeta.icon;
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-background/30">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-workspace-raised">
       {error && (
         <Alert variant="destructive" className="m-4">
           <AlertCircle className="h-4 w-4" />
@@ -268,7 +268,7 @@ export function ChatInterface({
         />
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-border/60 bg-background/88 px-3 py-3 backdrop-blur-xl sm:px-4">
+      <div data-fixed-composer="knowledge" data-testid="knowledge-composer" className="z-20 shrink-0 border-t border-border/60 bg-workspace-raised px-3 py-3 sm:px-4">
           <div className="mx-auto w-full max-w-4xl">
             <div className="flex items-end gap-3">
               <div className="mb-1 flex items-center gap-1.5">

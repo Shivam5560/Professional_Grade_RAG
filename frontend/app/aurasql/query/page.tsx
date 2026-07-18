@@ -801,7 +801,7 @@ function AuraSqlQueryPageContent() {
   const detailsOpen = recsOpen || showTablesMenu;
 
   return (
-    <FocusCanvas ariaLabel="AuraSQL query workspace" className="min-h-[calc(100svh-3rem)]">
+    <FocusCanvas ariaLabel="AuraSQL query workspace" className="h-[calc(100svh-2rem)] min-h-0 overflow-hidden">
       <CanvasHeader
         eyebrow="AuraSQL"
         title="Ask the business. Inspect the truth."
@@ -868,7 +868,7 @@ function AuraSqlQueryPageContent() {
         ))}
       </section>
 
-      <div className="flex flex-1 flex-col gap-5 py-5">
+      <div data-scroll-owner="query-results" className="relative flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto py-5">
         {(loading || loadingGenerate) ? (
           <div className="flex min-h-24 items-center justify-center gap-3 border-y border-border/50 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -894,7 +894,7 @@ function AuraSqlQueryPageContent() {
           </section>
         ) : (
           <>
-            <section aria-label="Ask a data question" className="mx-auto w-full max-w-4xl border-b border-border/60 pb-5">
+            <section data-fixed-composer="aurasql" aria-label="Ask a data question" className="sticky top-0 z-20 mx-auto w-full max-w-4xl rounded-lg border border-border/70 bg-workspace-raised p-4 shadow-sm">
               {latestUserMessage ? <p className="mb-3 text-sm leading-6 text-muted-foreground"><span className="font-medium text-foreground">Current question:</span> {latestUserMessage.content}</p> : null}
               <MessageInput
                 onSend={handleSendMessage}
@@ -908,7 +908,7 @@ function AuraSqlQueryPageContent() {
             </section>
 
             {latestSqlMessage?.sql ? (
-              <section aria-label="Review generated SQL" className="overflow-hidden rounded-lg border border-border/70 bg-background/88 backdrop-blur-xl">
+              <section aria-label="Review generated SQL" className="overflow-hidden rounded-lg border border-border/70 bg-workspace-raised">
                 <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
                   <div>
                     <h2 className="text-sm font-semibold">Review generated SQL</h2>

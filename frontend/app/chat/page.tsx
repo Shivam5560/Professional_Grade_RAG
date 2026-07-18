@@ -120,7 +120,7 @@ export default function ChatPage() {
 
       <section
         aria-label="Active conversation"
-        className="mt-4 h-[calc(100svh-15.5rem)] min-h-[32rem] overflow-hidden rounded-lg border border-border/70 bg-background/78 shadow-[0_28px_80px_-55px_hsl(var(--foreground)/0.4)] backdrop-blur-xl md:h-[calc(100svh-13rem)]"
+        className="mt-4 h-[calc(100svh-15.5rem)] min-h-[32rem] overflow-hidden rounded-lg border border-border/70 bg-workspace-raised shadow-[0_28px_80px_-55px_hsl(var(--foreground)/0.4)] md:h-[calc(100svh-13rem)]"
       >
         <ChatInterface
           error={error}
