@@ -356,7 +356,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                           <pre className="bg-muted/80 p-4 rounded-lg overflow-x-auto my-3 border border-border shadow-lg shadow-teal-500/10" {...props} />
                         ),
                         blockquote: ({ ...props }) => (
-                          <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r backdrop-blur-sm" {...props} />
+                          <blockquote className="border-l-4 border-teal-500 pl-4 italic my-3 text-foreground bg-teal-500/10 py-2 rounded-r" {...props} />
                         ),
                         hr: ({ ...props }) => (
                           <hr className="my-4 border-border" {...props} />
@@ -391,7 +391,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
               {/* Mode badge */}
               {message.mode && (
                 <div className={cn(
-                  "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg backdrop-blur-sm flex items-center gap-1.5",
+                  "text-xs font-semibold px-3 py-1 rounded-full border shadow-lg flex items-center gap-1.5",
                   message.mode === 'think'
                     ? "text-white bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))] border-transparent"
                     : message.mode === 'ask'
@@ -405,7 +405,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
 
               {/* Confidence badge */}
               {showConfidence && message.confidence_score !== undefined && (
-                <div className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm">
+                <div className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg">
                   Confidence: {Math.round(message.confidence_score)}%
                 </div>
               )}
@@ -415,7 +415,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                 <button
                   type="button"
                   onClick={() => setShowReasoning(!showReasoning)}
-                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Brain className="h-3 w-3" />
                   <span>Reasoning</span>
@@ -432,7 +432,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                 <button
                   type="button"
                   onClick={() => setShowSources(!showSources)}
-                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg backdrop-blur-sm hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-semibold text-foreground bg-muted/70 px-3 py-1 rounded-full border border-border/60 shadow-lg hover:border-border transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
                 >
                   <FileText className="h-3 w-3" />
                   <span>Sources ({message.sources.length})</span>
@@ -448,7 +448,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
             {/* Collapsible reasoning panel */}
             {showReasoning && message.reasoning && (
               <div className="mt-2 animate-in slide-in-from-top-2 duration-200">
-                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-xs backdrop-blur-sm">
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-xs">
                   <div className="flex items-center gap-2 mb-2">
                     <Brain className="h-4 w-4 text-primary" />
                     <span className="font-semibold text-primary">Reasoning Steps</span>
@@ -468,7 +468,7 @@ export function MessageItem({ message, showConfidence = false }: MessageItemProp
                 {message.sources.map((source, idx) => (
                   <div
                     key={idx}
-                    className="bg-card/80 border border-border/70 rounded-lg p-3 text-xs backdrop-blur-sm hover:border-secondary/40 transition-all duration-200"
+                    className="bg-workspace-raised border border-border/70 rounded-lg p-3 text-xs hover:border-secondary/40 transition-all duration-200"
                   >
                     <div className="flex items-start gap-2">
                       <FileText className="h-4 w-4 text-secondary flex-shrink-0 mt-0.5" />

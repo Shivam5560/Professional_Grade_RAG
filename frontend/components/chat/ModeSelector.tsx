@@ -18,7 +18,7 @@ interface ModeSelectorProps {
 
 export function ModeSelector({ mode, onModeChange, disabled = false }: ModeSelectorProps) {
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-card/70 p-1 backdrop-blur-sm shadow-[0_10px_30px_-24px_rgba(0,0,0,0.5)]">
+    <div className="flex items-center gap-1 rounded-xl border border-border/70 bg-workspace-inset p-1 shadow-[0_10px_30px_-24px_rgba(0,0,0,0.5)]">
       {/* Fast Mode */}
       <button
         type="button"

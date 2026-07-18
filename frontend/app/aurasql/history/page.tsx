@@ -39,7 +39,7 @@ export default function AuraSqlHistoryDataPage() {
   return (
     <AuraSqlPage title="Query history" description="AuraSQL questions and generated statements stay separate from every other application history.">
       {error ? <p role="alert" className="mb-4 border-y border-rose-500/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-700 dark:text-rose-300">{error}</p> : null}
-      <DataTable data={history} columns={columns} getRowId={(item) => item.id} loading={loading} searchPlaceholder="Search AuraSQL history" emptyTitle="No query history" emptyDescription="Your first generated statement will appear here." pageSize={20} className="bg-background/88 backdrop-blur-xl" />
+      <DataTable data={history} columns={columns} getRowId={(item) => item.id} loading={loading} searchPlaceholder="Search AuraSQL history" emptyTitle="No query history" emptyDescription="Your first generated statement will appear here." pageSize={20} className="bg-workspace-raised" />
     </AuraSqlPage>
   );
 }

@@ -13,7 +13,7 @@ import { apiClient } from '@/lib/api';
 import { AuraSqlConnection } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
+import { AuraSqlPage } from '@/components/aurasql/AuraSqlPage';
 
 function NewAuraSqlContextPageContent() {
   const router = useRouter();
@@ -104,20 +104,10 @@ function NewAuraSqlContextPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 opacity-35">
-        <ShaderAnimation className="w-full h-full" speed={0.08} />
-      </div>
-      <div className="pointer-events-none absolute inset-0 app-aurora" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
-      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
-      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
-
+    <AuraSqlPage title="Choose the data context" description="Name this reusable context, select the relevant tables, and AuraSQL will carry that scope into the query workspace.">
       {(loading || loadingTables) ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay">
+          <div className="rounded-xl border border-border bg-workspace-raised px-6 py-4 text-center shadow-xl">
             <p className="text-sm font-semibold">Preparing schema context</p>
             <p className="text-xs text-muted-foreground mt-1">Loading connections and tables.</p>
             <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
@@ -138,9 +128,8 @@ function NewAuraSqlContextPageContent() {
         </div>
       ) : null}
 
-      <main className="relative z-10 px-4 py-10 md:pl-28 md:pr-8">
-        <div className="max-w-4xl mx-auto">
-          <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
+      <div className="mx-auto w-full max-w-4xl py-3">
+          <Card className="border-border bg-workspace-raised shadow-sm">
             <CardHeader>
               <CardTitle>New Schema Context</CardTitle>
               <CardDescription>Select tables and save a reusable context.</CardDescription>
@@ -160,7 +149,7 @@ function NewAuraSqlContextPageContent() {
                     <select
                       value={selectedConnection}
                       onChange={(event) => setSelectedConnection(event.target.value)}
-                      className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-border bg-workspace-inset px-3 py-2 text-sm"
                     >
                       {connections.map((conn) => (
                         <option key={conn.id} value={conn.id}>
@@ -180,7 +169,7 @@ function NewAuraSqlContextPageContent() {
                   ) : (
                     <div className="grid gap-2 md:grid-cols-2">
                       {tables.map((table) => (
-                        <label key={table} className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2">
+                        <label key={table} className="flex items-center gap-2 rounded-lg border border-border bg-workspace-inset px-3 py-2">
                           <input
                             type="checkbox"
                             checked={selectedTables.has(table)}
@@ -210,9 +199,8 @@ function NewAuraSqlContextPageContent() {
               </form>
             </CardContent>
           </Card>
-        </div>
-      </main>
-    </div>
+      </div>
+    </AuraSqlPage>
   );
 }
 

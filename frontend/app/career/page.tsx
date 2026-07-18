@@ -5,7 +5,6 @@ import { ArrowLeft, BookOpen } from "lucide-react";
 
 import AuthPage from "@/app/auth/page";
 import { PageShell } from "@/components/layout/PageShell";
-import { ActionDock } from "@/components/shell/ActionDock";
 import { ContextRibbon } from "@/components/shell/ContextRibbon";
 import { Inspector } from "@/components/shell/Inspector";
 import { CareerHome, type CareerWorkflow } from "@/components/studios/career/CareerHome";
@@ -41,7 +40,11 @@ export default function CareerStudioPage(): JSX.Element | null {
   const [tailorContext, setTailorContext] = useState({ resumeId: "", jobDescription: "" });
   const [guideOpen, setGuideOpen] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("workflow");
+    if (requested === "score" || requested === "tailor" || requested === "create") setWorkflow(requested);
+    setMounted(true);
+  }, []);
   useEffect(() => {
     if (!user) return;
     apiClient.listResumes(user.id)
@@ -52,10 +55,14 @@ export default function CareerStudioPage(): JSX.Element | null {
   if (!mounted) return null;
   if (!isAuthenticated || !user) return <AuthPage />;
 
+  const selectWorkflow = (next: CareerWorkflow | null) => {
+    setWorkflow(next);
+    window.history.replaceState(null, "", next ? `/career?workflow=${next}` : "/career");
+  };
   const activeCopy = workflow ? workflowCopy[workflow] : null;
   return (
     <PageShell
-      actions={workflow ? <Button onClick={() => setWorkflow(null)} size="sm" variant="outline"><ArrowLeft className="mr-2 h-4 w-4" />All career tools</Button> : undefined}
+      actions={<><Button onClick={() => setGuideOpen(true)} size="sm" variant="outline"><BookOpen className="mr-2 h-4 w-4" />How it works</Button>{workflow ? <Button onClick={() => selectWorkflow(null)} size="sm" variant="outline"><ArrowLeft className="mr-2 h-4 w-4" />All career tools</Button> : null}</>}
       description={activeCopy?.description ?? "Choose the outcome you need today. Scoring never edits, tailoring only starts when you ask, and creation exports through your LaTeX pipeline."}
       eyebrow="Career Studio"
       maxWidth="full"
@@ -71,15 +78,11 @@ export default function CareerStudioPage(): JSX.Element | null {
 
       {resumeLoadError ? <p role="status" className="mt-5 rounded-lg border border-border bg-workspace-inset p-3 text-sm text-muted-foreground">Saved resumes are temporarily unavailable: {resumeLoadError}. You can still upload or create a resume.</p> : null}
       <main className="py-7 sm:py-10">
-        {!workflow ? <CareerHome onSelect={setWorkflow} /> : null}
-        {workflow === "score" ? <ScoreWorkspace resumes={resumes} userId={user.id} onTailor={(resumeId, jobDescription) => { setTailorContext({ resumeId, jobDescription }); setWorkflow("tailor"); }} /> : null}
+        {!workflow ? <CareerHome onSelect={selectWorkflow} /> : null}
+        {workflow === "score" ? <ScoreWorkspace resumes={resumes} userId={user.id} onTailor={(resumeId, jobDescription) => { setTailorContext({ resumeId, jobDescription }); selectWorkflow("tailor"); }} /> : null}
         {workflow === "tailor" ? <TailorWorkspace initialJobDescription={tailorContext.jobDescription} initialResumeId={tailorContext.resumeId} resumes={resumes} /> : null}
         {workflow === "create" ? <ResumeCreator /> : null}
       </main>
-      <ActionDock
-        primary={workflow ? <Button onClick={() => setWorkflow(null)} variant="outline">Choose another tool</Button> : <span className="px-3 text-xs text-muted-foreground">Start with the outcome you need</span>}
-        secondary={<Button onClick={() => setGuideOpen(true)} variant="ghost"><BookOpen className="mr-2 h-4 w-4" />How it works</Button>}
-      />
       <Inspector open={guideOpen} onOpenChange={setGuideOpen} title="How Career Studio protects your story">
         <div className="space-y-6 text-sm leading-6">
           <section><p className="text-xs font-semibold uppercase text-muted-foreground">Score</p><h2 className="mt-1 text-lg font-semibold">See the gap before changing anything</h2><p className="mt-2 text-muted-foreground">Scoring evaluates ATS compatibility and role evidence. It does not edit your uploaded resume.</p></section>

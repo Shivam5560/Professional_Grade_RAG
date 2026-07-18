@@ -1,4 +1,5 @@
 import { StudioHttpClient, type StudioClientOptions } from "../http";
+import type { ResumeAnalyzeResponse } from "@/lib/types";
 import type { CandidateEdgeInput, StructuredCareerSource, StructuredRoleInput } from "./types";
 
 export type CareerJsonScalar = string | number | boolean;
@@ -85,6 +86,11 @@ export interface CareerSourceWire {
 export interface CareerSourceIngestionResponseWire {
   source: CareerSourceWire;
   claims: CareerClaimRevisionWire[];
+  resume?: {
+    resume_id: string;
+    filename: string;
+    status: string;
+  };
 }
 
 export interface ParsedRoleWire {
@@ -289,6 +295,7 @@ export class CareerStudioClient extends StudioHttpClient {
   verifyClaim(claimId: string): Promise<CareerClaimRevisionWire> { return this.decideClaim(claimId, "verify"); }
   createRole(payload: StructuredRoleInput): Promise<CareerRoleWire> { return this.request("/roles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
   parseRole(jobDescription: string): Promise<ParsedRoleWire> { return this.request("/roles/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_description: jobDescription }) }); }
+  scoreResume(resumeId: string, jobDescription: string): Promise<ResumeAnalyzeResponse> { return this.request("/scores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume_id: resumeId, job_description: jobDescription }) }); }
   getRole(roleId: string): Promise<CareerRoleWire> { return this.request(`/roles/${encodeURIComponent(roleId)}`); }
   createMatch(payload: { match_id: string; role_id: string; candidate_edges: CandidateEdgeInput[] }): Promise<CareerMatchWire> { return this.request("/matches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
   getMatch(matchId: string): Promise<CareerMatchWire> { return this.request(`/matches/${encodeURIComponent(matchId)}`); }

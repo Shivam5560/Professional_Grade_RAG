@@ -16,38 +16,26 @@ import { CanvasHeader } from '@/components/shell/CanvasHeader';
 import { ContextRibbon } from '@/components/shell/ContextRibbon';
 import { FocusCanvas } from '@/components/shell/FocusCanvas';
 import { Inspector } from '@/components/shell/Inspector';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlExecuteResponse, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 import { useToast } from '@/hooks/useToast';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-sql';
 import { format as formatSqlWithLib } from 'sql-formatter';
 import type { SqlLanguage } from 'sql-formatter';
 import {
   AlertCircle,
   ArrowRight,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Database,
   Download,
-  Layers,
   Loader2,
   MessageSquarePlus,
-  Pencil,
   PlayCircle,
   RefreshCw,
-  Save,
   Table,
   Wand2,
-  X,
 } from 'lucide-react';
-
-const RemovedLegacyNavigation = (_props: Record<string, unknown>) => null;
 
 type AuraSqlChatMessage = {
   id: string;
@@ -102,9 +90,6 @@ const formatSql = (sql: string, dialect: string) => {
   }
 };
 
-const highlightSql = (sql: string, dialect: string) =>
-  Prism.highlight(formatSql(sql, dialect), Prism.languages.sql, 'sql');
-
 function AuraSqlQueryPageContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -114,16 +99,12 @@ function AuraSqlQueryPageContent() {
   const [isMounted, setIsMounted] = useState(false);
   const [connections, setConnections] = useState<AuraSqlConnection[]>([]);
   const [contexts, setContexts] = useState<AuraSqlContext[]>([]);
-  const [sessions, setSessions] = useState<AuraSqlSession[]>([]);
   const [selectedConnection, setSelectedConnection] = useState('');
   const [selectedContext, setSelectedContext] = useState('');
   const [activeContextId, setActiveContextId] = useState('');
   const [tableList, setTableList] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
-  const [newTables, setNewTables] = useState<Set<string>>(new Set());
   const [tableFilter, setTableFilter] = useState('');
-  const [showConnectionMenu, setShowConnectionMenu] = useState(false);
-  const [showContextMenu, setShowContextMenu] = useState(false);
   const [showTablesMenu, setShowTablesMenu] = useState(false);
   const [outputDialect, setOutputDialect] = useState('connection');
   const [sessionContextId, setSessionContextId] = useState<string | null>(null);
@@ -133,12 +114,7 @@ function AuraSqlQueryPageContent() {
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [recsOpen, setRecsOpen] = useState(false);
   const [recsByContext, setRecsByContext] = useState<Record<string, string[]>>({});
-  const [lastRecsContextId, setLastRecsContextId] = useState<string | null>(null);
-  const [recsConfirmOpen, setRecsConfirmOpen] = useState(false);
-  const [recsConfirmContextId, setRecsConfirmContextId] = useState<string | null>(null);
-  const [recsConfirmPrevContextId, setRecsConfirmPrevContextId] = useState<string | null>(null);
   const [historyBanner, setHistoryBanner] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [autoScrollEnabled] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -185,11 +161,6 @@ function AuraSqlQueryPageContent() {
     return connections.find((conn) => conn.id === selectedConnection)?.db_type || 'postgresql';
   }, [connections, outputDialect, selectedConnection]);
 
-  const baselineTables = useMemo(
-    () => new Set(selectedContextRecord?.table_names ?? []),
-    [selectedContextRecord]
-  );
-
   const filteredTables = useMemo(() => {
     const filter = tableFilter.trim().toLowerCase();
     if (!filter) return tableList;
@@ -226,11 +197,9 @@ function AuraSqlQueryPageContent() {
   useEffect(() => {
     if (!selectedContextRecord) {
       setSelectedTables(new Set());
-      setNewTables(new Set());
       return;
     }
     setSelectedTables(new Set(selectedContextRecord.table_names));
-    setNewTables(new Set());
   }, [selectedContextRecord]);
 
   useEffect(() => {
@@ -247,7 +216,6 @@ function AuraSqlQueryPageContent() {
         ]);
         setConnections(connData);
         setContexts(ctxData);
-        setSessions(sessionData);
 
         const connectionParam = params.get('connection');
         const contextParam = params.get('context');
@@ -378,7 +346,6 @@ function AuraSqlQueryPageContent() {
       } else {
         next.add(table);
       }
-      setNewTables(new Set([...next].filter((name) => !baselineTables.has(name))));
       return next;
     });
   };
@@ -438,7 +405,6 @@ function AuraSqlQueryPageContent() {
         table_names: Array.from(selectedTables),
       });
       setContexts((prev) => prev.map((item) => (item.id === context.id ? context : item)));
-      setNewTables(new Set());
     } catch (err) {
       reportError(err instanceof Error ? err.message : 'Failed to update context');
     } finally {
@@ -453,7 +419,6 @@ function AuraSqlQueryPageContent() {
       const recs = await apiClient.getAuraSqlRecommendations(contextId);
       setRecommendations(recs);
       setRecsByContext((prev) => ({ ...prev, [contextId]: recs }));
-      setLastRecsContextId(contextId);
       setRecsOpen(true);
     } catch (err) {
       reportError(err instanceof Error ? err.message : 'Failed to generate recommendations');
@@ -468,18 +433,6 @@ function AuraSqlQueryPageContent() {
     if (currentRecs && currentRecs.length > 0) {
       setRecommendations(currentRecs);
       setRecsOpen(true);
-      setLastRecsContextId(activeContextId);
-      return;
-    }
-
-    if (
-      lastRecsContextId &&
-      lastRecsContextId !== activeContextId &&
-      recsByContext[lastRecsContextId]?.length
-    ) {
-      setRecsConfirmContextId(activeContextId);
-      setRecsConfirmPrevContextId(lastRecsContextId);
-      setRecsConfirmOpen(true);
       return;
     }
 
@@ -548,8 +501,6 @@ function AuraSqlQueryPageContent() {
 
       if (response.session_id && response.session_id !== sessionId) {
         setSessionId(response.session_id);
-        const updatedSessions = await apiClient.listAuraSqlSessions();
-        setSessions(updatedSessions);
       }
     } catch (err) {
       reportError(err instanceof Error ? err.message : 'Failed to generate SQL');
@@ -594,56 +545,12 @@ function AuraSqlQueryPageContent() {
     }
   };
 
-  const handleToggleResults = (messageId: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, showResults: !msg.showResults } : msg
-      )
-    );
-  };
-
-  const handleShowMoreRows = (messageId: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? { ...msg, showRows: (msg.showRows || 10) + 10 }
-          : msg
-      )
-    );
-  };
-
-  const handleToggleSqlEdit = (messageId: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, isEditingSql: !msg.isEditingSql } : msg
-      )
-    );
-  };
-
   const handleFormatSql = (messageId: string) => {
     setChatMessages((prev) =>
       prev.map((msg) =>
         msg.id === messageId
           ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '', sqlDisplayDialect) }
           : msg
-      )
-    );
-  };
-
-  const handleResetSql = (messageId: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? { ...msg, editedSql: msg.originalSql ?? msg.sql ?? '' }
-          : msg
-      )
-    );
-  };
-
-  const handleResultFilterChange = (messageId: string, value: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, resultFilter: value, showRows: 10 } : msg
       )
     );
   };
@@ -714,24 +621,6 @@ function AuraSqlQueryPageContent() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-  };
-
-  const getContextInsights = (message: AuraSqlChatMessage) => {
-    if (!message.sourceTables?.length || !selectedContextRecord?.table_names?.length) return null;
-    const contextTables = selectedContextRecord.table_names;
-    const contextSet = new Set(contextTables.map((table) => table.toLowerCase()));
-    const usedTables = message.sourceTables.filter((table) => contextSet.has(table.toLowerCase()));
-    const missingTables = contextTables.filter(
-      (table) => !message.sourceTables?.some((used) => used.toLowerCase() === table.toLowerCase())
-    );
-    const percent = contextTables.length > 0 ? Math.round((usedTables.length / contextTables.length) * 100) : 0;
-    return {
-      used: usedTables.length,
-      total: contextTables.length,
-      percent,
-      missing: missingTables.slice(0, 3),
-      missingCount: missingTables.length,
-    };
   };
 
   const getMessageChecks = (message: AuraSqlChatMessage) => {
@@ -831,7 +720,7 @@ function AuraSqlQueryPageContent() {
           id="aurasql-connection"
           value={selectedConnection}
           onChange={(event) => setSelectedConnection(event.target.value)}
-          className="h-8 max-w-56 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground"
+          className="h-8 max-w-56 rounded-md border border-border/70 bg-workspace-inset px-2 text-xs text-foreground"
         >
           {connections.length === 0 ? <option value="">No connection</option> : null}
           {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.database}</option>)}
@@ -841,13 +730,13 @@ function AuraSqlQueryPageContent() {
           id="aurasql-context"
           value={selectedContext}
           onChange={(event) => setSelectedContext(event.target.value)}
-          className="h-8 max-w-56 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground"
+          className="h-8 max-w-56 rounded-md border border-border/70 bg-workspace-inset px-2 text-xs text-foreground"
         >
           <option value="">Select context</option>
           {connectionContexts.map((context) => <option key={context.id} value={context.id}>{context.name} · {context.table_names.length} tables</option>)}
         </select>
         <label className="sr-only" htmlFor="sql-output-dialect">SQL dialect</label>
-        <select id="sql-output-dialect" value={outputDialect} onChange={(event) => setOutputDialect(event.target.value)} className="h-8 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground">
+        <select id="sql-output-dialect" value={outputDialect} onChange={(event) => setOutputDialect(event.target.value)} className="h-8 rounded-md border border-border/70 bg-workspace-inset px-2 text-xs text-foreground">
           {OUTPUT_DIALECT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </ContextRibbon>
@@ -860,7 +749,7 @@ function AuraSqlQueryPageContent() {
         ].map((step, index) => (
           <div key={step.label} className="flex min-w-0 items-center">
             <div className="flex min-w-0 items-center gap-2">
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold ${activeStep >= step.number ? 'border-foreground bg-foreground text-background' : 'border-border bg-background/60 text-muted-foreground'}`}>{step.number}</span>
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold ${activeStep >= step.number ? 'border-foreground bg-foreground text-background' : 'border-border bg-workspace-inset text-muted-foreground'}`}>{step.number}</span>
               <span className={`truncate text-xs font-medium ${activeStep >= step.number ? 'text-foreground' : 'text-muted-foreground'}`}>{step.label}</span>
             </div>
             {index < 2 ? <ArrowRight className="mx-2 h-3.5 w-3.5 shrink-0 text-muted-foreground sm:mx-4" /> : null}
@@ -884,7 +773,7 @@ function AuraSqlQueryPageContent() {
         ) : null}
 
         {connections.length === 0 && !loading ? (
-          <section className="grid min-h-64 place-items-center border-y border-border/60 bg-background/45 px-5 text-center backdrop-blur-sm">
+          <section className="grid min-h-64 place-items-center border-y border-border/60 bg-workspace-raised px-5 text-center">
             <div className="max-w-sm">
               <Database className="mx-auto h-7 w-7 text-muted-foreground" />
               <h2 className="mt-4 text-lg font-semibold">Connect a database first</h2>
@@ -990,737 +879,7 @@ function AuraSqlQueryPageContent() {
     </FocusCanvas>
   );
 
-  const showLoader = loading || loadingTables || loadingContext || savingContext;
-  const loaderTitle = loading
-    ? 'Loading workspace'
-    : loadingTables
-    ? 'Refreshing table metadata'
-    : loadingContext
-    ? 'Building recommendations'
-    : savingContext
-    ? 'Saving schema context'
-    : 'Working';
-  const loaderSubtitle = loading
-    ? 'Syncing connections, contexts, and session history.'
-    : loadingTables
-    ? 'Inspecting database catalog for available tables.'
-    : loadingContext
-    ? 'Analyzing selected schema for targeted prompts.'
-    : savingContext
-    ? 'Persisting selected tables for this session.'
-    : 'Please wait.';
-  const loaderSteps = [
-    { label: 'Load connections and history', active: loading, done: !loading },
-    {
-      label: 'Refresh selected schema context',
-      active: loadingTables || loadingContext || savingContext,
-      done: !loadingTables && !loadingContext && !savingContext,
-    },
-  ];
 
-  return (
-    <div className="relative h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 app-aurora" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-
-      <RemovedLegacyNavigation
-        showSidebarToggle
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-      />
-
-      {showLoader ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
-            <p className="text-sm font-semibold">{loaderTitle}</p>
-            <p className="text-xs text-muted-foreground mt-1">{loaderSubtitle}</p>
-            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              {loaderSteps.map((step) => (
-                <div key={step.label} className="flex items-center gap-2">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      step.active ? 'bg-foreground/70 animate-pulse' : step.done ? 'bg-emerald-500/70' : 'bg-foreground/25'
-                    }`}
-                  />
-                  {step.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="relative z-10 flex h-[calc(100vh-4rem)] overflow-hidden">
-        <aside
-          className={`hidden md:block transition-all duration-300 ease-out ${
-            isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'
-          }`}
-        >
-          <div
-            className={`h-full transition-all duration-300 ${
-              isSidebarOpen ? 'translate-x-0' : '-translate-x-6 pointer-events-none'
-            }`}
-          >
-            <RemovedLegacyNavigation
-              currentHistoryId={sessionId}
-              sessions={sessions}
-              onSelectSession={(session: AuraSqlSession) => loadSessionHistory(session)}
-              onNewChat={handleStartNewChat}
-            />
-          </div>
-        </aside>
-
-        <main className="flex flex-1 flex-col overflow-hidden min-h-0">
-          <div className="flex-1 overflow-hidden p-3 md:p-6">
-            <div className="glass-panel sheen-border h-full rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col bg-accent-soft">
-              <div className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full pr-2">
-                  <div className="space-y-4 pb-4">
-                    {loading && (
-                      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
-                        Loading AuraSQL workspace...
-                      </div>
-                    )}
-
-                    {error && (
-                      <Alert variant="destructive" className="rounded-2xl">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    {chatMessages.length === 0 && !loadingGenerate && !loading && (
-                      <div className="rounded-2xl border border-dashed border-border/70 bg-card/40 p-6 text-sm text-muted-foreground">
-                        Start by asking a question about your schema. The assistant will generate SQL you can refine and execute.
-                      </div>
-                    )}
-
-                    {chatMessages.map((message) => (
-                      <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`${message.role === 'assistant' && message.sql ? 'max-w-[95%]' : 'max-w-[85%]'} space-y-3 ${message.role === 'user' ? 'text-right' : ''}`}
-                        >
-                          <div
-                            className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                              message.role === 'user'
-                                ? 'bg-foreground text-background'
-                                : 'bg-card/70 border border-border/60 text-foreground'
-                            }`}
-                          >
-                            {message.content}
-                          </div>
-
-                          {message.role === 'assistant' && message.sql && (
-                            <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">SQL Canvas</p>
-                                  {message.confidenceScore !== null && message.confidenceScore !== undefined && (
-                                    <Badge
-                                      variant="secondary"
-                                      className={`text-[10px] uppercase tracking-[0.2em] ${
-                                        message.confidenceLevel === 'high'
-                                          ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
-                                          : message.confidenceLevel === 'medium'
-                                          ? 'bg-amber-500/15 text-amber-800 dark:text-amber-200'
-                                          : 'bg-rose-500/15 text-rose-800 dark:text-rose-200'
-                                      }`}
-                                    >
-                                      {message.confidenceLevel || 'low'} {Math.round(message.confidenceScore)}%
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  <Button size="sm" variant="ghost" onClick={() => handleFormatSql(message.id)}>
-                                    <Wand2 className="h-4 w-4 mr-1" />
-                                    Format
-                                  </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handleResetSql(message.id)}>
-                                    <RefreshCw className="h-4 w-4 mr-1" />
-                                    Reset
-                                  </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handleToggleSqlEdit(message.id)}>
-                                    <Pencil className="h-4 w-4 mr-1" />
-                                    {message.isEditingSql ? 'Done' : 'Edit'}
-                                  </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handleCopySql(message.editedSql ?? message.sql)}>
-                                    <Copy className="h-4 w-4 mr-1" />
-                                    Copy
-                                  </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handleDownloadSql(message.editedSql ?? message.sql)}>
-                                    <Download className="h-4 w-4 mr-1" />
-                                    Download
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleExecuteMessage(message.id)}
-                                    disabled={Boolean(executingMessageId) || !(message.editedSql || message.sql)}
-                                  >
-                                    {executingMessageId === message.id ? (
-                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    ) : (
-                                      <PlayCircle className="h-4 w-4 mr-1" />
-                                    )}
-                                    {executingMessageId === message.id ? 'Executing' : 'Execute'}
-                                  </Button>
-                                </div>
-                              </div>
-
-                              {(() => {
-                                const insights = getContextInsights(message);
-                                const checks = getMessageChecks(message);
-                                if (!insights) return null;
-                                return (
-                                  <div className="rounded-xl border border-border/60 bg-card/60 p-2 text-[11px] space-y-1.5">
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {checks.map((check) => (
-                                        <Badge
-                                          key={`${message.id}-${check.label}`}
-                                          variant="secondary"
-                                          className={`text-[9px] uppercase tracking-[0.12em] ${getCheckBadgeClass(check.status)}`}
-                                        >
-                                          {check.label}: {check.status}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                    <div className="grid gap-1.5 pt-1 sm:grid-cols-5">
-                                      {checks.map((check) => (
-                                        <div key={`${message.id}-timeline-${check.label}`} className="flex items-center gap-1.5">
-                                          <span
-                                            className={`h-2 w-2 rounded-full ${
-                                              check.status === 'pass'
-                                                ? 'bg-emerald-500'
-                                                : check.status === 'warn'
-                                                ? 'bg-amber-500'
-                                                : check.status === 'fail'
-                                                ? 'bg-rose-500'
-                                                : 'bg-muted-foreground/40'
-                                            }`}
-                                          />
-                                          <span className="truncate text-[10px] text-muted-foreground">{check.label}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <div className="flex items-center justify-between text-muted-foreground">
-                                      <span>Context coverage</span>
-                                      <span>
-                                        {insights.used}/{insights.total} tables
-                                      </span>
-                                    </div>
-                                    <div className="h-1 w-full overflow-hidden rounded-full bg-border/70">
-                                      <div
-                                        className="h-full rounded-full bg-foreground/70"
-                                        style={{ width: `${insights.percent}%` }}
-                                      />
-                                    </div>
-                                    {insights.missingCount > 0 && (
-                                      <p className="text-muted-foreground">
-                                        Missing context: {insights.missing.join(', ')}
-                                        {insights.missingCount > insights.missing.length ? '…' : ''}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {message.validationErrors && message.validationErrors.length > 0 && (
-                                <Alert variant="destructive" className="rounded-xl py-2">
-                                  <AlertCircle className="h-4 w-4" />
-                                  <AlertDescription className="text-xs">
-                                    {message.validationErrors.join(' | ')}
-                                  </AlertDescription>
-                                </Alert>
-                              )}
-
-                              <div className="rounded-xl border border-border/60 bg-card/60 p-3">
-                                {message.isEditingSql ? (
-                                  <Textarea
-                                    value={message.editedSql ?? message.sql ?? ''}
-                                    onChange={(event) => {
-                                      const nextValue = event.target.value;
-                                      setChatMessages((prev) =>
-                                        prev.map((msg) =>
-                                          msg.id === message.id ? { ...msg, editedSql: nextValue } : msg
-                                        )
-                                      );
-                                    }}
-                                    onBlur={() => {
-                                      setChatMessages((prev) =>
-                                        prev.map((msg) =>
-                                          msg.id === message.id
-                                            ? { ...msg, editedSql: formatSql(msg.editedSql ?? msg.sql ?? '', sqlDisplayDialect) }
-                                            : msg
-                                        )
-                                      );
-                                    }}
-                                    className="min-h-[280px] w-full resize-none text-xs font-mono leading-relaxed"
-                                    spellCheck={false}
-                                  />
-                                ) : (
-                                  <pre
-                                    className="prism-sql text-xs font-mono whitespace-pre-wrap leading-relaxed min-h-[280px]"
-                                    dangerouslySetInnerHTML={{
-                                      __html: highlightSql(message.editedSql ?? message.sql ?? '', sqlDisplayDialect),
-                                    }}
-                                  />
-                                )}
-                              </div>
-
-                              {message.sourceTables && message.sourceTables.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                  {message.sourceTables.map((table) => (
-                                    <Badge key={table} variant="outline">
-                                      {table}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-
-                              {executingMessageId === message.id && (
-                                <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  Running SQL on the selected connection and preparing the result table.
-                                </div>
-                              )}
-
-                              {message.execution && (
-                                <div className="space-y-3">
-                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
-                                    <div className="text-xs text-muted-foreground">
-                                      <span className="font-medium text-foreground">{message.execution.rows.length}</span> rows
-                                      {' · '}
-                                      <span className="font-medium text-foreground">{message.execution.columns.length}</span> columns
-                                    </div>
-                                    <Button size="sm" variant="ghost" onClick={() => handleToggleResults(message.id)}>
-                                      {message.showResults ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
-                                      {message.showResults ? 'Hide results' : 'Show results'}
-                                    </Button>
-                                  </div>
-
-                                  {message.showResults && (
-                                    <>
-                                      {(() => {
-                                        const execution = message.execution;
-                                        if (!execution) return null;
-                                        const filteredRows = getFilteredRows(message);
-                                        if (execution.rows.length === 0) {
-                                          return <p className="text-sm text-muted-foreground">No rows returned.</p>;
-                                        }
-                                        if (filteredRows.length === 0) {
-                                          return <p className="text-sm text-muted-foreground">No rows match the filter.</p>;
-                                        }
-                                        return (
-                                          <div className="space-y-3">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <input
-                                                value={message.resultFilter ?? ''}
-                                                onChange={(event) => handleResultFilterChange(message.id, event.target.value)}
-                                                placeholder="Filter results..."
-                                                className="min-w-[220px] flex-1 rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
-                                              />
-                                              <Button size="sm" variant="outline" onClick={() => handleExportCsv(message.id)}>
-                                                <Download className="h-4 w-4 mr-1" />
-                                                Download CSV
-                                              </Button>
-                                            </div>
-                                            <div className="overflow-x-auto rounded-xl border border-border/60">
-                                              <table className="min-w-full divide-y divide-border">
-                                                <thead className="bg-muted/60">
-                                                  <tr>
-                                                    {execution.columns.map((column) => (
-                                                      <th
-                                                        key={column}
-                                                        className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground"
-                                                      >
-                                                        {column}
-                                                      </th>
-                                                    ))}
-                                                  </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-border">
-                                                  {filteredRows
-                                                    .slice(0, message.showRows || 10)
-                                                    .map((row, index) => (
-                                                      <tr key={index}>
-                                                        {execution.columns.map((column) => (
-                                                          <td key={column} className="px-4 py-2 text-sm text-foreground">
-                                                            {String(row[column] ?? '')}
-                                                          </td>
-                                                        ))}
-                                                      </tr>
-                                                    ))}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          </div>
-                                        );
-                                      })()}
-                                      {getFilteredRows(message).length > (message.showRows || 10) && (
-                                        <Button variant="outline" size="sm" onClick={() => handleShowMoreRows(message.id)}>
-                                          Show more
-                                        </Button>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              )}
-
-                              {message.executionError && (
-                                <Alert variant="destructive" className="rounded-xl py-2">
-                                  <AlertCircle className="h-4 w-4" />
-                                  <AlertDescription className="text-xs">{message.executionError}</AlertDescription>
-                                </Alert>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    {loadingGenerate && (
-                      <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Drafting SQL and validating syntax/schema...
-                      </div>
-                    )}
-                    <div ref={bottomRef} />
-                  </div>
-                </ScrollArea>
-              </div>
-
-              <div className="sticky bottom-0 z-20">
-                <div className="bg-gradient-to-t from-background/95 via-background/80 to-transparent px-2 pt-6 pb-4">
-                  <div className="mx-auto w-full max-w-4xl glass-panel rounded-3xl p-4 space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setShowConnectionMenu((prev) => !prev)}
-                            disabled={loading || connections.length === 0}
-                            aria-label="Select connection"
-                            title={
-                              connections.find((conn) => conn.id === selectedConnection)?.name ||
-                              'Select connection'
-                            }
-                          >
-                            <Database className="h-4 w-4" />
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                          {showConnectionMenu && (
-                            <div className="absolute left-0 bottom-full z-30 mb-2 w-72 rounded-xl border border-border/60 bg-card/95 p-2 shadow-lg">
-                              <div className="max-h-64 overflow-y-auto">
-                                {connections.length === 0 ? (
-                                  <p className="px-3 py-2 text-sm text-muted-foreground">No connections</p>
-                                ) : (
-                                  connections.map((conn) => (
-                                    <button
-                                      key={conn.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedConnection(conn.id);
-                                        setShowConnectionMenu(false);
-                                      }}
-                                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                        conn.id === selectedConnection
-                                          ? 'bg-foreground/10 text-foreground'
-                                          : 'hover:bg-muted/60'
-                                      }`}
-                                    >
-                                      {conn.name} • {conn.database} • {conn.schema_name || 'default'}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="relative">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setShowContextMenu((prev) => !prev)}
-                            disabled={loading || connectionContexts.length === 0}
-                            aria-label="Select context"
-                            title={selectedContextRecord?.name || 'Select context'}
-                          >
-                            <Layers className="h-4 w-4" />
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                          {showContextMenu && (
-                            <div className="absolute left-0 bottom-full z-30 mb-2 w-72 rounded-xl border border-border/60 bg-card/95 p-2 shadow-lg">
-                              <div className="max-h-64 overflow-y-auto">
-                                {connectionContexts.length === 0 ? (
-                                  <p className="px-3 py-2 text-sm text-muted-foreground">No contexts</p>
-                                ) : (
-                                  connectionContexts.map((ctx) => (
-                                    <button
-                                      key={ctx.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedContext(ctx.id);
-                                        setShowContextMenu(false);
-                                      }}
-                                      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                        ctx.id === selectedContext
-                                          ? 'bg-foreground/10 text-foreground'
-                                          : 'hover:bg-muted/60'
-                                      }`}
-                                    >
-                                      {ctx.name} • {ctx.table_names.join(', ')}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={handleRecommendations}
-                          disabled={loadingContext || !activeContextId}
-                          aria-label="Recommendations"
-                          title={recsByContext[activeContextId]?.length ? 'Recommendations' : 'Generate recommendations'}
-                        >
-                          {loadingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                        </Button>
-
-                        <div className="relative">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setShowTablesMenu((prev) => {
-                                const next = !prev;
-                                if (next && tableList.length === 0) {
-                                  handleFetchTables();
-                                }
-                                return next;
-                              });
-                            }}
-                            disabled={!selectedConnection}
-                            aria-label="Tables"
-                            title="Tables"
-                          >
-                            <Table className="h-4 w-4" />
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                          {showTablesMenu && (
-                            <div className="absolute left-0 bottom-full z-30 mb-2 w-[520px] rounded-xl border border-border/60 bg-card/95 p-3 shadow-lg">
-                              <div className="flex items-center gap-2 mb-3">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={handleFetchTables}
-                                  disabled={loadingTables || !selectedConnection}
-                                  aria-label="Refresh tables"
-                                  title="Refresh tables"
-                                >
-                                  <RefreshCw className={`h-4 w-4 ${loadingTables ? 'animate-spin' : ''}`} />
-                                </Button>
-                                <input
-                                  value={tableFilter}
-                                  onChange={(event) => setTableFilter(event.target.value)}
-                                  placeholder="Filter tables..."
-                                  className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
-                                />
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={handleUseSessionContext}
-                                  disabled={selectedTables.size === 0 || savingContext}
-                                  aria-label="Apply to session"
-                                  title="Apply to session"
-                                >
-                                  {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                </Button>
-                                {selectedContextRecord ? (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={handleUpdateContext}
-                                    disabled={!hasUnsavedChanges || savingContext}
-                                    aria-label="Update saved context"
-                                    title="Update saved context"
-                                  >
-                                    {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={() => setContextNameOpen(true)}
-                                    disabled={selectedTables.size === 0 || savingContext}
-                                    aria-label="Save context"
-                                    title="Save context"
-                                  >
-                                    {savingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                  </Button>
-                                )}
-                              </div>
-                              {filteredTables.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No tables found.</p>
-                              ) : (
-                                <div className="flex flex-wrap gap-2 max-h-[220px] overflow-y-auto pr-2">
-                                  {filteredTables.map((table) => {
-                                    const isSelected = selectedTables.has(table);
-                                    const isNew = newTables.has(table);
-                                    return (
-                                      <Badge
-                                        key={table}
-                                        variant={isSelected ? 'default' : 'outline'}
-                                        className={`cursor-pointer transition-all ${
-                                          isSelected ? 'bg-foreground text-background' : 'bg-card/70 text-muted-foreground'
-                                        } ${isNew ? 'ring-1 ring-amber-400/70' : ''}`}
-                                        onClick={() => handleToggleTable(table)}
-                                      >
-                                        {table}
-                                        {isSelected && <X className="ml-1 h-3 w-3" />}
-                                      </Badge>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-muted-foreground" htmlFor="sql-output-dialect">
-                          Output format
-                        </label>
-                        <select
-                          id="sql-output-dialect"
-                          value={outputDialect}
-                          onChange={(event) => setOutputDialect(event.target.value)}
-                          className="rounded-lg border border-border/70 bg-card/70 px-2 py-1 text-xs text-foreground"
-                        >
-                          {OUTPUT_DIALECT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {historyBanner && <p className="text-xs text-amber-500">{historyBanner}</p>}
-
-                    {selectedContextRecord?.table_names?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedContextRecord?.table_names.slice(0, 4).map((table) => {
-                          const prompt = `Show recent rows from ${table}`;
-                          return (
-                            <button
-                              key={table}
-                              type="button"
-                              onClick={() => setInputValue(prompt)}
-                              className="rounded-full border border-border/70 bg-card/70 px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                            >
-                              {prompt}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-
-                    <MessageInput
-                      onSend={handleSendMessage}
-                      disabled={loadingGenerate || !activeContextId || (hasUnsavedChanges && !sessionContextId)}
-                      value={inputValue}
-                      onChange={setInputValue}
-                      placeholder="Ask a question about your schema..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </main>
-      </div>
-
-      {recsOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-background/50 backdrop-blur-sm">
-          <div className="w-full max-w-md h-full bg-card/95 border-l border-border/70 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Recommendations</p>
-                <p className="text-xs text-muted-foreground">Pick a question to drop into chat.</p>
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setRecsOpen(false)}>
-                Close
-              </Button>
-            </div>
-
-            {loadingContext ? (
-              <p className="text-sm text-muted-foreground">Generating recommendations...</p>
-            ) : recommendations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recommendations yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {recommendations.map((rec) => (
-                  <Badge
-                    key={rec}
-                    variant="secondary"
-                    className="cursor-pointer"
-                    onClick={() => {
-                      setInputValue(rec);
-                      setRecsOpen(false);
-                    }}
-                  >
-                    {rec}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {recsConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border/60 bg-card/95 p-5 space-y-4">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold">Context changed</p>
-              <p className="text-xs text-muted-foreground">
-                Use previous recommendations or regenerate for the current context.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  if (recsConfirmPrevContextId && recsByContext[recsConfirmPrevContextId]) {
-                    setRecommendations(recsByContext[recsConfirmPrevContextId]);
-                    setRecsOpen(true);
-                  }
-                  setRecsConfirmOpen(false);
-                }}
-              >
-                Use previous
-              </Button>
-              <Button
-                onClick={async () => {
-                  if (recsConfirmContextId) {
-                    await runRecommendationsFetch(recsConfirmContextId);
-                  }
-                  setRecsConfirmOpen(false);
-                }}
-              >
-                Regenerate
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function AuraSqlQueryPage() {

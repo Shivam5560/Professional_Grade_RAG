@@ -19,10 +19,10 @@ export function LocalSubmenu({
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/60 bg-background/85 px-3 backdrop-blur-xl md:ml-20 md:border-b-0 md:bg-transparent md:px-0 md:pt-3 md:backdrop-blur-none">
+    <div className="sticky top-0 z-40 border-b border-border/60 bg-workspace-raised px-3 md:ml-20 md:border-b-0 md:bg-transparent md:px-0 md:pt-3">
       <nav
         aria-label={`${presentation.name} sections`}
-        className="flex min-h-12 items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] md:mr-3 md:w-fit md:rounded-md md:border md:border-border/70 md:bg-background/85 md:px-1.5 md:shadow-sm md:backdrop-blur-xl [&::-webkit-scrollbar]:hidden"
+        className="flex min-h-12 items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] md:mr-3 md:w-fit md:rounded-md md:border md:border-border/70 md:bg-workspace-raised md:px-1.5 md:shadow-sm [&::-webkit-scrollbar]:hidden"
       >
         {presentation.localDestinations.map((item) => {
           const active = item.matches(pathname);

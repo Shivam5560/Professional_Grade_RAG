@@ -50,7 +50,7 @@ export function SourceCitation({ sources }: SourceCitationProps) {
 
       {/* Expandable Content */}
       {isExpanded && (
-        <Card className="mt-2 border-l-2 border-foreground/20 animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl bg-card/80 border border-border/70 shadow-lg">
+        <Card className="mt-2 animate-in border border-l-2 border-border/70 border-l-foreground/20 bg-workspace-raised shadow-lg fade-in slide-in-from-top-2 duration-200">
           <CardContent className="pt-4 space-y-3">
             {sources.map((source, index) => (
               <div

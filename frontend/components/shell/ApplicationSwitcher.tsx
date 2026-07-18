@@ -52,7 +52,7 @@ export function ApplicationSwitcher({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="center"
-        className="mb-2 w-64 bg-background/95 backdrop-blur-xl"
+        className="mb-2 w-64 bg-overlay"
         side="top"
       >
         <DropdownMenuLabel>Applications</DropdownMenuLabel>

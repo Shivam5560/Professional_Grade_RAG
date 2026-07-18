@@ -279,7 +279,7 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading}
-                      className="h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
+                      className="h-11 w-11 rounded-md border-border/70 bg-workspace-inset hover:bg-muted"
                       title="Select chat mode"
                       aria-label="Select chat mode"
                     >
@@ -330,7 +330,7 @@ export function ChatInterface({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="relative h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
+                      className="relative h-11 w-11 rounded-md border-border/70 bg-workspace-inset hover:bg-muted"
                       title="Conversation files"
                       aria-label="Conversation files"
                     >
@@ -368,7 +368,7 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading || promptSuggestions.length === 0}
-                      className="h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
+                      className="h-11 w-11 rounded-md border-border/70 bg-workspace-inset hover:bg-muted"
                       title="Insert a saved prompt"
                       aria-label="Insert a saved prompt"
                     >
@@ -431,7 +431,7 @@ export function ChatInterface({
                     >
                       <span className="h-3 w-3 rounded-full bg-background" />
                     </span>
-                    <span className="pointer-events-none absolute bottom-8 right-0 z-30 hidden w-60 rounded-lg border border-border/70 bg-card/95 p-2 text-[10px] text-foreground shadow-xl group-hover:block">
+                    <span className="pointer-events-none absolute bottom-8 right-0 z-30 hidden w-60 rounded-lg border border-border/70 bg-overlay p-2 text-[10px] text-foreground shadow-xl group-hover:block">
                       <div className="font-semibold">Context Window</div>
                       <div>{tokenUsage.context_tokens_used.toLocaleString()} / {tokenUsage.context_tokens_max.toLocaleString()} tokens ({usagePct.toFixed(1)}%)</div>
                       <div>

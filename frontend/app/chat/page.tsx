@@ -107,10 +107,10 @@ export default function ChatPage() {
       />
 
       <ContextRibbon label="Conversation context">
-        <span className="inline-flex h-7 items-center rounded-md border border-border/70 bg-background/70 px-2.5 text-xs text-muted-foreground">
+        <span className="inline-flex h-7 items-center rounded-md border border-border/70 bg-workspace-inset px-2.5 text-xs text-muted-foreground">
           {messages.length} message{messages.length === 1 ? "" : "s"}
         </span>
-        <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-background/70 px-2.5 text-xs text-muted-foreground">
+        <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-workspace-inset px-2.5 text-xs text-muted-foreground">
           <Sparkles className="h-3 w-3" />
           {latestTokenUsage
             ? `${Math.round(latestTokenUsage.context_utilization_pct)}% context used`

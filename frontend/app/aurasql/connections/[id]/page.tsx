@@ -10,7 +10,7 @@ import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import AuthPage from '@/app/auth/page';
 import { Loader2 } from 'lucide-react';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
+import { AuraSqlPage } from '@/components/aurasql/AuraSqlPage';
 
 export default function EditAuraSqlConnectionPage() {
   const router = useRouter();
@@ -71,7 +71,7 @@ export default function EditAuraSqlConnectionPage() {
         port: Number(form.port),
         password: form.password || undefined,
       });
-      router.push('/aurasql');
+      router.push('/aurasql/connections');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update connection');
     } finally {
@@ -80,20 +80,10 @@ export default function EditAuraSqlConnectionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 opacity-35">
-        <ShaderAnimation className="w-full h-full" speed={0.08} />
-      </div>
-      <div className="pointer-events-none absolute inset-0 app-aurora" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
-      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
-      <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
-
+    <AuraSqlPage title="Edit database connection" description="Keep the saved access profile current without losing the schema contexts already built around it.">
       {(loading || saving) ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-          <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay">
+          <div className="rounded-xl border border-border bg-workspace-raised px-6 py-4 text-center shadow-xl">
             <p className="text-sm font-semibold">Updating connection</p>
             <p className="text-xs text-muted-foreground mt-1">Syncing connection details.</p>
             <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
@@ -114,9 +104,8 @@ export default function EditAuraSqlConnectionPage() {
         </div>
       ) : null}
 
-      <main className="relative z-10 px-4 py-10 md:pl-28 md:pr-8">
-        <div className="max-w-3xl mx-auto">
-          <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
+      <div className="mx-auto w-full max-w-3xl py-3">
+          <Card className="border-border bg-workspace-raised shadow-sm">
             <CardHeader>
               <CardTitle>Edit Connection</CardTitle>
               <CardDescription>Update connection details or password.</CardDescription>
@@ -139,7 +128,7 @@ export default function EditAuraSqlConnectionPage() {
                       <select
                         value={form.db_type}
                         onChange={(event) => setForm({ ...form, db_type: event.target.value })}
-                        className="w-full rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-sm"
+                        className="w-full rounded-lg border border-border bg-workspace-inset px-3 py-2 text-sm"
                       >
                         <option value="postgresql">PostgreSQL</option>
                         <option value="mysql">MySQL</option>
@@ -181,7 +170,7 @@ export default function EditAuraSqlConnectionPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-xl border border-border bg-workspace-inset px-4 py-3">
                     <div>
                       <p className="text-sm font-medium">Require SSL</p>
                       <p className="text-xs text-muted-foreground">Enable SSL connections by default.</p>
@@ -211,8 +200,7 @@ export default function EditAuraSqlConnectionPage() {
               )}
             </CardContent>
           </Card>
-        </div>
-      </main>
-    </div>
+      </div>
+    </AuraSqlPage>
   );
 }

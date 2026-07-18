@@ -104,10 +104,9 @@ const presentations: readonly ApplicationPresentation[] = [
       alt: "Human craft and verified documents arranged as a precise professional narrative",
       focalPoint: "72% 44%",
     },
-    headline: "Turn verified work into opportunity.",
+    headline: "Score honestly. Tailor deliberately. Create beautifully.",
     localDestinations: [
-      destination("Workspace", "/career", Briefcase),
-      destination("Settings", "/career?panel=settings", Settings2),
+      destination("Career tools", "/career", Briefcase),
     ],
   },
 ];

@@ -18,4 +18,21 @@ describe("CareerStudioClient", () => {
       headers: expect.objectContaining({ Authorization: "Bearer career-token" }),
     }));
   });
+
+  it("uses the owner-scoped Career facade for upload and scoring", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ source: {}, claims: [], resume: { resume_id: "resume-1" } }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ analysis_id: "analysis-1", resume_id: "resume-1", overall_score: 82, analysis: {}, created_at: "" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const client = new CareerStudioClient({ fetcher, getAccessToken: () => "career-token" });
+
+    const uploaded = await client.uploadResume(new File(["resume"], "resume.txt", { type: "text/plain" }));
+    await client.scoreResume(uploaded.resume!.resume_id, "A detailed data engineering job description");
+
+    expect(fetcher.mock.calls[0][0]).toBe("http://localhost:8000/api/v2/career/sources/upload");
+    expect(fetcher.mock.calls[1][0]).toBe("http://localhost:8000/api/v2/career/scores");
+    expect(fetcher.mock.calls[1][1]).toEqual(expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ resume_id: "resume-1", job_description: "A detailed data engineering job description" }),
+    }));
+  });
 });

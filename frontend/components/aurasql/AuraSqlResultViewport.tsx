@@ -66,7 +66,7 @@ export function AuraSqlResultViewport({
     .join(" ");
 
   return (
-    <section className="overflow-hidden rounded-lg border border-border/70 bg-background/88 shadow-[0_24px_80px_-48px_hsl(var(--foreground)/0.45)] backdrop-blur-xl">
+    <section className="overflow-hidden rounded-lg border border-border/70 bg-workspace-raised shadow-[0_24px_80px_-48px_hsl(var(--foreground)/0.45)]">
       <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 py-2 sm:px-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Explore results</p>
@@ -97,7 +97,7 @@ export function AuraSqlResultViewport({
             className="max-h-[32rem] overflow-auto"
           >
             <table aria-label="Query results" className="min-w-full border-collapse text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-lg">
+              <thead className="sticky top-0 z-10 bg-workspace-raised">
                 <tr className="border-b border-border/70">
                   {execution.columns.map((column) => (
                     <th key={column} className="whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase text-muted-foreground">

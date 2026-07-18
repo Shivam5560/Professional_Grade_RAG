@@ -149,7 +149,7 @@ export function DrawioDiagram({ xml, title = 'Diagram' }: DrawioDiagramProps) {
   return (
     <div
       ref={containerRef}
-      className="mt-4 rounded-2xl border border-border/70 bg-card/80 backdrop-blur-sm shadow-lg overflow-hidden"
+      className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-workspace-raised shadow-lg"
     >
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 text-xs text-muted-foreground">
         <span className="font-semibold uppercase tracking-wider">{title}</span>

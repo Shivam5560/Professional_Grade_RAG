@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePath
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -131,6 +131,22 @@ class JobDescriptionParseRequest(StrictRequest):
 class ParsedRoleResponse(BaseModel):
     title: str
     requirements: tuple[RoleRequirement, ...]
+
+
+class CareerScoreRequest(StrictRequest):
+    resume_id: str = Field(min_length=1, max_length=200)
+    job_description: str = Field(min_length=10, max_length=30_000)
+
+
+class CareerScoreResponse(BaseModel):
+    analysis_id: str
+    resume_id: str
+    overall_score: float | None = None
+    analysis: dict[str, Any]
+    refined_recommendations: list[str] | dict[str, str] | None = None
+    refined_justifications: list[str] | dict[str, str] | None = None
+    resume_data: dict[str, Any] | None = None
+    created_at: str = ""
 
 
 class CandidateEdgeInput(StrictRequest):

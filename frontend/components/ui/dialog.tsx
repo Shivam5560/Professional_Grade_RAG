@@ -108,7 +108,7 @@ export function DialogContent({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onOpenChange, open]);
+  }, [onOpenChange, open, returnFocusRef]);
 
   if (!open) return null;
 

@@ -11,8 +11,8 @@ describe("Career Studio experience", () => {
     );
 
     expect(source).toContain("<ContextRibbon");
-    expect(source).toContain("<ActionDock");
     expect(source).toContain("<Inspector");
+    expect(source).toContain("How it works");
     expect(source).not.toContain("<StudioPanel");
     expect(source).not.toContain("<Header");
   });

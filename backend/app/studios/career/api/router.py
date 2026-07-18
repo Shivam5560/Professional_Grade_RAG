@@ -19,6 +19,8 @@ from app.platform.persistence import (
 )
 from app.studios.career.api.contracts import (
     ApprovalDecisionRequest,
+    CareerScoreRequest,
+    CareerScoreResponse,
     ClaimDecisionRequest,
     DraftCreateRequest,
     MatchCreateRequest,
@@ -28,6 +30,7 @@ from app.studios.career.api.contracts import (
     SourceIngestionRequest,
 )
 from app.studios.career.extraction import extract_resume_source, parse_job_description
+from app.studios.career.integrations import score_stored_resume, store_resume_source
 from app.utils.validators import validate_file_extension, validate_file_size
 from app.studios.career.api.service import CareerApplicationService, UnsupportedCareerCapability
 from app.studios.career.persistence import InvalidCareerState
@@ -95,7 +98,17 @@ def create_career_router(
             raise HTTPException(status_code=413, detail="Resume file exceeds the 10 MB limit")
         try:
             extracted = extract_resume_source(filename, content)
-            return _translate(lambda: app.ingest_claims(filename=filename, media_type=file.content_type or "application/octet-stream", claims=extracted.claims))
+            await file.seek(0)
+            resume = await store_resume_source(session=app.session, owner_id=app.owner_id, file=file)
+            ingested = _translate(lambda: app.ingest_claims(filename=filename, media_type=file.content_type or "application/octet-stream", claims=extracted.claims))
+            return {
+                **ingested.model_dump(mode="json"),
+                "resume": {
+                    "resume_id": resume.resume_id,
+                    "filename": resume.filename,
+                    "status": resume.status,
+                },
+            }
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -121,6 +134,28 @@ def create_career_router(
             return ParsedRoleResponse(title=title, requirements=requirements)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/scores", status_code=status.HTTP_201_CREATED, response_model=CareerScoreResponse)
+    async def create_score(
+        request: CareerScoreRequest,
+        app: CareerApplicationService = Depends(service),
+    ):
+        analysis = await score_stored_resume(
+            session=app.session,
+            owner_id=app.owner_id,
+            resume_id=request.resume_id,
+            job_description=request.job_description,
+        )
+        return CareerScoreResponse(
+            analysis_id=analysis.id,
+            resume_id=analysis.resume_id,
+            overall_score=analysis.overall_score,
+            analysis=analysis.analysis or {},
+            refined_recommendations=analysis.refined_recommendations,
+            refined_justifications=analysis.refined_justifications,
+            resume_data=analysis.resume_data,
+            created_at=analysis.created_at.isoformat() if analysis.created_at else "",
+        )
 
     @router.get("/roles/{role_id}")
     def get_role(

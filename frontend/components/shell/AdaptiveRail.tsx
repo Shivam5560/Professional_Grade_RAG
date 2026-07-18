@@ -160,7 +160,7 @@ export function AdaptiveRail({
 
   return (
     <>
-      <aside className="fixed inset-y-3 left-3 z-50 hidden w-14 flex-col items-center rounded-md border border-border/70 bg-background/90 py-2 shadow-lg backdrop-blur-xl md:flex">
+      <aside className="fixed inset-y-3 left-3 z-50 hidden w-14 flex-col items-center rounded-md border border-border/70 bg-workspace-raised py-2 shadow-lg md:flex">
         <nav
           aria-label="Applications"
           className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto overscroll-contain px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -196,7 +196,7 @@ export function AdaptiveRail({
         </div>
       </aside>
 
-      <aside className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-background/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_32px_-20px_hsl(var(--foreground)/0.35)] backdrop-blur-xl md:hidden">
+      <aside className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-workspace-raised pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_32px_-20px_hsl(var(--foreground)/0.35)] md:hidden">
         <nav
           aria-label="Mobile applications"
           className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center justify-items-center px-2"

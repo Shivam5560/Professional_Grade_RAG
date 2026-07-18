@@ -25,11 +25,15 @@ export function ScoreWorkspace({ onTailor, resumes, userId }: { onTailor(resumeI
     try {
       if (file) {
         const evidence = await careerStudioClient.uploadResume(file);
-        await apiClient.uploadResume(file, userId);
-        setMessage(`${evidence.claims.length} evidence claims extracted. Resume scoring is queued; refresh results after processing finishes.`);
+        if (!evidence.resume) throw new Error("The resume was extracted but could not be stored for scoring");
+        const result = await careerStudioClient.scoreResume(evidence.resume.resume_id, jobDescription);
+        setResumeId(evidence.resume.resume_id);
+        setLatest(result);
+        setMessage(`${evidence.claims.length} evidence claims extracted. Review uncertain evidence before using it for tailoring.`);
       } else {
-        await apiClient.analyzeResume({ user_id: userId, resume_id: resumeId, job_description: jobDescription });
-        setMessage("Resume scoring is queued. Your result will appear here when processing finishes.");
+        const result = await careerStudioClient.scoreResume(resumeId, jobDescription);
+        setLatest(result);
+        setMessage("Scoring is complete. Your original resume has not been changed.");
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not start resume scoring"); }
     finally { setLoading(false); }

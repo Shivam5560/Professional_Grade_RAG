@@ -94,7 +94,7 @@ export function MessageList({
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.45, ease: 'easeOut', delay: index * 0.04 }}
                       whileHover={{ y: -2 }}
-                      className="min-h-14 rounded-md border border-border/70 bg-background/65 px-4 py-3 text-left text-sm font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-muted/70"
+                      className="min-h-14 rounded-md border border-border/70 bg-workspace-raised px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-workspace-inset"
                     >
                       {chip.title}
                     </motion.button>

@@ -161,7 +161,7 @@ export function QuickFileSelector({
                     cursor-pointer rounded-full py-1 px-3 transition-all hover:scale-105
                     ${selected
                       ? 'border-transparent bg-gradient-to-r from-[hsl(var(--chart-5))] to-[hsl(var(--chart-4))] text-white hover:brightness-105'
-                      : 'bg-card/80 text-muted-foreground border-border/70 hover:bg-muted/60'
+                      : 'bg-workspace-inset text-muted-foreground border-border/70 hover:bg-muted'
                     }
                   `}
                   onClick={() => onAskFileToggle?.(file.id)}
@@ -194,7 +194,7 @@ export function QuickFileSelector({
                     cursor-pointer rounded-full py-1 px-3 transition-all hover:scale-105
                     ${selected 
                       ? 'border-transparent bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))] text-white hover:brightness-105' 
-                      : 'bg-card/80 text-muted-foreground border-border/70 hover:bg-muted/60'
+                      : 'bg-workspace-inset text-muted-foreground border-border/70 hover:bg-muted'
                     }
                   `}
                   onClick={() => onFileToggle?.(file)}
