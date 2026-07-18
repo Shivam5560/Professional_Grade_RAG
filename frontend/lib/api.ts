@@ -40,12 +40,16 @@ class ApiClient {
     return {
       name: data.name,
       email: data.email,
+      phone: data.phone || '',
       location: data.location || '',
       linkedin_url: data.linkedin || '',
       github_url: data.github || '',
+      portfolio_url: data.portfolio || '',
+      summary: data.summary || '',
       experiences: (data.experience || []).map((e) => ({
         title: e.position || '',
         company: e.company || '',
+        location: e.location || '',
         dates: e.duration || '',
         responsibilities: Array.isArray(e.responsibilities) ? e.responsibilities.filter(Boolean) : [],
       })),
@@ -54,6 +58,7 @@ class ApiClient {
         degree: e.degree || '',
         graduation_date: e.duration || '',
         gpa: e.gpa || '',
+        location: e.location || '',
       })),
       projects: (data.projects || []).map((p) => ({
         title: p.name || '',
@@ -62,8 +67,16 @@ class ApiClient {
           ...(typeof p.description === 'string' && p.description.trim() ? [p.description.trim()] : []),
           p.technologies ? `Technologies: ${p.technologies}` : '',
         ].filter(Boolean),
+        technologies: p.technologies || '',
+        link: p.link || '',
+        dates: p.dates || '',
       })),
       skills: data.skills || {},
+      certifications: data.certifications || [],
+      awards: data.awards || [],
+      languages: data.languages || [],
+      custom_sections: data.customSections || [],
+      section_order: data.sectionOrder || [],
     };
   }
 

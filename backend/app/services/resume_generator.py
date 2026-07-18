@@ -116,13 +116,7 @@ class LatexResumeGenerator:
      {{CONTACT}}
 \end{center}
 
-{{EXPERIENCE_SECTION}}
-
-{{EDUCATION_SECTION}}
-
-{{PROJECTS_SECTION}}
-
-{{SKILLS_SECTION}}
+{{RESUME_BODY}}
 
 \end{document}
 """
@@ -131,12 +125,16 @@ class LatexResumeGenerator:
 
     def _build_contact(self, data: Dict[str, Any]) -> str:
         email = self._escape(data.get("email", ""))
+        phone = self._escape(data.get("phone", ""))
         location = self._escape(data.get("location", ""))
         linkedin = data.get("linkedin_url", "")
         github = data.get("github_url", "")
+        portfolio = data.get("portfolio_url", "")
         parts: List[str] = []
         if email:
             parts.append(f"\\href{{mailto:{email}}}{{\\underline{{{email}}}}}")
+        if phone:
+            parts.append(phone)
         if location:
             parts.append(location)
         first = " $|$ ".join(parts)
@@ -147,9 +145,17 @@ class LatexResumeGenerator:
         if github:
             clean = github.replace("https://", "").replace("http://", "")
             second_parts.append(f"\\href{{{github}}}{{\\underline{{{clean}}}}}")
+        if portfolio:
+            clean = portfolio.replace("https://", "").replace("http://", "").replace("www.", "")
+            second_parts.append(f"\\href{{{portfolio}}}{{\\underline{{{clean}}}}}")
         if second_parts:
             return f"{first} \\\\ " + " $|$\n    ".join(second_parts)
         return first
+
+    def _build_summary(self, summary: str) -> str:
+        if not summary or not summary.strip():
+            return ""
+        return f"\\section{{Professional Summary}}\n\\small{{{self._escape(summary.strip())}}}"
 
     def _build_experience(self, exps: List[Dict[str, Any]]) -> str:
         if not exps:
@@ -191,7 +197,12 @@ class LatexResumeGenerator:
         out = "\\section{Projects}\n  \\resumeSubHeadingListStart\n"
         for proj in projs:
             title = self._escape(proj.get("title", ""))
-            out += f"      \\resumeProjectHeading\n        {{\\textbf{{{title}}}}}{{}} \n      \\resumeItemListStart\n"
+            dates = self._escape(proj.get("dates", ""))
+            link = proj.get("link", "")
+            heading = f"\\textbf{{{title}}}"
+            if link:
+                heading = f"\\href{{{link}}}{{{heading}}}"
+            out += f"      \\resumeProjectHeading\n        {{{heading}}}{{{dates}}} \n      \\resumeItemListStart\n"
             descs = proj.get("descriptions", proj.get("description", []))
             if isinstance(descs, str):
                 descs = [descs]
@@ -199,6 +210,9 @@ class LatexResumeGenerator:
                 ds = d if isinstance(d, str) else str(d or "")
                 if ds.strip():
                     out += f"        \\resumeItem{{{self._escape(ds.strip())}}}\n"
+            technologies = self._escape(proj.get("technologies", ""))
+            if technologies:
+                out += f"        \\resumeItem{{Technologies: {technologies}}}\n"
             out += "      \\resumeItemListEnd\n"
         out += "  \\resumeSubHeadingListEnd"
         return out
@@ -224,16 +238,49 @@ class LatexResumeGenerator:
             return ""
         return "\\section{Additional}\n\\begin{itemize}\n" + "\n".join(items) + "\n\\end{itemize}"
 
+    def _build_named_records(self, title: str, records: List[Dict[str, Any]]) -> str:
+        items: List[str] = []
+        for record in records:
+            name = self._escape(record.get("name", ""))
+            if not name:
+                continue
+            details = [self._escape(record.get(key, "")) for key in ("issuer", "date", "proficiency")]
+            suffix = " --- ".join(item for item in details if item)
+            items.append(f"  \\item \\textbf{{{name}}}" + (f" --- {suffix}" if suffix else ""))
+        if not items:
+            return ""
+        return f"\\section{{{self._escape(title)}}}\n\\begin{{itemize}}\n" + "\n".join(items) + "\n\\end{itemize}"
+
+    def _build_custom_sections(self, sections: List[Dict[str, Any]]) -> str:
+        output: List[str] = []
+        for section in sections:
+            title = self._escape(section.get("title", ""))
+            items = [self._escape(item) for item in section.get("items", []) if str(item).strip()]
+            if title and items:
+                output.append(f"\\section{{{title}}}\n\\begin{{itemize}}\n" + "\n".join(f"  \\item {item}" for item in items) + "\n\\end{itemize}")
+        return "\n\n".join(output)
+
     # ─── Generate ────────────────────────────────────────────────
 
     def generate_latex(self, data: Dict[str, Any]) -> str:
         content = self.TEMPLATE
         content = content.replace("{{NAME}}", self._escape(data.get("name", "")))
         content = content.replace("{{CONTACT}}", self._build_contact(data))
-        content = content.replace("{{EXPERIENCE_SECTION}}", self._build_experience(data.get("experiences", [])))
-        content = content.replace("{{EDUCATION_SECTION}}", self._build_education(data.get("education", [])))
-        content = content.replace("{{PROJECTS_SECTION}}", self._build_projects(data.get("projects", [])))
-        content = content.replace("{{SKILLS_SECTION}}", self._build_skills(data.get("skills", {})))
+        sections = {
+            "summary": self._build_summary(data.get("summary", "")),
+            "experience": self._build_experience(data.get("experiences", data.get("experience", []))),
+            "education": self._build_education(data.get("education", [])),
+            "projects": self._build_projects(data.get("projects", [])),
+            "skills": self._build_skills(data.get("skills", {})),
+            "certifications": self._build_named_records("Certifications", data.get("certifications", [])),
+            "awards": self._build_named_records("Awards", data.get("awards", [])),
+            "languages": self._build_named_records("Languages", data.get("languages", [])),
+            "custom_sections": self._build_custom_sections(data.get("custom_sections", [])),
+        }
+        default_order = ["summary", "experience", "education", "projects", "skills", "certifications", "awards", "languages", "custom_sections"]
+        requested = [item for item in data.get("section_order", []) if item in sections]
+        order = requested + [item for item in default_order if item not in requested]
+        content = content.replace("{{RESUME_BODY}}", "\n\n".join(sections[item] for item in order if sections[item]))
         return content
 
     def compile_pdf(self, latex_content: str, output_path: str) -> Dict[str, Any]:

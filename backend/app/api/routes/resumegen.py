@@ -40,11 +40,15 @@ class Education(BaseModel):
     degree: str = ""
     graduation_date: str = Field(default="", validation_alias=AliasChoices("graduation_date", "duration"))
     gpa: str = ""
+    location: str = ""
 
 
 class Project(BaseModel):
     title: str = Field(default="", validation_alias=AliasChoices("title", "name"))
     descriptions: List[str] = Field(default_factory=list, validation_alias=AliasChoices("descriptions", "description"))
+    technologies: str = ""
+    link: str = ""
+    dates: str = ""
 
     @model_validator(mode="after")
     def _normalize_descriptions(self):
@@ -53,18 +57,49 @@ class Project(BaseModel):
         return self
 
 
+class Certification(BaseModel):
+    name: str = ""
+    issuer: str = ""
+    date: str = ""
+    link: str = ""
+
+
+class Award(BaseModel):
+    name: str = ""
+    issuer: str = ""
+    date: str = ""
+
+
+class Language(BaseModel):
+    name: str = ""
+    proficiency: str = ""
+
+
+class CustomSection(BaseModel):
+    title: str = ""
+    items: List[str] = Field(default_factory=list)
+
+
 class ResumeData(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     name: str = ""
     email: str = ""
+    phone: Optional[str] = ""
     location: Optional[str] = ""
     linkedin_url: Optional[str] = Field(default="", validation_alias=AliasChoices("linkedin_url", "linkedin"))
     github_url: Optional[str] = Field(default="", validation_alias=AliasChoices("github_url", "github"))
+    portfolio_url: Optional[str] = Field(default="", validation_alias=AliasChoices("portfolio_url", "portfolio"))
+    summary: Optional[str] = ""
     experiences: List[Experience] = Field(default_factory=list, validation_alias=AliasChoices("experiences", "experience"))
-    education: List[Education] = []
-    projects: List[Project] = []
-    skills: Dict[str, Any] = {}
+    education: List[Education] = Field(default_factory=list)
+    projects: List[Project] = Field(default_factory=list)
+    skills: Dict[str, Any] = Field(default_factory=dict)
+    certifications: List[Certification] = Field(default_factory=list)
+    awards: List[Award] = Field(default_factory=list)
+    languages: List[Language] = Field(default_factory=list)
+    custom_sections: List[CustomSection] = Field(default_factory=list)
+    section_order: List[str] = Field(default_factory=list)
 
 
 class GenerateRequest(BaseModel):

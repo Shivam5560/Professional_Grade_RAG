@@ -310,6 +310,7 @@ export interface ResumeGenExperience {
   company: string;
   position: string;
   duration: string;
+  location?: string;
   responsibilities: string[];
 }
 
@@ -318,6 +319,7 @@ export interface ResumeGenEducation {
   degree: string;
   duration: string;
   gpa?: string;
+  location?: string;
 }
 
 export interface ResumeGenProject {
@@ -325,18 +327,41 @@ export interface ResumeGenProject {
   descriptions: string[];
   description?: string;
   technologies: string;
+  link?: string;
+  dates?: string;
+}
+
+export interface ResumeGenNamedRecord {
+  name: string;
+  issuer?: string;
+  date?: string;
+  link?: string;
+  proficiency?: string;
+}
+
+export interface ResumeGenCustomSection {
+  title: string;
+  items: string[];
 }
 
 export interface ResumeGenData {
   name: string;
   email: string;
+  phone?: string;
   location?: string;
   linkedin?: string;
   github?: string;
+  portfolio?: string;
+  summary?: string;
   experience: ResumeGenExperience[];
   education: ResumeGenEducation[];
   projects: ResumeGenProject[];
   skills: Record<string, string[]>;
+  certifications?: ResumeGenNamedRecord[];
+  awards?: ResumeGenNamedRecord[];
+  languages?: ResumeGenNamedRecord[];
+  customSections?: ResumeGenCustomSection[];
+  sectionOrder?: string[];
 }
 
 export interface ResumeGenHealthResponse {
