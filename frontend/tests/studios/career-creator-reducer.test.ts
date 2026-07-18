@@ -34,3 +34,12 @@ it("hydrates only versioned creator drafts", () => {
   expect(hydrated.name).toBe("Jane Doe");
   expect(ignored.name).toBe("");
 });
+
+it("reorders repeatable entries independently", () => {
+  const one = resumeCreatorReducer(initialResumeCreatorState, { type: "add-project" });
+  const two = resumeCreatorReducer(one, { type: "add-project" });
+  const named = resumeCreatorReducer(two, { type: "update-project", index: 1, patch: { name: "Second project" } });
+  const moved = resumeCreatorReducer(named, { type: "move-project", index: 1, direction: "up" });
+
+  expect(moved.projects[0].name).toBe("Second project");
+});

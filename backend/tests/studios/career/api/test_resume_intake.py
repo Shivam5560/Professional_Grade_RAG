@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
-from app.db.models import User
+from app.db.models import NexusResumeFile, User
 from app.studios.career.api.router import create_career_router
 
 
@@ -33,6 +33,7 @@ def client() -> Iterator[TestClient]:
             session.commit()
 
     app = FastAPI()
+    app.state.test_engine = engine
     app.include_router(
         create_career_router(
             session_dependency=get_session,
@@ -99,6 +100,56 @@ def test_uploads_a_resume_and_returns_inferred_source_claims(
     )
 
 
+def test_repeated_uploads_receive_owner_scoped_unique_source_ids(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def stored_resume(**_kwargs):
+        return SimpleNamespace(resume_id="resume-unique", filename="resume.txt", status="uploaded")
+
+    monkeypatch.setattr("app.studios.career.api.router.store_resume_source", stored_resume)
+    monkeypatch.setattr(
+        "app.studios.career.extraction.resume_source.extract_resume_data",
+        lambda _text: {"personal_info": {"name": "Jane"}, "keywords": ["Python"]},
+    )
+    payload = {"file": ("resume.txt", b"Jane knows Python", "text/plain")}
+
+    first = client.post("/api/v2/career/sources/upload", files=payload)
+    second = client.post("/api/v2/career/sources/upload", files=payload)
+
+    assert first.status_code == second.status_code == 201
+    assert first.json()["source"]["id"].startswith("source-7-")
+    assert first.json()["source"]["id"] != second.json()["source"]["id"]
+
+
+def test_ingests_an_owner_scoped_stored_resume(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    stored_path = tmp_path / "stored.txt"
+    stored_path.write_text("Jane knows Python", encoding="utf-8")
+    with Session(client.app.state.test_engine) as session:
+        session.add(
+            NexusResumeFile(
+                id="row-stored",
+                user_id=7,
+                resume_id="resume-stored",
+                filename="stored.txt",
+                filepath=str(stored_path),
+                status="uploaded",
+            )
+        )
+        session.commit()
+    monkeypatch.setattr(
+        "app.studios.career.extraction.resume_source.extract_resume_data",
+        lambda _text: {"personal_info": {"name": "Jane"}, "keywords": ["Python"]},
+    )
+
+    response = client.post("/api/v2/career/sources/resumes/resume-stored")
+
+    assert response.status_code == 201, response.text
+    assert response.json()["resume"]["resume_id"] == "resume-stored"
+    assert response.json()["source"]["id"].startswith("source-7-")
+
+
 @pytest.mark.parametrize("filename", ["resume.exe", "resume.json", "../resume.txt"])
 def test_rejects_unsupported_or_unsafe_resume_names(
     client: TestClient, filename: str
@@ -115,6 +166,15 @@ def test_rejects_empty_resume_content(client: TestClient) -> None:
     response = client.post(
         "/api/v2/career/sources/upload",
         files={"file": ("resume.txt", b"   ", "text/plain")},
+    )
+
+    assert response.status_code == 400
+
+
+def test_rejects_a_mismatched_resume_media_type(client: TestClient) -> None:
+    response = client.post(
+        "/api/v2/career/sources/upload",
+        files={"file": ("resume.pdf", b"not a pdf", "text/plain")},
     )
 
     assert response.status_code == 400
@@ -190,3 +250,46 @@ def test_rejects_score_payloads_that_try_to_choose_an_owner(client: TestClient) 
     )
 
     assert response.status_code == 422
+
+
+def test_tailoring_requires_reviewed_evidence_and_returns_an_approval_bound_draft(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def stored_resume(**_kwargs):
+        return SimpleNamespace(resume_id="resume-verified", filename="resume.txt", status="uploaded")
+
+    monkeypatch.setattr("app.studios.career.api.router.store_resume_source", stored_resume)
+    monkeypatch.setattr(
+        "app.studios.career.extraction.resume_source.extract_resume_data",
+        lambda _text: {"personal_info": {"name": "Jane"}, "keywords": ["Python"]},
+    )
+    monkeypatch.setattr(
+        "app.studios.career.extraction.resume_source.extract_jd_data",
+        lambda _text: {"job_title": "Data Engineer", "required_skills": ["Python"]},
+    )
+    uploaded = client.post(
+        "/api/v2/career/sources/upload",
+        files={"file": ("resume.txt", b"Jane\nPython", "text/plain")},
+    ).json()
+
+    blocked = client.post(
+        "/api/v2/career/tailoring/prepare",
+        json={"source_id": uploaded["source"]["id"], "job_description": "Data Engineer role requiring Python"},
+    )
+    assert blocked.status_code == 409
+
+    for revision in uploaded["claims"]:
+        response = client.post(
+            f"/api/v2/career/claims/{revision['logical_claim_id']}/decisions",
+            json={"action": "verify"},
+        )
+        assert response.status_code == 200
+
+    prepared = client.post(
+        "/api/v2/career/tailoring/prepare",
+        json={"source_id": uploaded["source"]["id"], "job_description": "Data Engineer role requiring Python"},
+    )
+    assert prepared.status_code == 201, prepared.text
+    assert prepared.json()["draft"]["bullets"]
+    assert prepared.json()["approval"]["status"] == "pending"
+    assert prepared.json()["draft"]["bullets"][0]["source_claim_ids"]

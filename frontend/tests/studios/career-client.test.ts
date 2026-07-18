@@ -35,4 +35,18 @@ describe("CareerStudioClient", () => {
       body: JSON.stringify({ resume_id: "resume-1", job_description: "A detailed data engineering job description" }),
     }));
   });
+
+  it("prepares tailoring through the reviewed Career workflow", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ source: { id: "source-1" }, claims: [] }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ draft: { id: "draft-1" }, approval: { id: "approval-1" } }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const client = new CareerStudioClient({ fetcher });
+
+    await client.ingestStoredResume("resume-1");
+    await client.prepareTailoring("source-1", "A detailed platform engineering role");
+
+    expect(fetcher.mock.calls[0][0]).toBe("http://localhost:8000/api/v2/career/sources/resumes/resume-1");
+    expect(fetcher.mock.calls[1][0]).toBe("http://localhost:8000/api/v2/career/tailoring/prepare");
+    expect(fetcher.mock.calls[1][1]).toEqual(expect.objectContaining({ body: JSON.stringify({ source_id: "source-1", job_description: "A detailed platform engineering role" }) }));
+  });
 });

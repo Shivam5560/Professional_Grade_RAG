@@ -6,6 +6,8 @@ Direct text extraction + direct LLM calls.
 """
 
 import time
+import shutil
+import subprocess
 from typing import Dict, Optional
 from pathlib import Path
 
@@ -77,10 +79,24 @@ def extract_text_from_file(filepath: str) -> str:
             doc.close()
             return "\n".join(text_parts)
         
-        elif ext in (".docx", ".doc"):
+        elif ext == ".docx":
             from docx import Document
             doc = Document(filepath)
             return "\n".join([para.text for para in doc.paragraphs])
+
+        elif ext == ".doc":
+            antiword = shutil.which("antiword")
+            if not antiword:
+                raise HTTPException(status_code=500, detail="Legacy DOC extraction requires the antiword runtime")
+            completed = subprocess.run(
+                [antiword, filepath],
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+            if completed.returncode != 0:
+                raise HTTPException(status_code=400, detail="The DOC resume is corrupt or encrypted")
+            return completed.stdout.decode("utf-8", errors="ignore")
         
         elif ext == ".txt":
             with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
@@ -89,6 +105,8 @@ def extract_text_from_file(filepath: str) -> str:
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
     
+    except HTTPException:
+        raise
     except ImportError as e:
         logger.error(f"Missing dependency for {ext}: {e}")
         raise HTTPException(status_code=500, detail=f"Cannot process {ext} files: missing dependency")

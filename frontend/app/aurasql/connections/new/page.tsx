@@ -50,29 +50,6 @@ export default function NewAuraSqlConnectionPage() {
 
   return (
     <AuraSqlPage title="Connect a database" description="Add the credentials AuraSQL needs, then continue directly into choosing the schema tables that ground your questions.">
-      {isSubmitting ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay">
-          <div className="rounded-xl border border-border bg-workspace-raised px-6 py-4 text-center shadow-xl">
-            <p className="text-sm font-semibold">Saving connection</p>
-            <p className="text-xs text-muted-foreground mt-1">Validating credentials and schema.</p>
-            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
-                Verifying credentials
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Checking schema access
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Saving connection profile
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="mx-auto w-full max-w-3xl py-3">
           <Card className="border-border bg-workspace-raised shadow-sm">
             <CardHeader>
@@ -81,6 +58,8 @@ export default function NewAuraSqlConnectionPage() {
             </CardHeader>
             <CardContent>
               <form className="space-y-5" onSubmit={handleSubmit}>
+                {isSubmitting ? <p aria-live="polite" className="rounded-lg border border-border bg-workspace-inset p-3 text-sm text-muted-foreground">Validating credentials and saving the connection…</p> : null}
+                <fieldset className="space-y-5" disabled={isSubmitting}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Name</Label>
@@ -184,13 +163,14 @@ export default function NewAuraSqlConnectionPage() {
                   <Button type="button" variant="ghost" data-destination="/aurasql/connections" onClick={() => router.push('/aurasql/connections')}>
                     Back
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => router.push('/aurasql')}>
+                  <Button type="button" variant="ghost" onClick={() => router.push('/aurasql/connections')}>
                     Cancel
                   </Button>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Saving...' : 'Save Connection'}
                   </Button>
                 </div>
+                </fieldset>
               </form>
             </CardContent>
           </Card>

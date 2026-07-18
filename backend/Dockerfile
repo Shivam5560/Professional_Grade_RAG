@@ -25,6 +25,9 @@ RUN (find /opt/venv -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends antiword \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"

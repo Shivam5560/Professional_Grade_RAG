@@ -268,7 +268,7 @@ export function ChatInterface({
         />
       </div>
 
-      <div data-fixed-composer="knowledge" data-testid="knowledge-composer" className="z-20 shrink-0 border-t border-border/60 bg-workspace-raised px-3 py-3 sm:px-4">
+      <div data-fixed-composer="knowledge" data-testid="knowledge-composer" className="z-20 shrink-0 border-t border-border/60 bg-workspace-raised px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 md:pb-3">
           <div className="mx-auto w-full max-w-4xl">
             <div className="flex items-end gap-3">
               <div className="mb-1 flex items-center gap-1.5">

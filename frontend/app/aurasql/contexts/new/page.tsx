@@ -36,10 +36,11 @@ function NewAuraSqlContextPageContent() {
         const list = await apiClient.listAuraSqlConnections();
         setConnections(list);
         const fromQuery = params.get('connection');
-        if (fromQuery) {
+        if (fromQuery && list.some((connection) => connection.id === fromQuery)) {
           setSelectedConnection(fromQuery);
         } else if (list.length > 0) {
           setSelectedConnection(list[0].id);
+          if (fromQuery) setError('The requested connection is unavailable. Choose one of your saved connections.');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load connections');
@@ -88,13 +89,13 @@ function NewAuraSqlContextPageContent() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedConnection || selectedTables.size === 0) return;
+    if (!selectedConnection || selectedTables.size === 0 || !contextName.trim()) return;
 
     setError(null);
     try {
       const context = await apiClient.createAuraSqlContext({
         connection_id: selectedConnection,
-        name: contextName || 'Untitled context',
+        name: contextName.trim(),
         table_names: selectedTableList,
       });
       router.push(`/aurasql/query?context=${context.id}`);
@@ -105,29 +106,6 @@ function NewAuraSqlContextPageContent() {
 
   return (
     <AuraSqlPage title="Choose the data context" description="Name this reusable context, select the relevant tables, and AuraSQL will carry that scope into the query workspace.">
-      {(loading || loadingTables) ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay">
-          <div className="rounded-xl border border-border bg-workspace-raised px-6 py-4 text-center shadow-xl">
-            <p className="text-sm font-semibold">Preparing schema context</p>
-            <p className="text-xs text-muted-foreground mt-1">Loading connections and tables.</p>
-            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
-                Loading connections
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Fetching tables
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Ready for selection
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="mx-auto w-full max-w-4xl py-3">
           <Card className="border-border bg-workspace-raised shadow-sm">
             <CardHeader>
@@ -136,9 +114,10 @@ function NewAuraSqlContextPageContent() {
             </CardHeader>
             <CardContent>
               <form className="space-y-5" onSubmit={handleSubmit}>
+                {(loading || loadingTables) ? <p aria-live="polite" className="rounded-lg border border-border bg-workspace-inset p-3 text-sm text-muted-foreground">{loading ? 'Loading your saved connections…' : 'Loading available tables…'}</p> : null}
                 <div className="space-y-2">
-                  <Label>Context Name</Label>
-                  <Input value={contextName} onChange={(e) => setContextName(e.target.value)} placeholder="Sales analytics" />
+                  <Label htmlFor="context-name">Context Name</Label>
+                  <Input id="context-name" value={contextName} onChange={(e) => setContextName(e.target.value)} placeholder="Sales analytics" required />
                 </div>
 
                 <div className="space-y-2">
@@ -189,10 +168,10 @@ function NewAuraSqlContextPageContent() {
                   <Button type="button" variant="ghost" data-destination="/aurasql/contexts" onClick={() => router.push('/aurasql/contexts')}>
                     Back
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => router.push('/aurasql')}>
+                  <Button type="button" variant="ghost" onClick={() => router.push('/aurasql/contexts')}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={selectedTables.size === 0}>
+                  <Button type="submit" disabled={loading || loadingTables || selectedTables.size === 0 || !contextName.trim()}>
                     Save Context
                   </Button>
                 </div>

@@ -81,7 +81,7 @@ export default function CareerStudioPage(): JSX.Element | null {
         {!workflow ? <CareerHome onSelect={selectWorkflow} /> : null}
         {workflow === "score" ? <ScoreWorkspace resumes={resumes} userId={user.id} onTailor={(resumeId, jobDescription) => { setTailorContext({ resumeId, jobDescription }); selectWorkflow("tailor"); }} /> : null}
         {workflow === "tailor" ? <TailorWorkspace initialJobDescription={tailorContext.jobDescription} initialResumeId={tailorContext.resumeId} resumes={resumes} /> : null}
-        {workflow === "create" ? <ResumeCreator /> : null}
+        {workflow === "create" ? <ResumeCreator ownerId={user.id} /> : null}
       </main>
       <Inspector open={guideOpen} onOpenChange={setGuideOpen} title="How Career Studio protects your story">
         <div className="space-y-6 text-sm leading-6">

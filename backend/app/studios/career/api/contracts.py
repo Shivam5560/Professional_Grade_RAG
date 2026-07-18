@@ -149,6 +149,11 @@ class CareerScoreResponse(BaseModel):
     created_at: str = ""
 
 
+class TailoringPrepareRequest(StrictRequest):
+    source_id: str = Field(min_length=1, max_length=200)
+    job_description: str = Field(min_length=10, max_length=30_000)
+
+
 class CandidateEdgeInput(StrictRequest):
     requirement_id: str = Field(min_length=1)
     claim_id: str = Field(min_length=1)

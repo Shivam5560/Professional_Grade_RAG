@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -24,6 +26,7 @@ from app.studios.career import (
     REGISTERED_PUBLICATION_TRANSFORMATIONS,
     match_requirements,
     score_candidate_edge,
+    ScoreComponents,
 )
 from app.studios.career.api.contracts import (
     ClaimDecisionRequest,
@@ -34,12 +37,26 @@ from app.studios.career.api.contracts import (
     RoleCreateRequest,
     SourceIngestionRequest,
     SourceIngestionResponse,
+    CandidateEdgeInput,
 )
+from app.platform.evidence import VerificationStatus
+from app.studios.career.domain import RoleRequirement
 from app.studios.career.persistence import CareerDraft, CareerMatch, CareerRepository, CareerRole
 
 
 class UnsupportedCareerCapability(ValueError):
     """A capability was deliberately omitted instead of being simulated."""
+
+
+_CAREER_STOP_WORDS = {"and", "the", "with", "for", "from", "that", "this", "role", "work", "need", "requiring"}
+
+
+def _career_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9+#.]+", value.lower())
+        if len(token) > 2 and token not in _CAREER_STOP_WORDS
+    }
 
 
 def _digest(value: object) -> str:
@@ -134,6 +151,53 @@ class CareerApplicationService:
             result=result,
             owner_id=self.owner_id,
             created_at=self.now(),
+        )
+
+    def prepare_tailoring(
+        self,
+        *,
+        source_id: str,
+        title: str,
+        requirements: tuple[RoleRequirement, ...],
+    ) -> DraftWorkflowResponse:
+        revisions = self.career.list_current_claims(owner_id=self.owner_id, source_id=source_id)
+        verified = tuple(
+            revision.claim
+            for revision in revisions
+            if revision.claim.verification_status is VerificationStatus.VERIFIED
+        )
+        if not verified:
+            raise ValueError("Review and verify at least one extracted evidence claim before tailoring")
+
+        suffix = uuid.uuid4().hex
+        role = self.create_role(RoleCreateRequest(role_id=f"career-role-{suffix}", title=title, requirements=requirements))
+        edges: list[CandidateEdgeInput] = []
+        for requirement in role.requirements:
+            requirement_tokens = _career_tokens(requirement.description)
+            for claim in verified:
+                claim_text = " ".join(
+                    [claim.subject.label, str(claim.object.value), *(span.exact_text for span in claim.source_spans)]
+                )
+                claim_tokens = _career_tokens(claim_text)
+                overlap = len(requirement_tokens & claim_tokens) / max(1, len(requirement_tokens))
+                if overlap <= 0:
+                    continue
+                components = ScoreComponents(
+                    semantic_relevance=min(1.0, overlap),
+                    evidence_strength=max(0.9, claim.confidence),
+                    recency=0.5,
+                    duration_seniority=0.5,
+                    transferability=min(1.0, overlap),
+                    specificity=0.8,
+                )
+                edges.append(CandidateEdgeInput(requirement_id=requirement.id, claim_id=claim.id, components=components))
+
+        match = self.create_match(MatchCreateRequest(match_id=f"career-match-{suffix}", role_id=role.id, candidate_edges=tuple(edges)))
+        if not match.result.selected_matches:
+            raise ValueError("No verified evidence matches the target role; review the job description or evidence")
+        return self.create_draft(
+            DraftCreateRequest(match_id=match.id),
+            idempotency_key=f"tailoring-{suffix}",
         )
 
     def create_draft(self, request: DraftCreateRequest, *, idempotency_key: str) -> DraftWorkflowResponse:

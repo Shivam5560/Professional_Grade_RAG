@@ -61,3 +61,24 @@ def test_accepts_the_existing_resume_payload_aliases() -> None:
     assert "Engineer" in latex
     assert "Acme" in latex
     assert "Python, SQL" in latex
+
+
+def test_resume_links_cannot_break_out_of_latex_href() -> None:
+    latex = generate_resume_latex(
+        {
+            "name": "Jane",
+            "email": "jane@example.com",
+            "portfolio_url": "https://example.com/}\\input{/tmp/secret}",
+            "projects": [
+                {
+                    "title": "Work",
+                    "link": "https://example.com/}\\write18{touch hacked}",
+                    "descriptions": [],
+                }
+            ],
+        }
+    )
+
+    assert r"}\input{" not in latex
+    assert r"}\write18{" not in latex
+    assert "%7D" in latex

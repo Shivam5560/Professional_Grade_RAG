@@ -81,29 +81,6 @@ export default function EditAuraSqlConnectionPage() {
 
   return (
     <AuraSqlPage title="Edit database connection" description="Keep the saved access profile current without losing the schema contexts already built around it.">
-      {(loading || saving) ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-overlay">
-          <div className="rounded-xl border border-border bg-workspace-raised px-6 py-4 text-center shadow-xl">
-            <p className="text-sm font-semibold">Updating connection</p>
-            <p className="text-xs text-muted-foreground mt-1">Syncing connection details.</p>
-            <div className="mt-4 grid gap-2 text-left text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/60 animate-pulse" />
-                Validating updates
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Checking schema access
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-foreground/40" />
-                Saving connection profile
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="mx-auto w-full max-w-3xl py-3">
           <Card className="border-border bg-workspace-raised shadow-sm">
             <CardHeader>
@@ -118,6 +95,8 @@ export default function EditAuraSqlConnectionPage() {
                 </div>
               ) : (
                 <form className="space-y-5" onSubmit={handleSubmit}>
+                  {saving ? <p aria-live="polite" className="rounded-lg border border-border bg-workspace-inset p-3 text-sm text-muted-foreground">Validating changes and updating this connection…</p> : null}
+                  <fieldset className="space-y-5" disabled={saving}>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Name</Label>
@@ -189,13 +168,14 @@ export default function EditAuraSqlConnectionPage() {
                     <Button type="button" variant="ghost" data-destination="/aurasql/connections" onClick={() => router.push('/aurasql/connections')}>
                       Back
                     </Button>
-                    <Button type="button" variant="ghost" onClick={() => router.push('/aurasql')}>
+                    <Button type="button" variant="ghost" onClick={() => router.push('/aurasql/connections')}>
                       Cancel
                     </Button>
                     <Button type="submit" disabled={saving}>
                       {saving ? 'Saving...' : 'Save Changes'}
                     </Button>
                   </div>
+                  </fieldset>
                 </form>
               )}
             </CardContent>

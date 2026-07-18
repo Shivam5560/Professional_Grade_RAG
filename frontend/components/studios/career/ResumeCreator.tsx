@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState, type Dispatch, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useState, type Dispatch, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Download, Plus, Trash2 } from "lucide-react";
 
 import { ResumePreview } from "./ResumePreview";
@@ -13,25 +13,26 @@ import { creatorSections, initialResumeCreatorState, resumeCreatorReducer, type 
 import type { ResumeGenNamedRecord } from "@/lib/types";
 
 const steps = ["Details", "Experience", "Education", "Projects", "Extras", "Preview"];
-const storageKey = "career-resume-creator-v1";
-
-export function ResumeCreator(): JSX.Element {
+export function ResumeCreator({ ownerId }: { ownerId: number }): JSX.Element {
   const [state, dispatch] = useReducer(resumeCreatorReducer, initialResumeCreatorState);
   const [step, setStep] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const storageKey = useMemo(() => `career-resume-creator-v1-${ownerId}`, [ownerId]);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) dispatch({ type: "hydrate", state: JSON.parse(saved) });
     } catch { localStorage.removeItem(storageKey); }
-  }, []);
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)); }, [state]);
+  }, [storageKey]);
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)); }, [state, storageKey]);
 
   const setField = (field: keyof typeof state, value: unknown) => dispatch({ type: "set-field", field, value });
   const download = async (format: "pdf" | "tex") => {
     if (!state.name.trim() || !state.email.trim()) { setError("Name and email are required before export."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.email.trim())) { setError("Enter a valid email address before export."); return; }
+    if (!state.summary?.trim() && !state.experience.length && !state.education.length && !state.projects.length) { setError("Add a summary, experience, education, or project before export."); return; }
     setGenerating(true); setError(null);
     try {
       const blob = format === "pdf" ? await apiClient.generateResumePdf(state) : new Blob([await apiClient.generateResumeLatex(state)], { type: "text/plain" });
@@ -66,15 +67,15 @@ function Details({ state, setField }: { state: typeof initialResumeCreatorState;
 }
 
 function Experience({ state, dispatch }: { state: typeof initialResumeCreatorState; dispatch: Dispatch<ResumeCreatorAction> }) {
-  return <RepeatSection title="Experience" description="Add roles and evidence-rich achievement bullets." onAdd={() => dispatch({ type: "add-experience" })} addLabel="Add experience">{state.experience.map((item, index) => <Entry key={index} title={item.position || item.company || `Experience ${index + 1}`} onRemove={() => dispatch({ type: "remove-experience", index })}><div className="grid gap-3 sm:grid-cols-2"><Field label="Company"><Input value={item.company} onChange={(e) => dispatch({ type: "update-experience", index, patch: { company: e.target.value } })} /></Field><Field label="Position"><Input value={item.position} onChange={(e) => dispatch({ type: "update-experience", index, patch: { position: e.target.value } })} /></Field><Field label="Location"><Input value={item.location ?? ""} onChange={(e) => dispatch({ type: "update-experience", index, patch: { location: e.target.value } })} /></Field><Field label="Dates"><Input value={item.duration} onChange={(e) => dispatch({ type: "update-experience", index, patch: { duration: e.target.value } })} /></Field></div><Field className="mt-3" label="Achievement bullets (one per line)"><Textarea value={item.responsibilities.join("\n")} onChange={(e) => dispatch({ type: "update-experience", index, patch: { responsibilities: e.target.value.split("\n") } })} /></Field></Entry>)}</RepeatSection>;
+  return <RepeatSection title="Experience" description="Add roles and evidence-rich achievement bullets." onAdd={() => dispatch({ type: "add-experience" })} addLabel="Add experience">{state.experience.map((item, index) => <Entry key={index} title={item.position || item.company || `Experience ${index + 1}`} index={index} count={state.experience.length} onMove={(direction) => dispatch({ type: "move-experience", index, direction })} onRemove={() => dispatch({ type: "remove-experience", index })}><div className="grid gap-3 sm:grid-cols-2"><Field label="Company"><Input value={item.company} onChange={(e) => dispatch({ type: "update-experience", index, patch: { company: e.target.value } })} /></Field><Field label="Position"><Input value={item.position} onChange={(e) => dispatch({ type: "update-experience", index, patch: { position: e.target.value } })} /></Field><Field label="Location"><Input value={item.location ?? ""} onChange={(e) => dispatch({ type: "update-experience", index, patch: { location: e.target.value } })} /></Field><Field label="Dates"><Input value={item.duration} onChange={(e) => dispatch({ type: "update-experience", index, patch: { duration: e.target.value } })} /></Field></div><Field className="mt-3" label="Achievement bullets (one per line)"><Textarea value={item.responsibilities.join("\n")} onChange={(e) => dispatch({ type: "update-experience", index, patch: { responsibilities: e.target.value.split("\n") } })} /></Field></Entry>)}</RepeatSection>;
 }
 
 function Education({ state, dispatch }: { state: typeof initialResumeCreatorState; dispatch: Dispatch<ResumeCreatorAction> }) {
-  return <RepeatSection title="Education" description="Include formal education and relevant credentials." onAdd={() => dispatch({ type: "add-education" })} addLabel="Add education">{state.education.map((item, index) => <Entry key={index} title={item.degree || item.institution || `Education ${index + 1}`} onRemove={() => dispatch({ type: "remove-education", index })}><div className="grid gap-3 sm:grid-cols-2">{([["institution", "Institution"], ["degree", "Degree"], ["location", "Location"], ["duration", "Dates"], ["gpa", "GPA"]] as const).map(([field, label]) => <Field key={field} label={label}><Input value={String(item[field] ?? "")} onChange={(e) => dispatch({ type: "update-education", index, patch: { [field]: e.target.value } })} /></Field>)}</div></Entry>)}</RepeatSection>;
+  return <RepeatSection title="Education" description="Include formal education and relevant credentials." onAdd={() => dispatch({ type: "add-education" })} addLabel="Add education">{state.education.map((item, index) => <Entry key={index} title={item.degree || item.institution || `Education ${index + 1}`} index={index} count={state.education.length} onMove={(direction) => dispatch({ type: "move-education", index, direction })} onRemove={() => dispatch({ type: "remove-education", index })}><div className="grid gap-3 sm:grid-cols-2">{([["institution", "Institution"], ["degree", "Degree"], ["location", "Location"], ["duration", "Dates"], ["gpa", "GPA"]] as const).map(([field, label]) => <Field key={field} label={label}><Input value={String(item[field] ?? "")} onChange={(e) => dispatch({ type: "update-education", index, patch: { [field]: e.target.value } })} /></Field>)}</div></Entry>)}</RepeatSection>;
 }
 
 function Projects({ state, dispatch }: { state: typeof initialResumeCreatorState; dispatch: Dispatch<ResumeCreatorAction> }) {
-  return <RepeatSection title="Projects" description="Show what you built, the tools you used, and why it mattered." onAdd={() => dispatch({ type: "add-project" })} addLabel="Add project">{state.projects.map((item, index) => <Entry key={index} title={item.name || `Project ${index + 1}`} onRemove={() => dispatch({ type: "remove-project", index })}><div className="grid gap-3 sm:grid-cols-2">{([["name", "Project name"], ["technologies", "Technologies"], ["link", "Project link"], ["dates", "Dates"]] as const).map(([field, label]) => <Field key={field} label={label}><Input value={String(item[field] ?? "")} onChange={(e) => dispatch({ type: "update-project", index, patch: { [field]: e.target.value } })} /></Field>)}</div><Field className="mt-3" label="Project highlights (one per line)"><Textarea value={item.descriptions.join("\n")} onChange={(e) => dispatch({ type: "update-project", index, patch: { descriptions: e.target.value.split("\n") } })} /></Field></Entry>)}</RepeatSection>;
+  return <RepeatSection title="Projects" description="Show what you built, the tools you used, and why it mattered." onAdd={() => dispatch({ type: "add-project" })} addLabel="Add project">{state.projects.map((item, index) => <Entry key={index} title={item.name || `Project ${index + 1}`} index={index} count={state.projects.length} onMove={(direction) => dispatch({ type: "move-project", index, direction })} onRemove={() => dispatch({ type: "remove-project", index })}><div className="grid gap-3 sm:grid-cols-2">{([["name", "Project name"], ["technologies", "Technologies"], ["link", "Project link"], ["dates", "Dates"]] as const).map(([field, label]) => <Field key={field} label={label}><Input value={String(item[field] ?? "")} onChange={(e) => dispatch({ type: "update-project", index, patch: { [field]: e.target.value } })} /></Field>)}</div><Field className="mt-3" label="Project highlights (one per line)"><Textarea value={item.descriptions.join("\n")} onChange={(e) => dispatch({ type: "update-project", index, patch: { descriptions: e.target.value.split("\n") } })} /></Field></Entry>)}</RepeatSection>;
 }
 
 function Extras({ state, setField }: { state: typeof initialResumeCreatorState; setField(field: keyof typeof state, value: unknown): void; dispatch: Dispatch<ResumeCreatorAction> }) {
@@ -90,5 +91,5 @@ function NamedRecords({ label, records, onChange }: { label: string; records: Re
 
 function SectionOrder({ order, dispatch }: { order: string[]; dispatch: Dispatch<ResumeCreatorAction> }) { return <div className="mt-6 space-y-2">{order.map((section, index) => <div className="flex items-center justify-between rounded-lg border border-border bg-workspace-inset px-3 py-2" key={section}><span className="text-sm capitalize">{section.replace("_", " ")}</span><span><Button disabled={index === 0} size="icon" variant="ghost" onClick={() => dispatch({ type: "move-section", section, direction: "up" })}><ArrowUp className="h-4 w-4" /></Button><Button disabled={index === order.length - 1} size="icon" variant="ghost" onClick={() => dispatch({ type: "move-section", section, direction: "down" })}><ArrowDown className="h-4 w-4" /></Button></span></div>)}</div>; }
 function RepeatSection({ addLabel, children, description, onAdd, title }: { addLabel: string; children: ReactNode; description: string; onAdd(): void; title: string }) { return <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 text-sm text-muted-foreground">{description}</p><div className="mt-6 space-y-4">{children}</div><Button className="mt-4" variant="outline" onClick={onAdd}><Plus className="mr-2 h-4 w-4" />{addLabel}</Button></div>; }
-function Entry({ children, onRemove, title }: { children: ReactNode; onRemove(): void; title: string }) { return <article className="rounded-xl border border-border bg-workspace-inset p-4"><header className="mb-4 flex items-center justify-between"><h3 className="font-medium">{title}</h3><Button aria-label={`Remove ${title}`} size="icon" variant="ghost" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button></header>{children}</article>; }
+function Entry({ children, count, index, onMove, onRemove, title }: { children: ReactNode; count: number; index: number; onMove(direction: "up" | "down"): void; onRemove(): void; title: string }) { return <article className="rounded-xl border border-border bg-workspace-inset p-4"><header className="mb-4 flex items-center justify-between gap-2"><h3 className="font-medium">{title}</h3><span className="flex"><Button aria-label={`Move ${title} up`} disabled={index === 0} size="icon" variant="ghost" onClick={() => onMove("up")}><ArrowUp className="h-4 w-4" /></Button><Button aria-label={`Move ${title} down`} disabled={index === count - 1} size="icon" variant="ghost" onClick={() => onMove("down")}><ArrowDown className="h-4 w-4" /></Button><Button aria-label={`Remove ${title}`} size="icon" variant="ghost" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button></span></header>{children}</article>; }
 function Field({ children, className = "", label }: { children: ReactNode; className?: string; label: string }) { return <div className={`space-y-2 ${className}`}><Label>{label}</Label>{children}</div>; }

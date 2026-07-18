@@ -4,12 +4,13 @@ from collections.abc import Callable, Generator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
-from pathlib import PurePath
+from pathlib import Path, PurePath
+import uuid
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
-from app.db.models import User
+from app.db.models import NexusResumeFile, User
 from app.platform.approvals import InvalidApprovalDecision
 from app.platform.persistence import (
     IdempotencyConflict,
@@ -28,6 +29,7 @@ from app.studios.career.api.contracts import (
     ParsedRoleResponse,
     RoleCreateRequest,
     SourceIngestionRequest,
+    TailoringPrepareRequest,
 )
 from app.studios.career.extraction import extract_resume_source, parse_job_description
 from app.studios.career.integrations import score_stored_resume, store_resume_source
@@ -89,18 +91,80 @@ def create_career_router(
         app: CareerApplicationService = Depends(service),
     ):
         filename = file.filename or ""
+        suffix = PurePath(filename).suffix.lower()
         if filename != PurePath(filename).name or ".." in filename or not validate_file_extension(filename, [".pdf", ".doc", ".docx", ".txt"]):
             raise HTTPException(status_code=400, detail="Upload a PDF, DOC, DOCX, or TXT resume with a safe filename")
+        allowed_media_types = {
+            ".pdf": {"application/pdf"},
+            ".doc": {"application/msword", "application/octet-stream"},
+            ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/octet-stream"},
+            ".txt": {"text/plain", "application/octet-stream"},
+        }
+        media_type = (file.content_type or "application/octet-stream").lower()
+        if media_type not in allowed_media_types[suffix]:
+            raise HTTPException(status_code=400, detail=f"The declared media type does not match a {suffix} resume")
         content = await file.read()
         if not content.strip():
             raise HTTPException(status_code=400, detail="Resume file is empty")
         if not validate_file_size(len(content), 10):
             raise HTTPException(status_code=413, detail="Resume file exceeds the 10 MB limit")
         try:
-            extracted = extract_resume_source(filename, content)
+            extracted = extract_resume_source(
+                filename,
+                content,
+                source_id=f"source-{app.owner_id}-{uuid.uuid4().hex}",
+            )
             await file.seek(0)
-            resume = await store_resume_source(session=app.session, owner_id=app.owner_id, file=file)
             ingested = _translate(lambda: app.ingest_claims(filename=filename, media_type=file.content_type or "application/octet-stream", claims=extracted.claims))
+            resume = await store_resume_source(session=app.session, owner_id=app.owner_id, file=file)
+            return {
+                **ingested.model_dump(mode="json"),
+                "resume": {
+                    "resume_id": resume.resume_id,
+                    "filename": resume.filename,
+                    "status": resume.status,
+                },
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/sources/resumes/{resume_id}", status_code=status.HTTP_201_CREATED)
+    def ingest_stored_resume(
+        resume_id: str,
+        app: CareerApplicationService = Depends(service),
+    ):
+        resume = (
+            app.session.query(NexusResumeFile)
+            .filter(
+                NexusResumeFile.resume_id == resume_id,
+                NexusResumeFile.user_id == app.owner_id,
+            )
+            .first()
+        )
+        if resume is None:
+            raise HTTPException(status_code=404, detail="resume not found")
+        path = Path(resume.filepath)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="stored resume file is unavailable")
+        content = path.read_bytes()
+        try:
+            extracted = extract_resume_source(
+                resume.filename,
+                content,
+                source_id=f"source-{app.owner_id}-{uuid.uuid4().hex}",
+            )
+            ingested = _translate(
+                lambda: app.ingest_claims(
+                    filename=resume.filename,
+                    media_type={
+                        ".pdf": "application/pdf",
+                        ".doc": "application/msword",
+                        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        ".txt": "text/plain",
+                    }.get(PurePath(resume.filename).suffix.lower(), "application/octet-stream"),
+                    claims=extracted.claims,
+                )
+            )
             return {
                 **ingested.model_dump(mode="json"),
                 "resume": {
@@ -156,6 +220,23 @@ def create_career_router(
             resume_data=analysis.resume_data,
             created_at=analysis.created_at.isoformat() if analysis.created_at else "",
         )
+
+    @router.post("/tailoring/prepare", status_code=status.HTTP_201_CREATED)
+    def prepare_tailoring(
+        request: TailoringPrepareRequest,
+        app: CareerApplicationService = Depends(service),
+    ):
+        try:
+            title, requirements = parse_job_description(request.job_description)
+            return _translate(
+                lambda: app.prepare_tailoring(
+                    source_id=request.source_id,
+                    title=title,
+                    requirements=requirements,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.get("/roles/{role_id}")
     def get_role(

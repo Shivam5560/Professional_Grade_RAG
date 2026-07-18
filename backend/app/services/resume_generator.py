@@ -58,6 +58,18 @@ class LatexResumeGenerator:
             out = out.replace(char, esc)
         return out
 
+    @staticmethod
+    def _escape_url(value: Any) -> str:
+        url = str(value or "").strip()
+        if not url or any(char in url for char in ("\r", "\n", "\x00")):
+            return ""
+        if not url.startswith(("https://", "http://", "mailto:")):
+            url = f"https://{url}"
+        url = url.replace("\\", "%5C").replace("{", "%7B").replace("}", "%7D")
+        for char, escaped in (("%", r"\%"), ("#", r"\#"), ("&", r"\&"), ("_", r"\_"), ("$", r"\$"), ("^", "%5E"), ("~", "%7E")):
+            url = url.replace(char, escaped)
+        return url[:2000]
+
     # ─── Template ────────────────────────────────────────────────
 
     TEMPLATE = r"""
@@ -141,13 +153,13 @@ class LatexResumeGenerator:
         second_parts: List[str] = []
         if linkedin:
             clean = linkedin.replace("https://", "").replace("http://", "").replace("www.", "")
-            second_parts.append(f"\\href{{{linkedin}}}{{\\underline{{{clean}}}}}")
+            second_parts.append(f"\\href{{{self._escape_url(linkedin)}}}{{\\underline{{{self._escape(clean)}}}}}")
         if github:
             clean = github.replace("https://", "").replace("http://", "")
-            second_parts.append(f"\\href{{{github}}}{{\\underline{{{clean}}}}}")
+            second_parts.append(f"\\href{{{self._escape_url(github)}}}{{\\underline{{{self._escape(clean)}}}}}")
         if portfolio:
             clean = portfolio.replace("https://", "").replace("http://", "").replace("www.", "")
-            second_parts.append(f"\\href{{{portfolio}}}{{\\underline{{{clean}}}}}")
+            second_parts.append(f"\\href{{{self._escape_url(portfolio)}}}{{\\underline{{{self._escape(clean)}}}}}")
         if second_parts:
             return f"{first} \\\\ " + " $|$\n    ".join(second_parts)
         return first
@@ -201,7 +213,7 @@ class LatexResumeGenerator:
             link = proj.get("link", "")
             heading = f"\\textbf{{{title}}}"
             if link:
-                heading = f"\\href{{{link}}}{{{heading}}}"
+                heading = f"\\href{{{self._escape_url(link)}}}{{{heading}}}"
             out += f"      \\resumeProjectHeading\n        {{{heading}}}{{{dates}}} \n      \\resumeItemListStart\n"
             descs = proj.get("descriptions", proj.get("description", []))
             if isinstance(descs, str):

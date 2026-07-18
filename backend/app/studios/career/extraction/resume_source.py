@@ -130,9 +130,9 @@ def _claims_from_resume(source_id: str, raw_text: str, data: dict[str, Any]) -> 
     return tuple(claims[:200])
 
 
-def extract_resume_source(filename: str, content: bytes) -> ExtractedResumeSource:
+def extract_resume_source(filename: str, content: bytes, *, source_id: str | None = None) -> ExtractedResumeSource:
     suffix = Path(filename).suffix.lower()
-    source_id = f"source-{hashlib.sha256(content).hexdigest()[:24]}"
+    source_id = source_id or f"source-{hashlib.sha256(content).hexdigest()[:24]}"
     temporary_path = ""
     try:
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
