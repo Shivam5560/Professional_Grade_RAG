@@ -3,6 +3,11 @@ pipeline {
 
     parameters {
         string(
+            name: 'GIT_REPOSITORY',
+            defaultValue: 'https://github.com/Shivam5560/Professional_Grade_RAG.git',
+            description: 'Read-only Git repository URL'
+        )
+        string(
             name: 'GIT_BRANCH',
             defaultValue: 'enhancements',
             description: 'Git branch to verify and package'
@@ -10,7 +15,6 @@ pipeline {
     }
 
     environment {
-        REPO_URL = 'https://github.com/Shivam5560/Professional_Grade_RAG.git'
         PIP_DISABLE_PIP_VERSION_CHECK = '1'
     }
 
@@ -24,8 +28,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                git url: "${REPO_URL}", branch: "${params.GIT_BRANCH}"
+                git url: "${params.GIT_REPOSITORY}", branch: "${params.GIT_BRANCH}"
                 script {
+                    env.REPO_URL = params.GIT_REPOSITORY
                     env.SOURCE_COMMIT = sh(
                         script: 'git rev-parse HEAD',
                         returnStdout: true

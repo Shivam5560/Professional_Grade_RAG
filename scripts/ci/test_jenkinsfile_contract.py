@@ -13,7 +13,12 @@ class JenkinsfileContractTest(unittest.TestCase):
 
     def test_defaults_to_enhancements_and_checks_out_requested_branch(self) -> None:
         self.assertIn("defaultValue: 'enhancements'", self.pipeline)
+        self.assertIn(
+            "defaultValue: 'https://github.com/Shivam5560/Professional_Grade_RAG.git'",
+            self.pipeline,
+        )
         self.assertIn("params.GIT_BRANCH", self.pipeline)
+        self.assertIn("params.GIT_REPOSITORY", self.pipeline)
         self.assertNotIn("branch: 'main'", self.pipeline)
 
     def test_pipeline_never_pushes_repository_changes(self) -> None:
