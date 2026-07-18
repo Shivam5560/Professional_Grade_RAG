@@ -87,6 +87,11 @@ export interface CareerSourceIngestionResponseWire {
   claims: CareerClaimRevisionWire[];
 }
 
+export interface ParsedRoleWire {
+  title: string;
+  requirements: RoleRequirementWire[];
+}
+
 export interface RoleRequirementWire {
   id: string;
   priority: "required" | "preferred";
@@ -278,10 +283,12 @@ export interface CareerPublicationResponseWire {
 export class CareerStudioClient extends StudioHttpClient {
   constructor(options: StudioClientOptions = {}) { super("/api/v2/career", options); }
   createSource(payload: StructuredCareerSource): Promise<CareerSourceIngestionResponseWire> { return this.request("/sources", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
+  uploadResume(file: File): Promise<CareerSourceIngestionResponseWire> { const body = new FormData(); body.append("file", file); return this.request("/sources/upload", { method: "POST", body }); }
   getSource(sourceId: string): Promise<CareerSourceWire> { return this.request(`/sources/${encodeURIComponent(sourceId)}`); }
   decideClaim(claimId: string, action: "verify" | "reject" | "revise", replacement?: unknown): Promise<CareerClaimRevisionWire> { return this.request(`/claims/${encodeURIComponent(claimId)}/decisions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...(replacement ? { replacement } : {}) }) }); }
   verifyClaim(claimId: string): Promise<CareerClaimRevisionWire> { return this.decideClaim(claimId, "verify"); }
   createRole(payload: StructuredRoleInput): Promise<CareerRoleWire> { return this.request("/roles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
+  parseRole(jobDescription: string): Promise<ParsedRoleWire> { return this.request("/roles/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ job_description: jobDescription }) }); }
   getRole(roleId: string): Promise<CareerRoleWire> { return this.request(`/roles/${encodeURIComponent(roleId)}`); }
   createMatch(payload: { match_id: string; role_id: string; candidate_edges: CandidateEdgeInput[] }): Promise<CareerMatchWire> { return this.request("/matches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
   getMatch(matchId: string): Promise<CareerMatchWire> { return this.request(`/matches/${encodeURIComponent(matchId)}`); }
