@@ -7,10 +7,24 @@ import { CareerWorkspace } from "@/components/studios/career/CareerWorkspace";
 import { StudioPanel, StatusPill } from "@/components/studios/StudioPrimitives";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { careerStudioClient } from "@/lib/studios/career/client";
+import {
+  careerStudioClient,
+  type ApprovalRequestWire,
+  type CareerClaimRevisionWire,
+  type CareerMatchResultWire,
+  type ResumeDraftWire,
+  type RoleRequirementWire,
+} from "@/lib/studios/career/client";
 import { careerWorkspaceReducer, initialCareerWorkspace } from "@/lib/studios/career/reducer";
-import type { CareerClaim, CareerProfile } from "@/lib/studios/career/types";
-import type { CandidateEdgeInput } from "@/lib/studios/career/types";
+import type {
+  CandidateEdgeInput,
+  CareerApproval,
+  CareerClaim,
+  CareerDraft,
+  CareerGap,
+  RequirementMatch,
+  RoleRequirement,
+} from "@/lib/studios/career/types";
 
 const stages = ["sources", "requirements", "coverage", "draft", "approve"] as const;
 
@@ -79,35 +93,35 @@ export default function CareerStudioPage() {
   </PageShell>;
 }
 
-function normalizeClaimRevisions(revisions: any[]): CareerClaim[] {
-  return revisions.map((revision: any) => {
-    const claim = revision.claim ?? revision;
+function normalizeClaimRevisions(revisions: CareerClaimRevisionWire[]): CareerClaim[] {
+  return revisions.map((revision) => {
+    const claim = revision.claim;
     return {
     id: claim.id,
-    subject: typeof claim.subject === "string" ? claim.subject : claim.subject?.label ?? claim.subject?.id ?? "Career evidence",
+    subject: claim.subject.label,
     predicate: claim.predicate,
-    value: typeof claim.value === "string" ? claim.value : String(claim.object?.value ?? claim.value ?? ""),
-    status: claim.status ?? claim.verification_status ?? "inferred",
-    confidence: claim.confidence ?? 0,
-    source_label: claim.source_label ?? claim.source_spans?.[0]?.locator ?? "Source evidence",
-    source_spans: claim.source_spans,
+    value: String(claim.object.value),
+    status: claim.verification_status,
+    confidence: claim.confidence,
+    source_label: claim.source_spans[0]?.locator ?? "Source evidence",
+    source_spans: claim.source_spans.map((span) => span.locator),
     };
   });
 }
 
-function normalizeRequirements(requirements: any[]) { return requirements.map((item) => ({ id: item.id, text: item.text ?? item.description, kind: item.kind ?? (item.priority === "required" ? "mandatory" : "preferred"), confidence: item.confidence, source_span: item.source_span?.exact_text })); }
+function normalizeRequirements(requirements: RoleRequirementWire[]): RoleRequirement[] { return requirements.map((item) => ({ id: item.id, text: item.description, kind: item.priority === "required" ? "mandatory" : "preferred", confidence: item.confidence, source_span: item.source_span.exact_text })); }
 
-function normalizeMatch(result: any) {
-  const selected = result?.selected_matches ?? [];
-  const unmatched = result?.unmatched_requirements ?? [];
+function normalizeMatch(result: CareerMatchResultWire): { matches: RequirementMatch[]; gaps: CareerGap[] } {
+  const selected = result.selected_matches;
+  const unmatched = result.unmatched_requirements;
   return {
-    matches: selected.map((item: any) => ({ requirement_id: item.requirement_id, claim_id: item.claim_id, weight: item.score, rationale: `${item.strength} evidence match${item.uncertain ? " · uncertain" : ""}` })),
-    gaps: unmatched.map((item: any) => ({ requirement_id: item.id, text: item.description, strategy: "Keep visible as an unsupported requirement; do not fabricate evidence." })),
+    matches: selected.map((item) => ({ requirement_id: item.requirement_id, claim_id: item.claim_id, weight: item.score, rationale: `${item.strength} evidence match${item.uncertain ? " · uncertain" : ""}` })),
+    gaps: unmatched.map((item) => ({ requirement_id: item.id, text: item.description, strategy: "Keep visible as an unsupported requirement; do not fabricate evidence." })),
   };
 }
 
-function normalizeDraft(draft: any, approval: any) { return { id: draft.id, revision: 1, status: approval ? "awaiting_approval" as const : "truth_review" as const, bullets: (draft.bullets ?? []).map((bullet: any, index: number) => ({ id: `${draft.id}:${index}`, text: bullet.after_text, source_claim_ids: bullet.source_claim_ids ?? [], transformation: bullet.transformation, added_keywords: (bullet.added_keywords ?? []).map((item: any) => item.keyword) })), truth_issues: [] }; }
+function normalizeDraft(draft: ResumeDraftWire, approval: ApprovalRequestWire | null): CareerDraft { return { id: draft.id, revision: 1, status: approval ? "awaiting_approval" as const : "truth_review" as const, bullets: draft.bullets.map((bullet, index) => ({ id: `${draft.id}:${index}`, text: bullet.after_text, source_claim_ids: bullet.source_claim_ids, transformation: bullet.transformation, added_keywords: bullet.added_keywords.map((item) => item.keyword) })), truth_issues: [] }; }
 
-function normalizeApproval(approval: any) { return { id: approval.id, type: "final_publication" as const, status: approval.status === "pending" ? "pending" as const : approval.status }; }
+function normalizeApproval(approval: ApprovalRequestWire): CareerApproval { return { id: approval.id, type: "final_publication", status: approval.status }; }
 
 function message(reason: unknown) { return reason instanceof Error ? reason.message : "Career Studio request failed"; }

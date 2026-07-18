@@ -10,7 +10,35 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { dataAnalystClient } from "@/lib/studios/data-analyst/client";
 import { analysisWorkspaceReducer, initialAnalysisWorkspace } from "@/lib/studios/data-analyst/reducer";
-import type { Computation, Finding, PlanStep } from "@/lib/studios/data-analyst/types";
+import type {
+  ColumnProfile,
+  Computation,
+  DatasetProfile,
+  Finding,
+  PlanStep,
+  StudioRunState,
+} from "@/lib/studios/data-analyst/types";
+
+type NormalizableColumnProfile = Omit<ColumnProfile, "inferred_type"> & {
+  inferred_type?: string;
+  semantic_type?: string;
+  dtype?: string;
+};
+
+type NormalizableDatasetProfile = Omit<DatasetProfile, "columns" | "warnings"> & {
+  columns: NormalizableColumnProfile[];
+  warnings?: string[];
+};
+
+type NormalizablePlanStep = Omit<PlanStep, "title" | "state" | "depends_on"> & {
+  title?: string;
+  state?: PlanStep["state"];
+  depends_on?: string[];
+  rationale?: string;
+  prerequisite_step_ids?: string[];
+};
+
+type NormalizablePlan = { steps?: NormalizablePlanStep[] } | NormalizablePlanStep[];
 
 export default function AnalysisStudioPage() {
   const [state, dispatch] = useReducer(analysisWorkspaceReducer, initialAnalysisWorkspace);
@@ -65,11 +93,25 @@ export default function AnalysisStudioPage() {
   </PageShell>;
 }
 
-function normalizeProfile(profile: any) {
-  return { ...profile, warnings: profile.warnings ?? [], columns: (profile.columns ?? []).map((column: any) => ({ ...column, inferred_type: column.inferred_type ?? column.semantic_type ?? column.dtype ?? "unknown" })) };
+function normalizeProfile(profile: NormalizableDatasetProfile): DatasetProfile {
+  return {
+    ...profile,
+    warnings: profile.warnings ?? [],
+    columns: profile.columns.map((column) => ({
+      ...column,
+      inferred_type: column.inferred_type ?? column.semantic_type ?? column.dtype ?? "unknown",
+    })),
+  };
 }
 
-function normalizePlan(value: any, state: string): PlanStep[] {
+function normalizePlan(value: NormalizablePlan | undefined, state: StudioRunState): PlanStep[] {
   const steps = Array.isArray(value) ? value : value?.steps ?? [];
-  return steps.map((step: any) => ({ id: step.id, method_id: step.method_id, title: step.title ?? step.rationale ?? step.method_id, state: step.state ?? (state === "succeeded" ? "completed" : "pending"), assumptions: step.assumptions ?? [], depends_on: step.depends_on ?? step.prerequisite_step_ids ?? [] }));
+  return steps.map((step) => ({
+    id: step.id,
+    method_id: step.method_id,
+    title: step.title ?? step.rationale ?? step.method_id,
+    state: step.state ?? (state === "succeeded" ? "completed" : "pending"),
+    assumptions: step.assumptions ?? [],
+    depends_on: step.depends_on ?? step.prerequisite_step_ids ?? [],
+  }));
 }

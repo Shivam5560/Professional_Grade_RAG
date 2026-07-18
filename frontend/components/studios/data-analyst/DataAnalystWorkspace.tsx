@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Braces, Database, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Braces, ShieldCheck } from "lucide-react";
 import { EvidenceTag, EmptyStudioState, StatusPill, StudioPanel } from "../StudioPrimitives";
 import type { Computation, DatasetProfile, Finding, PlanStep, StudioRun } from "@/lib/studios/data-analyst/types";
 

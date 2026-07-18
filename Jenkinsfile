@@ -58,7 +58,7 @@ pipeline {
                 dir('frontend') {
                     sh '''
                         npm ci
-                        npm test -- --pool=forks --maxWorkers=1 --minWorkers=1
+                        npm test -- --pool=forks --maxWorkers=1
                         npm run typecheck
                         npm run build
                     '''

@@ -32,6 +32,7 @@ class JenkinsfileContractTest(unittest.TestCase):
             self.pipeline.index(f"stage('{stage}')") for stage in required_stages
         ]
         self.assertEqual(stage_positions, sorted(stage_positions))
+        self.assertNotIn("--minWorkers", self.pipeline)
 
     def test_pipeline_archives_versioned_images_with_checksums(self) -> None:
         self.assertIn("docker save", self.pipeline)
