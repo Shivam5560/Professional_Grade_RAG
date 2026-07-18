@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import AuthPage from '@/app/auth/page';
 import { AuraSqlPage } from '@/components/aurasql/AuraSqlPage';
+import { DeleteAuraSqlResourceDialog } from '@/components/aurasql/DeleteAuraSqlResourceDialog';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -17,6 +18,24 @@ export default function AuraSqlContextsPage() {
   const [contexts, setContexts] = useState<AuraSqlContext[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AuraSqlContext | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const remove = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiClient.deleteAuraSqlContext(pendingDelete.id);
+      setContexts((current) => current.filter((item) => item.id !== pendingDelete.id));
+      setPendingDelete(null);
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Failed to delete context');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -33,11 +52,12 @@ export default function AuraSqlContextsPage() {
           {contexts.length === 0 ? <p className="py-16 text-center text-sm text-muted-foreground">No saved contexts yet.</p> : contexts.map((context) => (
             <article key={context.id} className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0"><h2 className="font-medium">{context.name}</h2><p className="mt-1 truncate font-mono text-xs text-muted-foreground">{context.table_names.join(' · ')}</p></div>
-              <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?context=${context.id}`)}>Use context</Button><Button size="icon" variant="ghost" aria-label={`Delete ${context.name}`} onClick={async () => { if (!window.confirm(`Delete ${context.name}?`)) return; await apiClient.deleteAuraSqlContext(context.id); setContexts((current) => current.filter((item) => item.id !== context.id)); }}><Trash2 className="h-4 w-4" /></Button></div>
+              <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => router.push(`/aurasql/query?context=${context.id}`)}>Use context</Button><Button size="icon" variant="ghost" aria-label={`Delete ${context.name}`} onClick={() => { setDeleteError(null); setPendingDelete(context); }}><Trash2 className="h-4 w-4" /></Button></div>
             </article>
           ))}
         </div>
       )}
+      <DeleteAuraSqlResourceDialog deleting={deleting} error={deleteError} onCancel={() => setPendingDelete(null)} onConfirm={remove} open={Boolean(pendingDelete)} resourceName={pendingDelete?.name ?? ''} resourceType="context" />
     </AuraSqlPage>
   );
 }

@@ -197,7 +197,7 @@ function NewAuraSqlContextPageContent() {
                 {error && <p className="text-sm text-red-500">{error}</p>}
 
                 <div className="flex justify-between gap-3">
-                  <Button type="button" variant="ghost" onClick={() => router.back()}>
+                  <Button type="button" variant="ghost" data-destination="/aurasql/contexts" onClick={() => router.push('/aurasql/contexts')}>
                     Back
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => router.push('/aurasql')}>

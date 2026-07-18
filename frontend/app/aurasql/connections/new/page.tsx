@@ -192,7 +192,7 @@ export default function NewAuraSqlConnectionPage() {
                 {error && <p className="text-sm text-red-500">{error}</p>}
 
                 <div className="flex justify-between gap-3">
-                  <Button type="button" variant="ghost" onClick={() => router.back()}>
+                  <Button type="button" variant="ghost" data-destination="/aurasql/connections" onClick={() => router.push('/aurasql/connections')}>
                     Back
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => router.push('/aurasql')}>

@@ -4,13 +4,14 @@ export const dynamic = 'force-dynamic';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { AuraSqlResultViewport } from '@/components/aurasql/AuraSqlResultViewport';
+import { ContextNameDialog } from '@/components/aurasql/ContextNameDialog';
 import { CanvasHeader } from '@/components/shell/CanvasHeader';
 import { ContextRibbon } from '@/components/shell/ContextRibbon';
 import { FocusCanvas } from '@/components/shell/FocusCanvas';
@@ -105,6 +106,7 @@ const highlightSql = (sql: string, dialect: string) =>
   Prism.highlight(formatSql(sql, dialect), Prism.languages.sql, 'sql');
 
 function AuraSqlQueryPageContent() {
+  const router = useRouter();
   const params = useSearchParams();
   const { isAuthenticated } = useAuthStore();
   const { toast } = useToast();
@@ -146,6 +148,8 @@ function AuraSqlQueryPageContent() {
   const [loadingTables, setLoadingTables] = useState(false);
   const [loadingContext, setLoadingContext] = useState(false);
   const [savingContext, setSavingContext] = useState(false);
+  const [contextNameOpen, setContextNameOpen] = useState(false);
+  const [contextSaveError, setContextSaveError] = useState<string | null>(null);
   const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [executingMessageId, setExecutingMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -401,11 +405,10 @@ function AuraSqlQueryPageContent() {
     }
   };
 
-  const handleSaveContext = async () => {
+  const handleSaveContext = async (name: string) => {
     if (!selectedConnection || selectedTables.size === 0) return;
-    const name = window.prompt('Name this context', 'New context');
-    if (!name) return;
     setSavingContext(true);
+    setContextSaveError(null);
     setError(null);
     try {
       const context = await apiClient.createAuraSqlContext({
@@ -416,8 +419,11 @@ function AuraSqlQueryPageContent() {
       setContexts((prev) => [context, ...prev]);
       setSelectedContext(context.id);
       setSessionContextId(null);
+      setContextNameOpen(false);
     } catch (err) {
-      reportError(err instanceof Error ? err.message : 'Failed to save context');
+      const message = err instanceof Error ? err.message : 'Failed to save context';
+      setContextSaveError(message);
+      reportError(message);
     } finally {
       setSavingContext(false);
     }
@@ -883,7 +889,7 @@ function AuraSqlQueryPageContent() {
               <Database className="mx-auto h-7 w-7 text-muted-foreground" />
               <h2 className="mt-4 text-lg font-semibold">Connect a database first</h2>
               <p className="mt-2 text-sm text-muted-foreground">AuraSQL keeps credentials in your existing connection profile and uses its schema to ground every query.</p>
-              <Button className="mt-5" onClick={() => window.location.assign('/aurasql/connections/new')}>Create connection</Button>
+              <Button className="mt-5" onClick={() => router.push('/aurasql/connections/new')}>Create connection</Button>
             </div>
           </section>
         ) : (
@@ -967,11 +973,20 @@ function AuraSqlQueryPageContent() {
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={handleUseSessionContext} disabled={selectedTables.size === 0 || savingContext}>Use for session</Button>
-              <Button size="sm" onClick={selectedContextRecord ? handleUpdateContext : handleSaveContext} disabled={selectedTables.size === 0 || savingContext}>{selectedContextRecord ? 'Update context' : 'Save context'}</Button>
+              <Button size="sm" onClick={selectedContextRecord ? handleUpdateContext : () => setContextNameOpen(true)} disabled={selectedTables.size === 0 || savingContext}>{selectedContextRecord ? 'Update context' : 'Save context'}</Button>
             </div>
           </section>
         </div>
       </Inspector>
+      <ContextNameDialog
+        connectionLabel={activeConnectionRecord?.name ?? ''}
+        error={contextSaveError}
+        onCancel={() => { if (!savingContext) { setContextNameOpen(false); setContextSaveError(null); } }}
+        onSave={handleSaveContext}
+        open={contextNameOpen}
+        saving={savingContext}
+        selectedTables={Array.from(selectedTables)}
+      />
     </FocusCanvas>
   );
 
@@ -1539,7 +1554,7 @@ function AuraSqlQueryPageContent() {
                                   <Button
                                     size="icon"
                                     variant="ghost"
-                                    onClick={handleSaveContext}
+                                    onClick={() => setContextNameOpen(true)}
                                     disabled={selectedTables.size === 0 || savingContext}
                                     aria-label="Save context"
                                     title="Save context"
