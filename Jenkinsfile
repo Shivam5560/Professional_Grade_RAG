@@ -1,75 +1,136 @@
 pipeline {
     agent any
 
+    parameters {
+        string(
+            name: 'GIT_BRANCH',
+            defaultValue: 'enhancements',
+            description: 'Git branch to verify and package'
+        )
+    }
+
     environment {
-        // The ID of the credential stored in Jenkins (e.g., Username with password / Personal Access Token)
-        GITHUB_CREDENTIALS_ID = 'github-credentials-id'
         REPO_URL = 'https://github.com/Shivam5560/Professional_Grade_RAG.git'
+        PIP_DISABLE_PIP_VERSION_CHECK = '1'
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 90, unit: 'MINUTES')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Check out the code securely using Jenkins credentials
-                git credentialsId: "${GITHUB_CREDENTIALS_ID}", url: "${REPO_URL}", branch: 'main'
+                deleteDir()
+                git url: "${REPO_URL}", branch: "${params.GIT_BRANCH}"
+                script {
+                    env.SOURCE_COMMIT = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+                    def safeBranch = params.GIT_BRANCH.replaceAll(/[^A-Za-z0-9_.-]/, '-')
+                    env.IMAGE_TAG = "${safeBranch}-${env.SOURCE_COMMIT.take(12)}-${env.BUILD_NUMBER}"
+                }
             }
         }
 
-        stage('Install Backend Dependencies') {
+        stage('Backend Tests') {
             steps {
                 dir('backend') {
-                    sh 'python3 -m venv venv'
-                    sh '. venv/bin/activate && pip install -r requirements.txt'
-                }
-            }
-        }
-
-        stage('Install Frontend Dependencies') {
-            steps {
-                dir('frontend') {
-                    sh 'npm install'
-                }
-            }
-        }
-
-        stage('Build Frontend') {
-            steps {
-                dir('frontend') {
-                    sh 'npm run build'
-                }
-            }
-        }
-
-        stage('Git Push Example') {
-            // This stage demonstrates how you can securely push changes back to GitHub
-            // using the credentials injected by Jenkins, avoiding auth prompts.
-            steps {
-                withCredentials([usernamePassword(credentialsId: "${GITHUB_CREDENTIALS_ID}", passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
                     sh '''
-                        # Configure Git identity for the Jenkins bot
-                        git config user.name "Jenkins Build Bot"
-                        git config user.email "jenkins@localhost"
-                        
-                        # Example: If you need to make changes during the build and push them:
-                        # git commit -am "chore: automated update from Jenkins"
-                        
-                        # Push changes back to the remote branch securely using injected credentials
-                        git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Shivam5560/Professional_Grade_RAG.git HEAD:main
+                        python3 -m venv .jenkins-venv
+                        . .jenkins-venv/bin/activate
+                        python -m pip install -r requirements.txt pytest
+                        PYTHONPATH=. python -m pytest \
+                            tests/platform \
+                            tests/studios/data_analyst \
+                            tests/studios/career \
+                            -q
                     '''
                 }
             }
         }
+
+        stage('Frontend Tests and Build') {
+            steps {
+                dir('frontend') {
+                    sh '''
+                        npm ci
+                        npm test -- --pool=forks --maxWorkers=1 --minWorkers=1
+                        npm run typecheck
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('MCP Build') {
+            steps {
+                dir('mcp-server') {
+                    sh '''
+                        npm ci
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                sh '''
+                    docker build \
+                        --label "org.opencontainers.image.revision=${SOURCE_COMMIT}" \
+                        --label "org.opencontainers.image.source=${REPO_URL}" \
+                        --tag "nexusmind-backend:${IMAGE_TAG}" \
+                        backend
+                    docker build \
+                        --label "org.opencontainers.image.revision=${SOURCE_COMMIT}" \
+                        --label "org.opencontainers.image.source=${REPO_URL}" \
+                        --tag "nexusmind-frontend:${IMAGE_TAG}" \
+                        frontend
+                '''
+            }
+        }
+
+        stage('Package Deployment Artifacts') {
+            steps {
+                sh '''
+                    mkdir -p artifacts
+                    docker save "nexusmind-backend:${IMAGE_TAG}" \
+                        | gzip -9 > "artifacts/nexusmind-backend-${IMAGE_TAG}.tar.gz"
+                    docker save "nexusmind-frontend:${IMAGE_TAG}" \
+                        | gzip -9 > "artifacts/nexusmind-frontend-${IMAGE_TAG}.tar.gz"
+                    tar -czf "artifacts/nexusmind-mcp-${IMAGE_TAG}.tar.gz" \
+                        -C mcp-server dist package.json package-lock.json
+                    sha256sum artifacts/*.tar.gz > artifacts/SHA256SUMS
+                    printf 'branch=%s\ncommit=%s\nimage_tag=%s\n' \
+                        "${GIT_BRANCH}" "${SOURCE_COMMIT}" "${IMAGE_TAG}" \
+                        > artifacts/BUILD_MANIFEST.txt
+                '''
+                archiveArtifacts artifacts: 'artifacts/*', fingerprint: true
+            }
+        }
     }
-    
+
     post {
         always {
-            cleanWs()
+            sh '''
+                if [ -n "${IMAGE_TAG:-}" ]; then
+                    docker image rm \
+                        "nexusmind-backend:${IMAGE_TAG}" \
+                        "nexusmind-frontend:${IMAGE_TAG}" \
+                        >/dev/null 2>&1 || true
+                fi
+            '''
+            cleanWs(deleteDirs: true)
         }
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Deployable artifacts created for ${params.GIT_BRANCH} at ${env.SOURCE_COMMIT}."
         }
         failure {
-            echo 'Pipeline failed. Please check the logs.'
+            echo 'Pipeline failed before deployable artifacts could be published.'
         }
     }
 }
