@@ -8,9 +8,9 @@ export function CareerWorkspace({ claims, requirements, matches, gaps, draft, ap
   const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
   const matchesByRequirement = new Map(matches.map((match) => [match.requirement_id, match]));
   const pendingFinal = approvals.some((approval) => approval.type === "final_publication" && approval.status === "pending");
-  return <div className="space-y-5">
-    <div className="grid gap-3 sm:grid-cols-4"><Summary label="Verified claims" value={claims.filter((claim) => claim.status === "verified").length} /><Summary label="Needs review" value={claims.filter((claim) => claim.status === "inferred" || claim.status === "disputed").length} /><Summary label="Requirements" value={requirements.length} /><Summary label="Truth issues" value={draft?.truth_issues.length ?? 0} critical={Boolean(draft?.truth_issues.some((issue) => issue.severity === "critical"))} /></div>
-    <div className="grid gap-5 xl:grid-cols-[0.9fr_1.15fr_1.2fr]">
+  return <div className="space-y-8">
+    <div className="grid grid-cols-2 gap-x-5 gap-y-4 border-b border-border/70 pb-6"><Summary label="Verified claims" value={claims.filter((claim) => claim.status === "verified").length} /><Summary label="Needs review" value={claims.filter((claim) => claim.status === "inferred" || claim.status === "disputed").length} /><Summary label="Requirements" value={requirements.length} /><Summary label="Truth issues" value={draft?.truth_issues.length ?? 0} critical={Boolean(draft?.truth_issues.some((issue) => issue.severity === "critical"))} /></div>
+    <div className="space-y-6">
       <div className="space-y-5">
         <StudioPanel title="Career evidence" description="Atomic claims tied to source spans">
           {claims.length ? <div className="space-y-2">{claims.map((claim) => <article className="rounded-lg border border-border p-3" key={claim.id}><div className="flex items-start justify-between gap-2"><EvidenceTag>{claim.id}</EvidenceTag><StatusPill state={claim.status} /></div><p className="mt-3 text-xs font-semibold">{claim.subject}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{claim.predicate}: {claim.value}</p><p className="mt-2 text-[10px] text-muted-foreground">{claim.source_label} · {Math.round(claim.confidence * 100)}%</p></article>)}</div> : <EmptyStudioState title="No career evidence" description="Upload a resume or supporting source to build a verified claim graph." />}
@@ -35,4 +35,4 @@ export function CareerWorkspace({ claims, requirements, matches, gaps, draft, ap
   </div>;
 }
 
-function Summary({ label, value, critical = false }: { label: string; value: number; critical?: boolean }) { return <div className={`rounded-xl border bg-card p-4 shadow-sm ${critical ? "border-destructive/30" : "border-border"}`}><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className={`mt-1 text-2xl font-semibold ${critical ? "text-destructive" : ""}`}>{value}</p></div>; }
+function Summary({ label, value, critical = false }: { label: string; value: number; critical?: boolean }) { return <div className={`border-l-2 pl-3 ${critical ? "border-destructive" : "border-border"}`}><p className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</p><p className={`mt-1 text-xl font-semibold ${critical ? "text-destructive" : ""}`}>{value}</p></div>; }

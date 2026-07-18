@@ -4,12 +4,11 @@
 
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageItem } from './MessageItem';
 import { Bot } from 'lucide-react';
 import { TypingIndicator } from './TypingIndicator';
-import { Badge } from '@/components/ui/badge';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore } from '@/lib/store';
 import type { Message, SourceReference } from '@/lib/types';
@@ -31,7 +30,6 @@ export function MessageList({
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuthStore();
-  const [activeCategory, setActiveCategory] = useState<string>('All');
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -60,145 +58,34 @@ export function MessageList({
     return 'there';
   }, [user?.full_name, user?.email]);
 
-  const categoryMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    promptSuggestions.forEach((item) => {
-      const title = item.title.toLowerCase();
-      if (title.includes('summarize') || title.includes('brief') || title.includes('recap')) {
-        map[item.title] = 'Summary';
-      } else if (title.includes('compare')) {
-        map[item.title] = 'Comparison';
-      } else if (title.includes('action') || title.includes('decision') || title.includes('timeline')) {
-        map[item.title] = 'Actions';
-      } else if (title.includes('risk') || title.includes('compliance') || title.includes('counterpoint')) {
-        map[item.title] = 'Risk';
-      } else if (title.includes('stakeholder') || title.includes('metrics')) {
-        map[item.title] = 'Stakeholders';
-      } else if (title.includes('faq') || title.includes('email')) {
-        map[item.title] = 'Comms';
-      } else {
-        map[item.title] = 'Other';
-      }
-    });
-    return map;
-  }, [promptSuggestions]);
-
-  const categories = useMemo(() => {
-    const set = new Set<string>(['All']);
-    promptSuggestions.forEach((item) => set.add(categoryMap[item.title] || 'Other'));
-    return Array.from(set);
-  }, [promptSuggestions, categoryMap]);
-
-  const categoryBadgeClass = (category: string, isActive: boolean) => {
-    const base = 'px-3 py-1 text-xs uppercase tracking-[0.2em] transition-colors';
-    if (category === 'All') {
-      return isActive
-        ? `${base} bg-foreground text-background`
-        : `${base} bg-card/80 text-foreground border-border/70 hover:bg-muted/60`;
-    }
-
-    const palette: Record<string, { active: string; idle: string }> = {
-      Summary: {
-        active: 'bg-emerald-500 text-white',
-        idle: 'bg-emerald-500/10 text-emerald-700 border-emerald-300/60 dark:text-emerald-200',
-      },
-      Comparison: {
-        active: 'bg-sky-500 text-white',
-        idle: 'bg-sky-500/10 text-sky-700 border-sky-300/60 dark:text-sky-200',
-      },
-      Actions: {
-        active: 'bg-amber-500 text-white',
-        idle: 'bg-amber-500/10 text-amber-700 border-amber-300/60 dark:text-amber-200',
-      },
-      Risk: {
-        active: 'bg-rose-500 text-white',
-        idle: 'bg-rose-500/10 text-rose-700 border-rose-300/60 dark:text-rose-200',
-      },
-      Stakeholders: {
-        active: 'bg-indigo-500 text-white',
-        idle: 'bg-indigo-500/10 text-indigo-700 border-indigo-300/60 dark:text-indigo-200',
-      },
-      Comms: {
-        active: 'bg-teal-500 text-white',
-        idle: 'bg-teal-500/10 text-teal-700 border-teal-300/60 dark:text-teal-200',
-      },
-      Other: {
-        active: 'bg-zinc-700 text-white',
-        idle: 'bg-zinc-500/10 text-zinc-600 border-zinc-300/60 dark:text-zinc-200',
-      },
-    };
-
-    const selected = palette[category] || palette.Other;
-    return `${base} ${isActive ? selected.active : selected.idle}`;
-  };
-
-  const filteredPrompts = useMemo(() => {
-    if (activeCategory === 'All') return promptSuggestions;
-    return promptSuggestions.filter((item) => categoryMap[item.title] === activeCategory);
-  }, [activeCategory, promptSuggestions, categoryMap]);
-
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="relative h-full overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 intro-sheen" />
-        <div className="pointer-events-none absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_top,hsl(var(--chart-1)/0.45),transparent_65%)] blur-3xl float-slow" />
-        <div className="pointer-events-none absolute -bottom-28 right-1/4 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_top,hsl(var(--chart-2)/0.45),transparent_70%)] blur-3xl float-slower" />
-        <div className="pointer-events-none absolute -top-10 right-8 h-48 w-48 rounded-full bg-[radial-gradient(circle_at_top,hsl(var(--chart-4)/0.4),transparent_70%)] blur-3xl float-slowest" />
-
-        <div className="relative z-10 flex h-full items-center justify-center p-6 md:p-10">
+      <div className="relative h-full overflow-y-auto">
+        <div className="relative z-10 flex min-h-full items-center justify-center p-6 md:p-10">
           <motion.div
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="w-full max-w-4xl"
+            className="w-full max-w-3xl"
           >
-            <div className="space-y-6">
+            <div className="space-y-8">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, ease: 'easeOut' }}
                 className="text-center"
               >
-                <div className="text-2xl md:text-3xl font-semibold text-foreground">
+                <div className="text-2xl font-semibold text-foreground md:text-3xl">
                   {greeting}, {displayName}
                 </div>
-                <div className="mt-2 text-base md:text-lg text-muted-foreground">
-                  How can I help you today?
+                <div className="mt-2 text-sm text-muted-foreground md:text-base">
+                  What would you like to understand from your evidence?
                 </div>
               </motion.div>
 
-              {categories.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                  className="flex flex-wrap items-center justify-center gap-2"
-                >
-                  {categories.map((category) => {
-                    const isActive = category === activeCategory;
-                    return (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() => setActiveCategory(category)}
-                        className="rounded-full"
-                      >
-                        <Badge
-                          className={categoryBadgeClass(category, isActive)}
-                          variant={isActive ? 'default' : 'outline'}
-                        >
-                          {category}
-                        </Badge>
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-
-              {filteredPrompts.length > 0 && (
-                <div className="max-h-[46vh] overflow-y-auto pr-1">
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    {filteredPrompts.map((chip, index) => (
+              {promptSuggestions.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                    {promptSuggestions.slice(0, 4).map((chip, index) => (
                     <motion.button
                       key={chip.title}
                       type="button"
@@ -206,18 +93,12 @@ export function MessageList({
                       initial={{ opacity: 0, y: 14, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.45, ease: 'easeOut', delay: index * 0.04 }}
-                      whileHover={{ y: -3, scale: 1.04 }}
-                      className="rounded-full"
+                      whileHover={{ y: -2 }}
+                      className="min-h-14 rounded-md border border-border/70 bg-background/65 px-4 py-3 text-left text-sm font-medium text-foreground backdrop-blur-sm transition-colors hover:bg-muted/70"
                     >
-                      <Badge
-                        variant="outline"
-                        className="px-5 py-2.5 text-sm md:text-base font-semibold bg-card/80 border-border/70 hover:bg-muted/60 hover:border-foreground/40 transition-all shadow-[0_14px_30px_-24px_rgba(0,0,0,0.5)]"
-                      >
-                        {chip.title}
-                      </Badge>
+                      {chip.title}
                     </motion.button>
                     ))}
-                  </div>
                 </div>
               )}
             </div>

@@ -5,14 +5,17 @@ export const dynamic = 'force-dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { AuraSqlSidebar } from '@/components/aurasql/AuraSqlSidebar';
 import { MessageInput } from '@/components/chat/MessageInput';
+import { AuraSqlResultViewport } from '@/components/aurasql/AuraSqlResultViewport';
+import { CanvasHeader } from '@/components/shell/CanvasHeader';
+import { ContextRibbon } from '@/components/shell/ContextRibbon';
+import { FocusCanvas } from '@/components/shell/FocusCanvas';
+import { Inspector } from '@/components/shell/Inspector';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { apiClient } from '@/lib/api';
 import { AuraSqlConnection, AuraSqlContext, AuraSqlExecuteResponse, AuraSqlSession } from '@/lib/types';
 import { useAuthStore } from '@/lib/store';
@@ -24,6 +27,7 @@ import { format as formatSqlWithLib } from 'sql-formatter';
 import type { SqlLanguage } from 'sql-formatter';
 import {
   AlertCircle,
+  ArrowRight,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -32,6 +36,7 @@ import {
   Download,
   Layers,
   Loader2,
+  MessageSquarePlus,
   Pencil,
   PlayCircle,
   RefreshCw,
@@ -40,6 +45,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+
+const RemovedLegacyNavigation = (_props: Record<string, unknown>) => null;
 
 type AuraSqlChatMessage = {
   id: string;
@@ -779,6 +786,195 @@ function AuraSqlQueryPageContent() {
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
+  const latestUserMessage = [...chatMessages].reverse().find((message) => message.role === 'user');
+  const latestSqlMessage = [...chatMessages].reverse().find(
+    (message) => message.role === 'assistant' && Boolean(message.sql)
+  );
+  const activeConnectionRecord = connections.find((connection) => connection.id === selectedConnection);
+  const activeStep = latestSqlMessage?.execution ? 3 : latestSqlMessage?.sql ? 2 : 1;
+  const detailsOpen = recsOpen || showTablesMenu;
+
+  return (
+    <FocusCanvas ariaLabel="AuraSQL query workspace" className="min-h-[calc(100svh-3rem)]">
+      <CanvasHeader
+        eyebrow="AuraSQL"
+        title="Ask the business. Inspect the truth."
+        description="Move from a plain-language question to reviewed SQL and an explorable result without leaving the canvas."
+        status={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            {activeConnectionRecord ? 'Connection ready' : 'Connection required'}
+          </span>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setShowTablesMenu(true)}>
+              <Table className="mr-2 h-4 w-4" />
+              Schema
+            </Button>
+            <Button variant="ghost" size="icon" aria-label="Start new query" title="Start new query" onClick={handleStartNewChat}>
+              <MessageSquarePlus className="h-4 w-4" />
+            </Button>
+          </>
+        }
+      />
+
+      <ContextRibbon label="Query context">
+        <label className="sr-only" htmlFor="aurasql-connection">Connection</label>
+        <select
+          id="aurasql-connection"
+          value={selectedConnection}
+          onChange={(event) => setSelectedConnection(event.target.value)}
+          className="h-8 max-w-56 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground"
+        >
+          {connections.length === 0 ? <option value="">No connection</option> : null}
+          {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.database}</option>)}
+        </select>
+        <label className="sr-only" htmlFor="aurasql-context">Context</label>
+        <select
+          id="aurasql-context"
+          value={selectedContext}
+          onChange={(event) => setSelectedContext(event.target.value)}
+          className="h-8 max-w-56 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground"
+        >
+          <option value="">Select context</option>
+          {connectionContexts.map((context) => <option key={context.id} value={context.id}>{context.name} · {context.table_names.length} tables</option>)}
+        </select>
+        <label className="sr-only" htmlFor="sql-output-dialect">SQL dialect</label>
+        <select id="sql-output-dialect" value={outputDialect} onChange={(event) => setOutputDialect(event.target.value)} className="h-8 rounded-md border border-border/70 bg-background/80 px-2 text-xs text-foreground">
+          {OUTPUT_DIALECT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </ContextRibbon>
+
+      <section aria-label="Query progress" className="grid grid-cols-3 border-b border-border/60 py-4">
+        {[
+          { number: 1, label: 'Ask' },
+          { number: 2, label: 'Review SQL' },
+          { number: 3, label: 'Explore results' },
+        ].map((step, index) => (
+          <div key={step.label} className="flex min-w-0 items-center">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold ${activeStep >= step.number ? 'border-foreground bg-foreground text-background' : 'border-border bg-background/60 text-muted-foreground'}`}>{step.number}</span>
+              <span className={`truncate text-xs font-medium ${activeStep >= step.number ? 'text-foreground' : 'text-muted-foreground'}`}>{step.label}</span>
+            </div>
+            {index < 2 ? <ArrowRight className="mx-2 h-3.5 w-3.5 shrink-0 text-muted-foreground sm:mx-4" /> : null}
+          </div>
+        ))}
+      </section>
+
+      <div className="flex flex-1 flex-col gap-5 py-5">
+        {(loading || loadingGenerate) ? (
+          <div className="flex min-h-24 items-center justify-center gap-3 border-y border-border/50 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {loading ? 'Preparing connections and context' : 'Drafting and validating SQL'}
+          </div>
+        ) : null}
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {connections.length === 0 && !loading ? (
+          <section className="grid min-h-64 place-items-center border-y border-border/60 bg-background/45 px-5 text-center backdrop-blur-sm">
+            <div className="max-w-sm">
+              <Database className="mx-auto h-7 w-7 text-muted-foreground" />
+              <h2 className="mt-4 text-lg font-semibold">Connect a database first</h2>
+              <p className="mt-2 text-sm text-muted-foreground">AuraSQL keeps credentials in your existing connection profile and uses its schema to ground every query.</p>
+              <Button className="mt-5" onClick={() => window.location.assign('/aurasql/connections/new')}>Create connection</Button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section aria-label="Ask a data question" className="mx-auto w-full max-w-4xl border-b border-border/60 pb-5">
+              {latestUserMessage ? <p className="mb-3 text-sm leading-6 text-muted-foreground"><span className="font-medium text-foreground">Current question:</span> {latestUserMessage.content}</p> : null}
+              <MessageInput
+                onSend={handleSendMessage}
+                disabled={loadingGenerate || !activeContextId || (hasUnsavedChanges && !sessionContextId)}
+                value={inputValue}
+                onChange={setInputValue}
+                placeholder={activeContextId ? 'Ask a question about the selected data…' : 'Select a schema context to begin'}
+              />
+              {historyBanner ? <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">{historyBanner}</p> : null}
+              {!activeContextId ? <p className="mt-2 text-xs text-muted-foreground">Choose a saved context above, or open Schema to select tables.</p> : null}
+            </section>
+
+            {latestSqlMessage?.sql ? (
+              <section aria-label="Review generated SQL" className="overflow-hidden rounded-lg border border-border/70 bg-background/88 backdrop-blur-xl">
+                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">Review generated SQL</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Validate the statement before executing it against {activeConnectionRecord?.name ?? 'the database'}.</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="ghost" aria-label="Format SQL" title="Format SQL" onClick={() => handleFormatSql(latestSqlMessage.id)}><Wand2 className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Copy SQL" title="Copy SQL" onClick={() => handleCopySql(latestSqlMessage.editedSql || latestSqlMessage.sql)}><Copy className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Download SQL" title="Download SQL" onClick={() => handleDownloadSql(latestSqlMessage.editedSql || latestSqlMessage.sql)}><Download className="h-4 w-4" /></Button>
+                  </div>
+                </header>
+                <Textarea
+                  aria-label="Generated SQL"
+                  value={latestSqlMessage.editedSql || latestSqlMessage.sql}
+                  onChange={(event) => setChatMessages((previous) => previous.map((message) => message.id === latestSqlMessage.id ? { ...message, editedSql: event.target.value } : message))}
+                  className="min-h-40 resize-y rounded-none border-0 bg-transparent p-4 font-mono text-xs leading-6 shadow-none focus-visible:ring-0"
+                />
+                <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {getMessageChecks(latestSqlMessage).map((check) => <Badge key={check.label} className={getCheckBadgeClass(check.status)} variant="secondary">{check.label}</Badge>)}
+                  </div>
+                  <Button onClick={() => handleExecuteMessage(latestSqlMessage.id)} disabled={executingMessageId === latestSqlMessage.id}>
+                    {executingMessageId === latestSqlMessage.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+                    Run query
+                  </Button>
+                </footer>
+                {latestSqlMessage.executionError ? <p className="border-t border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300">{latestSqlMessage.executionError}</p> : null}
+              </section>
+            ) : null}
+
+            {latestSqlMessage?.execution ? (
+              <AuraSqlResultViewport execution={latestSqlMessage.execution} onExport={() => handleExportCsv(latestSqlMessage.id)} />
+            ) : latestSqlMessage?.sql ? (
+              <div className="flex min-h-28 items-center justify-center border-y border-dashed border-border/70 text-center text-sm text-muted-foreground">
+                Run the reviewed SQL to unlock table and graph exploration.
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <Inspector
+        open={detailsOpen}
+        onOpenChange={(open) => { if (!open) { setRecsOpen(false); setShowTablesMenu(false); } }}
+        title="Schema and query guidance"
+      >
+        <div className="space-y-7">
+          <section>
+            <div className="flex items-center justify-between gap-3">
+              <div><h3 className="text-sm font-semibold">Question ideas</h3><p className="mt-1 text-xs text-muted-foreground">Grounded in the active schema context.</p></div>
+              <Button size="sm" variant="outline" onClick={handleRecommendations} disabled={!activeContextId || loadingContext}>{loadingContext ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate'}</Button>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {recommendations.length === 0 ? <p className="border-y border-border/50 py-4 text-xs text-muted-foreground">Generate focused starting questions when you need them.</p> : recommendations.map((recommendation) => <button key={recommendation} type="button" className="border-b border-border/50 py-3 text-left text-sm leading-5 transition-colors hover:text-[hsl(var(--chart-2))]" onClick={() => { setInputValue(recommendation); setRecsOpen(false); setShowTablesMenu(false); }}>{recommendation}</button>)}
+            </div>
+          </section>
+          <section>
+            <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">Tables in context</h3><p className="mt-1 text-xs text-muted-foreground">{selectedTables.size} of {tableList.length} selected</p></div><Button size="icon" variant="ghost" aria-label="Refresh tables" onClick={handleFetchTables}><RefreshCw className={`h-4 w-4 ${loadingTables ? 'animate-spin' : ''}`} /></Button></div>
+            <input value={tableFilter} onChange={(event) => setTableFilter(event.target.value)} placeholder="Filter tables" className="mt-3 h-10 w-full rounded-md border border-border/70 bg-background px-3 text-sm" />
+            <div className="mt-3 max-h-72 divide-y divide-border/50 overflow-y-auto border-y border-border/50">
+              {filteredTables.map((table) => <label key={table} className="flex cursor-pointer items-center gap-3 py-3 text-sm"><input type="checkbox" checked={selectedTables.has(table)} onChange={() => handleToggleTable(table)} className="h-4 w-4" /><span className="min-w-0 flex-1 truncate font-mono text-xs">{table}</span></label>)}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={handleUseSessionContext} disabled={selectedTables.size === 0 || savingContext}>Use for session</Button>
+              <Button size="sm" onClick={selectedContextRecord ? handleUpdateContext : handleSaveContext} disabled={selectedTables.size === 0 || savingContext}>{selectedContextRecord ? 'Update context' : 'Save context'}</Button>
+            </div>
+          </section>
+        </div>
+      </Inspector>
+    </FocusCanvas>
+  );
+
   const showLoader = loading || loadingTables || loadingContext || savingContext;
   const loaderTitle = loading
     ? 'Loading workspace'
@@ -813,7 +1009,7 @@ function AuraSqlQueryPageContent() {
       <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
 
-      <Header
+      <RemovedLegacyNavigation
         showSidebarToggle
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
@@ -851,10 +1047,10 @@ function AuraSqlQueryPageContent() {
               isSidebarOpen ? 'translate-x-0' : '-translate-x-6 pointer-events-none'
             }`}
           >
-            <AuraSqlSidebar
+            <RemovedLegacyNavigation
               currentHistoryId={sessionId}
               sessions={sessions}
-              onSelectSession={(session) => loadSessionHistory(session)}
+              onSelectSession={(session: AuraSqlSession) => loadSessionHistory(session)}
               onNewChat={handleStartNewChat}
             />
           </div>
@@ -1402,7 +1598,7 @@ function AuraSqlQueryPageContent() {
 
                     {selectedContextRecord?.table_names?.length ? (
                       <div className="flex flex-wrap gap-2">
-                        {selectedContextRecord.table_names.slice(0, 4).map((table) => {
+                        {selectedContextRecord?.table_names.slice(0, 4).map((table) => {
                           const prompt = `Show recent rows from ${table}`;
                           return (
                             <button

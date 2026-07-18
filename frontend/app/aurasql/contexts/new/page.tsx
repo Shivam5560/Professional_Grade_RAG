@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,8 +115,6 @@ function NewAuraSqlContextPageContent() {
       <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
       <div className="pointer-events-none absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-4)/0.16),transparent_70%)] blur-3xl float-slowest" />
 
-      <Header />
-
       {(loading || loadingTables) ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/70 backdrop-blur-sm">
           <div className="glass-panel sheen-border rounded-3xl px-6 py-4 text-center">
@@ -141,7 +138,7 @@ function NewAuraSqlContextPageContent() {
         </div>
       ) : null}
 
-      <main className="relative z-10 px-4 md:px-8 py-10">
+      <main className="relative z-10 px-4 py-10 md:pl-28 md:pr-8">
         <div className="max-w-4xl mx-auto">
           <Card className="glass-panel sheen-border border-border/60 bg-accent-soft">
             <CardHeader>

@@ -15,7 +15,7 @@ export function FocusCanvas({
     <main
       aria-label={ariaLabel}
       className={cn(
-        "relative min-h-[calc(100svh-2rem)] w-full overflow-x-clip pl-0 md:pl-[4.5rem]",
+        "relative min-h-[calc(100svh-2rem)] w-full min-w-0 overflow-x-clip",
         className,
       )}
     >

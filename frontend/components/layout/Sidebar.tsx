@@ -1,14 +1,15 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MessageSquare, Plus, RefreshCw, Trash2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Plus, Settings, HelpCircle, Sparkles, RefreshCw, Database, Trash2, Workflow } from "lucide-react";
-import { useAuthStore } from "@/lib/store";
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { apiClient } from "@/lib/api";
-import { ChatSession } from "@/lib/types";
-import { cn, formatTimestamp } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
-import { isAppEnabled, useAppCatalog } from "@/lib/apps/useAppCatalog";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
+import type { ChatSession } from "@/lib/types";
+import { cn, formatTimestamp } from "@/lib/utils";
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -18,51 +19,30 @@ interface SidebarProps {
 
 export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarProps) {
   const { user } = useAuthStore();
-  const router = useRouter();
   const { confirm, toast } = useToast();
-  const appCatalog = useAppCatalog();
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showAll, setShowAll] = useState(false);
 
   const loadHistory = useCallback(async () => {
-    if (user) {
-      setIsRefreshing(true);
-      try {
-        const bootstrap = await apiClient.getChatBootstrap(undefined, { includeMessages: false });
-        setHistory(bootstrap.sessions);
-        // Cache in sessionStorage for instant load on navigation
-        try {
-          sessionStorage.setItem(`chat_history_${user.id}`, JSON.stringify(bootstrap.sessions));
-          sessionStorage.setItem(`chat_history_ts_${user.id}`, Date.now().toString());
-        } catch { /* quota exceeded — ignore */ }
-      } catch (error) {
-        console.error("Failed to load chat history:", error);
-      } finally {
-        setIsRefreshing(false);
-      }
-    } else {
+    if (!user) {
       setHistory([]);
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const bootstrap = await apiClient.getChatBootstrap(undefined, { includeMessages: false });
+      setHistory(bootstrap.sessions);
+    } catch (error) {
+      console.error("Failed to load chat history:", error);
+    } finally {
+      setIsRefreshing(false);
     }
   }, [user]);
 
-  // Load cached history first, then refresh in background
   useEffect(() => {
-    if (!user) return;
-    // Try cached version first for instant display
-    try {
-      const cached = sessionStorage.getItem(`chat_history_${user.id}`);
-      const cachedTs = sessionStorage.getItem(`chat_history_ts_${user.id}`);
-      if (cached && cachedTs) {
-        const age = Date.now() - Number(cachedTs);
-        if (age < 5 * 60 * 1000) { // 5 minute cache
-          setHistory(JSON.parse(cached));
-        }
-      }
-    } catch { /* corrupt cache — ignore */ }
-    // Always refresh from server
     loadHistory();
-  }, [user, loadHistory]);
+  }, [loadHistory]);
 
   useEffect(() => {
     const handleHistoryUpdate = (event: Event) => {
@@ -71,56 +51,52 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
       loadHistory();
     };
 
-    window.addEventListener('chat-history-updated', handleHistoryUpdate as EventListener);
-    return () => {
-      window.removeEventListener('chat-history-updated', handleHistoryUpdate as EventListener);
-    };
-  }, [user, loadHistory]);
+    window.addEventListener("chat-history-updated", handleHistoryUpdate as EventListener);
+    return () => window.removeEventListener("chat-history-updated", handleHistoryUpdate as EventListener);
+  }, [loadHistory, user]);
 
-  const handleSessionClick = async (sessionId: string) => {
-    if (onLoadSession) {
-      onLoadSession(sessionId);
-    }
-  };
+  const sortedHistory = useMemo(
+    () =>
+      [...history].sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime(),
+      ),
+    [history],
+  );
 
-  const handleDeleteSession = async (sessionId: string, title?: string) => {
-    const label = title ? `"${title}"` : "this chat";
+  const deleteSession = async (session: ChatSession) => {
     const confirmed = await confirm({
       title: "Delete chat?",
-      description: `Delete ${label}? This cannot be undone.`,
+      description: `Delete "${session.title || "Untitled chat"}"? This cannot be undone.`,
       confirmLabel: "Delete",
       cancelLabel: "Cancel",
       variant: "destructive",
     });
     if (!confirmed) return;
+
     try {
-      await apiClient.deleteChatSession(sessionId);
-      setHistory((prev) => prev.filter((session) => session.id !== sessionId));
-      if (currentSessionId === sessionId) {
-        onNewChat();
-      }
-      toast({
-        title: "Chat deleted",
-        description: "The conversation has been removed.",
-      });
+      await apiClient.deleteChatSession(session.id);
+      setHistory((current) => current.filter((item) => item.id !== session.id));
+      if (currentSessionId === session.id) onNewChat();
+      toast({ title: "Chat deleted", description: "The conversation has been removed." });
     } catch (error) {
-      console.error("Failed to delete chat session:", error);
       toast({
         title: "Delete failed",
-        description: error instanceof Error ? error.message : "Unable to delete chat session.",
+        description: error instanceof Error ? error.message : "Unable to delete this conversation.",
         variant: "destructive",
       });
     }
   };
 
-  const handleDeleteAllHistory = async () => {
+  const deleteAllHistory = async () => {
     if (!user || history.length === 0) return;
     const confirmed = await confirm({
-      title: 'Delete all chats?',
-      description: 'This will permanently remove your entire chat history.',
-      confirmLabel: 'Delete all',
-      cancelLabel: 'Cancel',
-      variant: 'destructive',
+      title: "Delete all chats?",
+      description: "This permanently removes Knowledge Studio conversation history.",
+      confirmLabel: "Delete all",
+      cancelLabel: "Cancel",
+      variant: "destructive",
     });
     if (!confirmed) return;
 
@@ -128,219 +104,94 @@ export function Sidebar({ onNewChat, onLoadSession, currentSessionId }: SidebarP
       await apiClient.deleteAllChatHistory(user.id);
       setHistory([]);
       onNewChat();
-      toast({
-        title: 'History deleted',
-        description: 'All chats were removed.',
-      });
-      window.dispatchEvent(new CustomEvent('chat-history-updated', { detail: { userId: user.id } }));
+      toast({ title: "History deleted", description: "All Knowledge chats were removed." });
     } catch (error) {
       toast({
-        title: 'Delete failed',
-        description: error instanceof Error ? error.message : 'Unable to delete all chat history.',
-        variant: 'destructive',
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Unable to delete chat history.",
+        variant: "destructive",
       });
     }
   };
 
-  const sortedHistory = useMemo(() => {
-    return [...history].sort((a, b) => {
-      const aTime = new Date(a.updated_at || a.created_at).getTime();
-      const bTime = new Date(b.updated_at || b.created_at).getTime();
-      return bTime - aTime;
-    });
-  }, [history]);
-
-  const primaryHistory = sortedHistory.slice(0, 6);
-  const extraCount = Math.max(sortedHistory.length - primaryHistory.length, 0);
-
-  const formatTitle = (title?: string, fallbackDate?: string) => {
-    if (!title) {
-      return fallbackDate ? `Untitled chat • ${fallbackDate}` : 'Untitled chat';
-    }
-    const cleaned = title.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '';
-    const parsed = new Date(dateString);
-    if (Number.isNaN(parsed.getTime())) return '';
-    return formatTimestamp(parsed.toISOString());
-  };
-
-  const renderSessionList = (sessions: ChatSession[]) => (
-    <div className="space-y-2">
-      {sessions.map((session) => {
-        const displayDate = formatDate(session.updated_at || session.created_at);
-        const displayTitle = formatTitle(session.title, displayDate);
-
-        return (
-          <div
-            key={session.id}
-            className={cn(
-              "rounded-xl border border-transparent transition-all",
-              currentSessionId === session.id
-                ? 'border-foreground/10 bg-foreground/5'
-                : 'hover:border-border/60 hover:bg-muted/60'
-            )}
-          >
-            <div className="flex items-start gap-3 px-3 py-3">
-              <button
-                type="button"
-                onClick={() => handleSessionClick(session.id)}
-                className="flex flex-1 items-start gap-2 text-left"
-              >
-                <MessageSquare
-                  className={cn(
-                    "h-4 w-4 mt-0.5 flex-shrink-0 transition-colors",
-                    currentSessionId === session.id ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground whitespace-normal break-words leading-snug">
-                    {displayTitle}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {displayDate}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDeleteSession(session.id, session.title);
-                }}
-                className="h-8 w-8 rounded-lg border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                aria-label="Delete chat"
-                title="Delete chat"
-              >
-                <Trash2 className="h-4 w-4 mx-auto" />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-
   return (
-    <>
-      <div className="flex h-full w-72 flex-col border-r border-border/60 bg-card/70 backdrop-blur-xl">
-      <div className="p-4">
-        <Button 
-          onClick={onNewChat} 
-          className="w-full justify-start gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-lg h-11 font-semibold" 
+    <section className="flex h-full min-h-0 flex-col" aria-label="Knowledge chat history">
+      <div className="flex items-center gap-2 border-b border-border/60 pb-4">
+        <Button className="flex-1 justify-start gap-2" onClick={onNewChat}>
+          <Plus className="h-4 w-4" />
+          New conversation
+        </Button>
+        <Button
+          aria-label="Refresh chat history"
+          disabled={isRefreshing}
+          onClick={loadHistory}
+          size="icon"
+          title="Refresh chat history"
+          variant="outline"
         >
-          <Plus className="h-5 w-5" />
-          <span>New Chat</span>
-          <Sparkles className="h-4 w-4 ml-auto" />
+          <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
         </Button>
       </div>
-      
-      <div className="px-4 py-2 flex-1 overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Recent Conversations
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            onClick={loadHistory}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1 pr-2">
-          <div className="space-y-2">
-            {user ? (
-              sortedHistory.length > 0 ? (
-                <>
-                  {renderSessionList(primaryHistory)}
-                  {showAll && sortedHistory.length > primaryHistory.length && (
-                    <div className="pt-2">
-                      <div className="px-2 py-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                        More conversations
-                      </div>
-                      {renderSessionList(sortedHistory.slice(primaryHistory.length))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="px-2 py-8 text-center text-xs text-muted-foreground">
-                  {isRefreshing ? 'Loading...' : 'No chat history yet. Start a new conversation!'}
-                </div>
-              )
-            ) : (
-              <div className="px-2 py-8 text-center text-xs text-muted-foreground">
-                Login to view history
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-        <div className="pt-3">
-          <Button
-            variant="ghost"
-            className="mb-2 w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleDeleteAllHistory}
-            disabled={history.length === 0}
-          >
-            Delete all history
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            onClick={() => setShowAll((prev) => !prev)}
-            disabled={extraCount === 0}
-          >
-            {extraCount === 0
-              ? 'All chats shown'
-              : showAll
-                ? 'Show less'
-                : `Show more (${extraCount})`}
-          </Button>
-        </div>
-      </div>
 
-      <div className="mt-auto p-4 border-t border-border/60">
-        <div className="space-y-1">
-          {isAppEnabled(appCatalog, 'career-studio') ? (
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-              onClick={() => router.push('/workflows')}
-            >
-              <Workflow className="h-4 w-4" />
-              Workflows
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-            onClick={() => router.push('/knowledge-base')}
-          >
-            <Database className="h-4 w-4" />
-            Knowledge Base
-          </Button>
-          <Button variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all">
-            <Settings className="h-4 w-4" />
-            Settings
-          </Button>
-          {isAppEnabled(appCatalog, 'developer-studio') ? (
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all"
-              onClick={() => router.push('/developer')}
-            >
-              <HelpCircle className="h-4 w-4" />
-              Developer
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      </div>
-    </>
+      <ScrollArea className="min-h-0 flex-1 py-4 pr-3">
+        {sortedHistory.length === 0 ? (
+          <div className="grid min-h-52 place-items-center px-6 text-center">
+            <div>
+              <MessageSquare className="mx-auto h-5 w-5 text-muted-foreground" />
+              <p className="mt-3 text-sm font-medium text-foreground">No conversations yet</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                New Knowledge chats will remain here, separate from every other studio.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {sortedHistory.map((session) => (
+              <div
+                className={cn(
+                  "group flex items-start gap-2 rounded-md border px-3 py-3 transition-colors",
+                  currentSessionId === session.id
+                    ? "border-foreground/20 bg-foreground/[0.07]"
+                    : "border-transparent hover:border-border/70 hover:bg-muted/55",
+                )}
+                key={session.id}
+              >
+                <button
+                  className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onLoadSession?.(session.id)}
+                  type="button"
+                >
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {session.title || "Untitled chat"}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {formatTimestamp(session.updated_at || session.created_at)}
+                  </span>
+                </button>
+                <button
+                  aria-label={`Delete ${session.title || "untitled chat"}`}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+                  onClick={() => deleteSession(session)}
+                  title="Delete chat"
+                  type="button"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+
+      <Button
+        className="mt-4 w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+        disabled={history.length === 0}
+        onClick={deleteAllHistory}
+        variant="ghost"
+      >
+        <Trash2 className="mr-2 h-4 w-4" />
+        Delete Knowledge history
+      </Button>
+    </section>
   );
 }

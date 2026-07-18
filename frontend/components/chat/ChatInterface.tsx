@@ -5,25 +5,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertCircle,
+  Files,
   ListPlus,
-  Sparkles,
-  ShieldCheck,
   Zap,
   Brain,
   MessageCircle,
-  Activity,
-  Wrench,
   ChevronDown,
-  Plus,
-  Loader2,
 } from 'lucide-react';
 import { QuickFileSelector } from './QuickFileSelector';
 import { useToast } from '@/hooks/useToast';
@@ -71,7 +64,7 @@ export function ChatInterface({
   const [promptSuggestions, setPromptSuggestions] = useState<Array<{ title: string; prompt: string }>>([]);
   const [servicesHealthy, setServicesHealthy] = useState(true);
   const [isAskUploading, setIsAskUploading] = useState(false);
-  const [isRagUploading, setIsRagUploading] = useState(false);
+  const [, setIsRagUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -206,14 +199,14 @@ export function ChatInterface({
       const response = await sendMessage(message, contextIds, contextFilesInfo, mode, askFilesPayload);
       if (response && response.sources) {
         setLatestSources(response.sources);
-        // Chat request succeeded - mark services as healthy and notify Header
+        // Keep the global service indicator in sync after a successful request.
         setServicesHealthy(true);
         window.dispatchEvent(new CustomEvent('llm-health-update', { detail: { healthy: true } }));
       }
     } catch (err) {
       console.error('Failed to send message:', err);
       toast({ title: 'Message failed', description: err instanceof Error ? err.message : 'Could not send message', variant: 'destructive' });
-      // Chat request failed - mark services as unhealthy and notify Header
+      // Keep the global service indicator in sync after a failed request.
       setServicesHealthy(false);
       window.dispatchEvent(new CustomEvent('llm-health-update', { detail: { healthy: false } }));
     }
@@ -241,58 +234,22 @@ export function ChatInterface({
   const modeMeta = mode === 'think'
     ? {
         title: 'Think Mode',
-        subtitle: 'Deep reasoning with PageIndex traversal',
         icon: Brain,
-        tone: 'from-[hsl(var(--chart-3))] to-[hsl(var(--chart-4))]',
       }
     : mode === 'ask'
       ? {
           title: 'Ask Mode',
-          subtitle: 'Direct LLM responses (no retrieval)',
           icon: MessageCircle,
-          tone: 'from-[hsl(var(--chart-5))] to-[hsl(var(--chart-4))]',
         }
       : {
           title: 'Fast Mode',
-          subtitle: 'Hybrid retrieval with reranking',
           icon: Zap,
-          tone: 'from-[hsl(var(--chart-2))] to-[hsl(var(--chart-1))]',
         };
 
   const ModeIcon = modeMeta.icon;
 
   return (
-    <Card className="relative flex h-full flex-col overflow-hidden border-none bg-transparent shadow-none">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(520px_circle_at_12%_-8%,hsl(var(--chart-1)/0.18),transparent_60%),radial-gradient(560px_circle_at_88%_110%,hsl(var(--chart-2)/0.16),transparent_62%)]" />
-
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge className="rounded-full bg-foreground text-background px-3 py-1 text-[10px] uppercase tracking-[0.24em]">
-            {mode === 'ask' ? 'Ask Chat' : 'RAG Chat'}
-          </Badge>
-          <Badge
-            className={`rounded-full bg-gradient-to-r ${modeMeta.tone} text-white px-3 py-1 text-[10px] uppercase tracking-[0.2em] border-transparent`}
-          >
-            <ModeIcon className="mr-1.5 h-3 w-3" />
-            {modeMeta.title}
-          </Badge>
-          <Badge
-            variant="outline"
-            className="rounded-full border-border/70 bg-card/70 px-3 py-1 text-[10px] uppercase tracking-[0.2em]"
-          >
-            <ShieldCheck className="mr-1.5 h-3 w-3" />
-            {mode === 'ask' ? 'Direct LLM' : 'Retrieval + Reasoning'}
-          </Badge>
-        </div>
-        <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-          <Activity className={`h-3.5 w-3.5 ${servicesHealthy ? 'text-emerald-400' : 'text-red-400'}`} />
-          {activeContextCount > 0
-            ? `${activeContextCount} context file${activeContextCount !== 1 ? 's' : ''} active`
-            : 'No context files selected'}
-        </div>
-      </div>
-
-
+    <div className="relative flex h-full flex-col overflow-hidden bg-background/30">
       {error && (
         <Alert variant="destructive" className="m-4">
           <AlertCircle className="h-4 w-4" />
@@ -300,7 +257,7 @@ export function ChatInterface({
         </Alert>
       )}
 
-      <div className="relative z-10 flex-1 overflow-hidden min-h-0">
+      <div className="relative z-10 min-h-0 flex-1 overflow-hidden">
         <MessageList
           key={`messages-${sessionId}`}
           messages={messages}
@@ -311,26 +268,10 @@ export function ChatInterface({
         />
       </div>
 
-      <div className="sticky bottom-0 z-20">
-        <div className="bg-gradient-to-t from-background/95 via-background/85 to-transparent px-4 pt-6 pb-4">
-          <div className="mx-auto w-full max-w-4xl rounded-3xl border border-border/70 bg-card/80 p-4 shadow-[0_32px_90px_-60px_rgba(0,0,0,0.55)] backdrop-blur-xl space-y-3">
-            <QuickFileSelector
-              mode={mode}
-              selectedFiles={selectedRagFiles}
-              onFileToggle={handleFileToggle}
-              onClearAll={handleClearAll}
-              askFiles={askFiles}
-              selectedAskFileIds={selectedAskFileIds}
-              onAskFileToggle={handleAskToggle}
-              onAskUpload={handleAskUploadFromSelector}
-              isAskUploading={isAskUploading}
-              showUploadButton={false}
-              fileInputRef={uploadInputRef}
-              onUploadingChange={setIsRagUploading}
-            />
-            
+      <div className="sticky bottom-0 z-20 border-t border-border/60 bg-background/88 px-3 py-3 backdrop-blur-xl sm:px-4">
+          <div className="mx-auto w-full max-w-4xl">
             <div className="flex items-end gap-3">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="mb-1 flex items-center gap-1.5">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -338,7 +279,7 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading}
-                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      className="h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
                       title="Select chat mode"
                       aria-label="Select chat mode"
                     >
@@ -389,49 +330,36 @@ export function ChatInterface({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70"
-                      title="MCP tools"
-                      aria-label="MCP tools"
+                      className="relative h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
+                      title="Conversation files"
+                      aria-label="Conversation files"
                     >
-                      <Wrench className="h-5 w-5" />
+                      <Files className="h-4 w-4" />
+                      {activeContextCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-foreground px-1 text-[10px] text-background">
+                          {activeContextCount}
+                        </span>
+                      ) : null}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-80">
-                    <DropdownMenuLabel>Developer MCP Tools</DropdownMenuLabel>
+                  <DropdownMenuContent align="start" className="w-[min(22rem,calc(100vw-2rem))] p-3">
+                    <DropdownMenuLabel>Conversation files</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem disabled>🩺 health_check · backend health</DropdownMenuItem>
-                    <DropdownMenuItem disabled>💬 chat_query · fast/think/ask</DropdownMenuItem>
-                    <DropdownMenuItem disabled>📚 list_user_documents · user docs</DropdownMenuItem>
-                    <DropdownMenuItem disabled>🧭 list_tools_catalog · tool catalog</DropdownMenuItem>
+                    <QuickFileSelector
+                      mode={mode}
+                      selectedFiles={selectedRagFiles}
+                      onFileToggle={handleFileToggle}
+                      onClearAll={handleClearAll}
+                      askFiles={askFiles}
+                      selectedAskFileIds={selectedAskFileIds}
+                      onAskFileToggle={handleAskToggle}
+                      onAskUpload={handleAskUploadFromSelector}
+                      isAskUploading={isAskUploading}
+                      fileInputRef={uploadInputRef}
+                      onUploadingChange={setIsRagUploading}
+                    />
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => uploadInputRef.current?.click()}
-                  disabled={
-                    isLoading ||
-                    !servicesHealthy ||
-                    (mode === 'ask' ? isAskUploading : isRagUploading)
-                  }
-                  className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
-                  title={mode === 'ask' ? 'Add ask file' : 'Upload file'}
-                  aria-label={mode === 'ask' ? 'Add ask file' : 'Upload file'}
-                >
-                  {mode === 'ask' ? (
-                    isAskUploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Plus className="h-5 w-5" />
-                    )
-                  ) : isRagUploading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Plus className="h-5 w-5" />
-                  )}
-                </Button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -440,7 +368,7 @@ export function ChatInterface({
                       variant="outline"
                       size="icon"
                       disabled={isLoading || promptSuggestions.length === 0}
-                      className="h-12 w-12 rounded-xl border-border/70 bg-muted/70 hover:bg-background/90"
+                      className="h-11 w-11 rounded-md border-border/70 bg-background/80 hover:bg-muted"
                       title="Insert a saved prompt"
                       aria-label="Insert a saved prompt"
                     >
@@ -490,11 +418,7 @@ export function ChatInterface({
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3" />
-                Use the prompt button to insert saved prompts.
-              </span>
+            <div className="flex items-center justify-end px-1 pt-2 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-2">
                 {tokenUsage && (
                   <span className="relative inline-flex items-center group">
@@ -529,8 +453,7 @@ export function ChatInterface({
               </span>
             </div>
           </div>
-        </div>
       </div>
-    </Card>
+    </div>
   );
 }

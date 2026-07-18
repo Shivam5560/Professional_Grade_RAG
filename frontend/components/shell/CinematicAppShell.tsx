@@ -32,7 +32,9 @@ export function CinematicAppShell({
       />
       <div className="min-h-screen pb-16 md:pb-0">
         <LocalSubmenu pathname={pathname} presentation={presentation} />
-        <MotionRoute routeKey={pathname}>{children}</MotionRoute>
+        <div data-testid="shell-content" className="min-w-0 md:pl-20">
+          <MotionRoute routeKey={pathname}>{children}</MotionRoute>
+        </div>
       </div>
     </div>
   );

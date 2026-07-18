@@ -31,7 +31,7 @@ export function CinematicAppGallery({ apps }: { apps: AppManifest[] }): JSX.Elem
   return (
     <main
       aria-label="Application dashboard"
-      className="relative min-h-[calc(100svh-2rem)] w-full overflow-hidden bg-background md:pl-[4.5rem]"
+      className="relative min-h-[calc(100svh-2rem)] w-full overflow-hidden bg-background"
     >
       <AnimatePresence initial={false} mode="sync">
         <motion.div

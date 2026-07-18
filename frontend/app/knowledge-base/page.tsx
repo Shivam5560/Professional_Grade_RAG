@@ -1,125 +1,102 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
-import { DocumentInfo } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Trash2, FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuthStore } from '@/lib/store';
-import { Header } from '@/components/layout/Header';
-import { useToast } from '@/hooks/useToast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AuraSqlContext } from '@/lib/types';
-import { ShaderAnimation } from '@/components/ui/shader-animation';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+
+import { ActionDock } from "@/components/shell/ActionDock";
+import { CanvasHeader } from "@/components/shell/CanvasHeader";
+import { ContextRibbon } from "@/components/shell/ContextRibbon";
+import { FocusCanvas } from "@/components/shell/FocusCanvas";
+import { Inspector } from "@/components/shell/Inspector";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/useToast";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
+import type { DocumentInfo } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes) return "Unknown size";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatDate = (date: string): string => {
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleString();
+};
 
 export default function KnowledgeBasePage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { confirm, toast } = useToast();
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
-  const [contexts, setContexts] = useState<AuraSqlContext[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeDocument, setActiveDocument] = useState<DocumentInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingContexts, setLoadingContexts] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const { confirm, toast } = useToast();
+  const [hydrated, setHydrated] = useState(false);
 
   const loadDocuments = useCallback(async (userId: number) => {
     setLoading(true);
     setError(null);
-    
     try {
       const response = await apiClient.getUserDocuments(userId);
       setDocuments(response.documents);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents');
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load documents");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const loadContexts = useCallback(async () => {
-    setLoadingContexts(true);
-    try {
-      const response = await apiClient.listAuraSqlContexts();
-      setContexts(response);
-    } catch (err) {
-      console.error('Failed to load contexts:', err);
-    } finally {
-      setLoadingContexts(false);
-    }
-  }, []);
-
-  // Wait for Zustand to hydrate from localStorage
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  useEffect(() => setHydrated(true), []);
 
   useEffect(() => {
-    // Only check auth after hydration
-    if (!isHydrated) return;
-    
-    // Check if user is logged in
+    if (!hydrated) return;
     if (!user) {
-      router.push('/auth');
+      router.push("/auth");
       return;
     }
-    
-    // Fetch user's documents
     loadDocuments(user.id);
-    loadContexts();
-  }, [router, user, isHydrated, loadDocuments, loadContexts]);
+  }, [hydrated, loadDocuments, router, user]);
 
-  // Show loading state while hydrating
-  if (!isHydrated || (loading && documents.length === 0 && loadingContexts)) {
-    return (
-      <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-35">
-          <ShaderAnimation className="w-full h-full" speed={0.08} />
-        </div>
-        <div className="pointer-events-none absolute inset-0 app-aurora" />
-        <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-        <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-        <Header />
-        <div className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center">
-          <div className="text-center glass-panel rounded-3xl px-8 py-10">
-            <Loader2 className="h-8 w-8 animate-spin text-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading Knowledge Base...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const totalVectors = useMemo(
+    () => documents.reduce((total, document) => total + (document.vector_count || 0), 0),
+    [documents],
+  );
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(documents.map(doc => doc.id)));
-    } else {
-      setSelectedIds(new Set());
-    }
+  const selectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(documents.map((document) => document.id)) : new Set());
   };
 
-  const handleSelectOne = (id: string, checked: boolean) => {
-    const newSelected = new Set(selectedIds);
-    if (checked) {
-      newSelected.add(id);
-    } else {
-      newSelected.delete(id);
-    }
-    setSelectedIds(newSelected);
+  const selectOne = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   };
 
-  const handleBulkDelete = async () => {
+  const deleteSelected = async () => {
     if (!user || selectedIds.size === 0) return;
-
     const approved = await confirm({
       title: "Delete documents?",
-      description: `Delete ${selectedIds.size} document(s)? This action cannot be undone.`,
+      description: `Delete ${selectedIds.size} document${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`,
       confirmLabel: "Delete",
       cancelLabel: "Cancel",
       variant: "destructive",
@@ -129,293 +106,198 @@ export default function KnowledgeBasePage() {
     setDeleting(true);
     setError(null);
     setSuccess(null);
-
     try {
       const response = await apiClient.bulkDeleteDocuments({
         document_ids: Array.from(selectedIds),
         user_id: user.id,
       });
-
       setSuccess(response.message);
       setSelectedIds(new Set());
-      toast({
-        title: "Documents deleted",
-        description: response.message,
-      });
-      
-      // Reload documents
+      setActiveDocument(null);
+      toast({ title: "Documents deleted", description: response.message });
       await loadDocuments(user.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete documents');
-      toast({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : 'Failed to delete documents',
-        variant: "destructive",
-      });
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete documents";
+      setError(message);
+      toast({ title: "Delete failed", description: message, variant: "destructive" });
     } finally {
       setDeleting(false);
     }
   };
 
-  const formatFileSize = (bytes?: number): string => {
-    if (!bytes) return 'N/A';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const formatDate = (dateStr: string): string => {
-    try {
-      return new Date(dateStr).toLocaleString();
-    } catch {
-      return dateStr;
-    }
-  };
-
-  if (loading) {
+  if (!hydrated || loading) {
     return (
-      <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-35">
-          <ShaderAnimation className="w-full h-full" speed={0.08} />
+      <FocusCanvas ariaLabel="Knowledge documents loading">
+        <div className="grid min-h-[70svh] place-items-center">
+          <div className="text-center" role="status">
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-foreground" />
+            <p className="mt-3 text-sm text-muted-foreground">Loading Knowledge documents...</p>
+          </div>
         </div>
-        <div className="pointer-events-none absolute inset-0 app-aurora" />
-        <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-        <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-        <Header />
-        <div className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-foreground" />
-        </div>
-      </div>
+      </FocusCanvas>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 opacity-35">
-        <ShaderAnimation className="w-full h-full" speed={0.08} />
-      </div>
-      <div className="pointer-events-none absolute inset-0 app-aurora" />
-      <div className="pointer-events-none absolute inset-0 bg-grid-soft opacity-60" />
-      <div className="pointer-events-none absolute inset-0 bg-noise opacity-40" />
-      <div className="pointer-events-none absolute -top-32 right-[-10%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-1)/0.18),transparent_65%)] blur-2xl float-slow" />
-      <div className="pointer-events-none absolute top-[12%] left-[-12%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--chart-2)/0.2),transparent_65%)] blur-3xl float-slower" />
+    <FocusCanvas ariaLabel="Knowledge documents">
+      <CanvasHeader
+        actions={
+          <Button onClick={() => router.push("/chat")} size="sm">
+            Open conversation
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        }
+        description="Review the source material available to Knowledge Studio. Select a record for details."
+        eyebrow="Knowledge Studio"
+        title="Documents"
+      />
 
-      <Header />
+      <ContextRibbon label="Library">
+        <span className="inline-flex h-7 items-center rounded-md border border-border/70 bg-background/70 px-2.5 text-xs text-muted-foreground">
+          {documents.length} document{documents.length === 1 ? "" : "s"}
+        </span>
+        <span className="inline-flex h-7 items-center rounded-md border border-border/70 bg-background/70 px-2.5 text-xs text-muted-foreground">
+          {totalVectors.toLocaleString()} indexed vectors
+        </span>
+        {selectedIds.size > 0 ? (
+          <span className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs text-background">
+            {selectedIds.size} selected
+          </span>
+        ) : null}
+      </ContextRibbon>
 
-      <main className="relative z-10 px-4 md:px-8 py-8">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="glass-panel sheen-border rounded-3xl p-6 md:p-8 bg-accent-soft">
-            <div className="flex flex-col gap-2 mb-0">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl logo-mark flex items-center justify-center shadow-lg ring-2 ring-foreground/10">
-                  <FileText className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-black text-foreground">Knowledge Base</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Manage your uploaded documents and keep your chat context clean.
-                  </p>
-                </div>
-              </div>
+      <div className="pt-4">
+        {error ? (
+          <Alert className="mb-4" variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+        {success ? (
+          <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {documents.length === 0 ? (
+          <section className="grid min-h-[56svh] place-items-center border-y border-border/60" aria-label="Empty document library">
+            <div className="max-w-sm px-6 text-center">
+              <FileText className="mx-auto h-7 w-7 text-muted-foreground" />
+              <h2 className="mt-4 text-lg font-semibold text-foreground">No documents yet</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Add source material from a Knowledge conversation to build this library.
+              </p>
+              <Button className="mt-5" onClick={() => router.push("/chat")}>
+                Start a conversation
+              </Button>
             </div>
-          </div>
+          </section>
+        ) : (
+          <section className="overflow-hidden rounded-lg border border-border/70 bg-background/72 backdrop-blur-xl" aria-label="Document library">
+            <div className="flex min-h-12 items-center justify-between gap-4 border-b border-border/70 px-4">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  aria-label="Select all documents"
+                  checked={selectedIds.size === documents.length}
+                  className="h-4 w-4 rounded border-border"
+                  onChange={(event) => selectAll(event.target.checked)}
+                  type="checkbox"
+                />
+                Select all
+              </label>
+              <span className="text-xs text-muted-foreground">Newest source material first</span>
+            </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              { label: 'Documents', value: documents.length },
-              { label: 'Total vectors', value: documents.reduce((sum, d) => sum + (d.vector_count || 0), 0) },
-              { label: 'SQL Contexts', value: contexts.length },
-            ].map((stat) => (
-              <div key={stat.label} className="glass-panel sheen-border border-border/60 bg-accent-soft rounded-2xl px-5 py-4 hover-glow transition-transform hover:-translate-y-0.5">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">{stat.label}</p>
-                <p className="text-3xl font-black">{stat.value}</p>
+            <div className="divide-y divide-border/60">
+              {documents.map((document) => (
+                <article
+                  className={cn(
+                    "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/45 sm:gap-4",
+                    selectedIds.has(document.id) && "bg-foreground/[0.055]",
+                  )}
+                  key={document.id}
+                >
+                  <input
+                    aria-label={`Select ${document.filename}`}
+                    checked={selectedIds.has(document.id)}
+                    className="h-4 w-4 rounded border-border"
+                    onChange={(event) => selectOne(document.id, event.target.checked)}
+                    type="checkbox"
+                  />
+                  <button className="min-w-0 text-left" onClick={() => setActiveDocument(document)} type="button">
+                    <span className="block truncate text-sm font-medium text-foreground">{document.title || document.filename}</span>
+                    <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      {document.title ? <span className="max-w-64 truncate">{document.filename}</span> : null}
+                      <span>{formatFileSize(document.file_size)}</span>
+                      <span className="hidden sm:inline">{document.vector_count.toLocaleString()} vectors</span>
+                      <span className="hidden lg:inline">{formatDate(document.upload_date)}</span>
+                    </span>
+                  </button>
+                  <Button aria-label={`View details for ${document.filename}`} onClick={() => setActiveDocument(document)} size="icon" variant="ghost">
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {documents.length > 0 ? (
+        <ActionDock
+          primary={
+            <Button onClick={() => router.push("/chat")} size="sm">
+              Use in chat
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          }
+          secondary={
+            <Button
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={selectedIds.size === 0 || deleting}
+              onClick={deleteSelected}
+              size="sm"
+              variant="ghost"
+            >
+              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Delete{selectedIds.size > 0 ? ` ${selectedIds.size}` : ""}
+            </Button>
+          }
+        />
+      ) : null}
+
+      <Inspector onOpenChange={(open) => !open && setActiveDocument(null)} open={Boolean(activeDocument)} title="Document details">
+        {activeDocument ? (
+          <div className="space-y-6">
+            <div>
+              <Badge variant="outline">{activeDocument.file_type || "Document"}</Badge>
+              <h2 className="mt-3 break-words text-xl font-semibold text-foreground">
+                {activeDocument.title || activeDocument.filename}
+              </h2>
+              {activeDocument.title ? <p className="mt-1 break-all text-sm text-muted-foreground">{activeDocument.filename}</p> : null}
+            </div>
+            <dl className="divide-y divide-border/60 border-y border-border/60 text-sm">
+              <div className="flex items-center justify-between gap-6 py-3">
+                <dt className="text-muted-foreground">Size</dt>
+                <dd className="font-medium text-foreground">{formatFileSize(activeDocument.file_size)}</dd>
               </div>
-            ))}
+              <div className="flex items-center justify-between gap-6 py-3">
+                <dt className="text-muted-foreground">Indexed vectors</dt>
+                <dd className="font-medium text-foreground">{activeDocument.vector_count.toLocaleString()}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-6 py-3">
+                <dt className="text-muted-foreground">Uploaded</dt>
+                <dd className="text-right font-medium text-foreground">{formatDate(activeDocument.upload_date)}</dd>
+              </div>
+            </dl>
+            <Button className="w-full" onClick={() => router.push("/chat")}>
+              Open Knowledge conversation
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
-
-          <div className="glass-panel rounded-3xl p-6 md:p-8">
-          {error && (
-            <Alert variant="destructive" className="mb-4 border-red-500/30 bg-red-500/10 text-red-600">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert className="mb-4 border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          )}
-
-          <Tabs defaultValue="documents" className="space-y-4">
-            <TabsList className="bg-muted/40">
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-              <TabsTrigger value="contexts">SQL Contexts</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="documents" className="space-y-4">
-              {documents.length === 0 ? (
-                <div className="text-center py-14">
-                  <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
-                    <FileText className="h-8 w-8 text-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No documents yet</h3>
-                  <p className="text-muted-foreground mb-6">Upload your first document to get started.</p>
-                  <Button onClick={() => router.push('/chat')} className="bg-foreground text-background shadow-lg">
-                    Go to Chat
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.size === documents.length && documents.length > 0}
-                          onChange={(e) => handleSelectAll(e.target.checked)}
-                          className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
-                        />
-                        <span className="text-sm font-medium text-foreground">Select All</span>
-                      </label>
-                      {selectedIds.size > 0 && (
-                        <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20">
-                          {selectedIds.size} selected
-                        </Badge>
-                      )}
-                    </div>
-
-                    <Button
-                      onClick={handleBulkDelete}
-                      disabled={selectedIds.size === 0 || deleting}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      {deleting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Selected
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  <div className="border border-border/70 rounded-2xl overflow-hidden bg-card/70">
-                    <table className="min-w-full divide-y divide-border">
-                      <thead className="bg-muted/60">
-                        <tr>
-                          <th className="w-12 px-4 py-3"></th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Filename
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Vectors
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Uploaded
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-card/60 divide-y divide-border">
-                        {documents.map((doc) => (
-                          <tr
-                            key={doc.id}
-                            className={`hover:bg-muted/40 transition-colors ${
-                              selectedIds.has(doc.id) ? 'bg-primary/10' : ''
-                            }`}
-                          >
-                            <td className="px-4 py-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(doc.id)}
-                                onChange={(e) => handleSelectOne(doc.id, e.target.checked)}
-                                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
-                              />
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-foreground">
-                                  {doc.filename}
-                                </span>
-                                {doc.title && (
-                                  <span className="text-xs text-muted-foreground">{doc.title}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <Badge variant="outline" className="text-xs">
-                                {doc.file_type || 'N/A'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-4 text-sm text-foreground">
-                              {formatFileSize(doc.file_size)}
-                            </td>
-                            <td className="px-4 py-4">
-                              <Badge variant="secondary" className="text-xs">
-                                {doc.vector_count}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-4 text-sm text-muted-foreground">
-                              {formatDate(doc.upload_date)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="mt-4 text-sm text-muted-foreground">
-                    Total: {documents.length} document{documents.length !== 1 ? 's' : ''}
-                  </div>
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="contexts" className="space-y-4">
-              {loadingContexts ? (
-                <p className="text-sm text-muted-foreground">Loading contexts...</p>
-              ) : contexts.length === 0 ? (
-                <div className="text-center py-14">
-                  <div className="mx-auto mb-6 h-16 w-16 rounded-2xl bg-muted/70 flex items-center justify-center">
-                    <FileText className="h-8 w-8 text-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No SQL contexts yet</h3>
-                  <p className="text-muted-foreground mb-6">Create a schema context to reuse SQL knowledge.</p>
-                  <Button onClick={() => router.push('/aurasql/contexts/new')} className="bg-foreground text-background shadow-lg">
-                    Create SQL Context
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {contexts.map((context) => (
-                    <div key={context.id} className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{context.name}</p>
-                        <p className="text-xs text-muted-foreground">{context.table_names.join(', ')}</p>
-                      </div>
-                      <Button size="sm" onClick={() => router.push(`/aurasql/query?context=${context.id}`)}>
-                        Query
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-          </div>
-        </div>
-      </main>
-    </div>
+        ) : null}
+      </Inspector>
+    </FocusCanvas>
   );
 }

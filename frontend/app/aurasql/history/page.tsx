@@ -1,76 +1,45 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { Header } from '@/components/layout/Header';
-import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { useAuthStore } from '@/lib/store';
-import { apiClient } from '@/lib/api';
-import { AuraSqlHistoryItem } from '@/lib/types';
+import { useEffect, useMemo, useState } from 'react';
+
 import AuthPage from '@/app/auth/page';
+import { AuraSqlPage } from '@/components/aurasql/AuraSqlPage';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { apiClient } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
+import type { AuraSqlHistoryItem } from '@/lib/types';
 
 export default function AuraSqlHistoryDataPage() {
   const { isAuthenticated } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
   const [history, setHistory] = useState<AuraSqlHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
+  useEffect(() => setIsMounted(true), []);
   useEffect(() => {
     if (!isAuthenticated) return;
-    apiClient.listAuraSqlHistory().then((data) => {
-      setHistory(data);
-      setLoading(false);
-    });
+    setLoading(true);
+    apiClient.listAuraSqlHistory()
+      .then(setHistory)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Failed to load AuraSQL history'))
+      .finally(() => setLoading(false));
   }, [isAuthenticated]);
 
-  const historyColumns = useMemo<DataTableColumn<AuraSqlHistoryItem>[]>(() => [
-    {
-      id: 'natural_language_query',
-      header: 'Natural Language Query',
-      accessor: 'natural_language_query',
-      className: 'max-w-xs whitespace-normal',
-    },
-    {
-      id: 'generated_sql',
-      header: 'Generated SQL',
-      accessor: 'generated_sql',
-      className: 'max-w-sm whitespace-normal font-mono text-xs',
-    },
-    { id: 'status', header: 'Status', accessor: 'status', className: 'w-32' },
-    { id: 'connection_id', header: 'Connection', accessor: 'connection_id', className: 'w-40' },
-    {
-      id: 'created_at',
-      header: 'Date',
-      accessor: (item) => (item.created_at ? new Date(item.created_at).toLocaleString() : '—'),
-      className: 'w-52 whitespace-nowrap',
-    },
+  const columns = useMemo<DataTableColumn<AuraSqlHistoryItem>[]>(() => [
+    { id: 'natural_language_query', header: 'Question', accessor: 'natural_language_query', className: 'min-w-64 max-w-md whitespace-normal font-medium' },
+    { id: 'generated_sql', header: 'Generated SQL', accessor: 'generated_sql', className: 'min-w-80 max-w-xl whitespace-normal font-mono text-xs' },
+    { id: 'status', header: 'Status', accessor: 'status', className: 'w-28' },
+    { id: 'created_at', header: 'Created', accessor: (item) => item.created_at ? new Date(item.created_at).toLocaleString() : '—', className: 'w-48 whitespace-nowrap' },
   ], []);
 
   if (!isMounted) return null;
   if (!isAuthenticated) return <AuthPage />;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <Header />
-      <main className="flex-1 p-8 flex flex-col max-w-7xl mx-auto w-full">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Generation Feed</h1>
-          <p className="text-muted-foreground">Full history of generated SQL intents.</p>
-        </div>
-        <DataTable
-          data={history}
-          columns={historyColumns}
-          getRowId={(item) => item.id}
-          loading={loading}
-          searchPlaceholder="Search history..."
-          emptyTitle="No generated SQL history"
-          emptyDescription="Generated SQL requests will appear here."
-          pageSize={20}
-        />
-      </main>
-    </div>
+    <AuraSqlPage title="Query history" description="AuraSQL questions and generated statements stay separate from every other application history.">
+      {error ? <p role="alert" className="mb-4 border-y border-rose-500/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-700 dark:text-rose-300">{error}</p> : null}
+      <DataTable data={history} columns={columns} getRowId={(item) => item.id} loading={loading} searchPlaceholder="Search AuraSQL history" emptyTitle="No query history" emptyDescription="Your first generated statement will appear here." pageSize={20} className="bg-background/88 backdrop-blur-xl" />
+    </AuraSqlPage>
   );
 }

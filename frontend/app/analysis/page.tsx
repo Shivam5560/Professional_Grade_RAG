@@ -1,11 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { BarChart3, FileSpreadsheet, RotateCcw, Settings2, StopCircle } from "lucide-react";
 import { useReducer, useState } from "react";
-import { BarChart3, History, Play, Upload } from "lucide-react";
-import { PageShell } from "@/components/layout/PageShell";
-import { DataAnalystWorkspace } from "@/components/studios/data-analyst/DataAnalystWorkspace";
-import { StudioPanel, StatusPill } from "@/components/studios/StudioPrimitives";
+
+import { AnalysisRunCanvas } from "@/components/analysis/AnalysisRunCanvas";
+import { FileDropzone } from "@/components/analysis/FileDropzone";
+import { ActionDock } from "@/components/shell/ActionDock";
+import { CanvasHeader } from "@/components/shell/CanvasHeader";
+import { ContextRibbon } from "@/components/shell/ContextRibbon";
+import { FocusCanvas } from "@/components/shell/FocusCanvas";
+import { Inspector } from "@/components/shell/Inspector";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { dataAnalystClient } from "@/lib/studios/data-analyst/client";
@@ -48,6 +53,9 @@ export default function AnalysisStudioPage() {
   const [computations, setComputations] = useState<Computation[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [limitations, setLimitations] = useState<string[]>([]);
+  const [guardrailsOpen, setGuardrailsOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const hasRun = Boolean(state.activeRun);
 
   async function start() {
     if (!file || question.trim().length < 3) return;
@@ -55,7 +63,10 @@ export default function AnalysisStudioPage() {
     try {
       const snapshot = await dataAnalystClient.createDataset(file);
       dispatch({ type: "profile-loaded", profile: normalizeProfile(snapshot.profile) });
-      const response = await dataAnalystClient.createRun({ snapshot_id: snapshot.snapshot_id, question: question.trim() }, crypto.randomUUID());
+      const response = await dataAnalystClient.createRun(
+        { snapshot_id: snapshot.snapshot_id, question: question.trim() },
+        crypto.randomUUID(),
+      );
       const run = { ...response.run, question: response.run.question ?? question.trim() };
       dispatch({ type: "run-loaded", run });
       setPlan(normalizePlan(response.plan, run.state));
@@ -74,23 +85,127 @@ export default function AnalysisStudioPage() {
 
   async function cancel() {
     if (!state.activeRun) return;
-    try { await dataAnalystClient.cancelRun(state.activeRun.id); } finally { dispatch({ type: "cancelled", runId: state.activeRun.id }); }
+    try {
+      await dataAnalystClient.cancelRun(state.activeRun.id);
+    } finally {
+      dispatch({ type: "cancelled", runId: state.activeRun.id });
+    }
   }
 
-  return <PageShell title="Data Analyst Studio" eyebrow="Evidence-first analytics" description="Profile the dataset, inspect the chosen methods, and trace every published number to deterministic computation evidence." maxWidth="full" actions={<div className="flex gap-2"><Button asChild variant="outline"><Link href="/analysis/history"><History className="mr-2 h-4 w-4" />Run history</Link></Button>{state.activeRun && ["queued", "running"].includes(state.activeRun.state) ? <Button onClick={cancel} variant="destructive">Cancel run</Button> : null}</div>}>
-    <div className="mb-5 grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
-      <StudioPanel title="Start a governed analysis" description="CSV snapshots are immutable. Questions should name the decision or relationship you need to understand.">
-        <label className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-4 hover:border-primary/40">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-background"><Upload className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{file?.name ?? "Choose a CSV dataset"}</span><span className="text-xs text-muted-foreground">UTF-8 CSV · maximum limits are enforced by the server</span></span><input className="sr-only" type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-        </label>
-        <Textarea className="mt-3 min-h-24 resize-none" aria-label="Analysis question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Which factors are associated with higher customer retention, and how stable is the evidence?" />
-        {state.error ? <p className="mt-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">{state.error}</p> : null}
-        <Button className="mt-3 w-full" disabled={!file || question.trim().length < 3 || state.loading} onClick={start}>{state.loading ? <><span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />Running verified workflow</> : <><Play className="mr-2 h-4 w-4" />Profile and analyze</>}</Button>
-      </StudioPanel>
-      <div className="rounded-xl border border-border bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Run contract</p><h2 className="mt-1 text-lg font-semibold">Reproducible by construction</h2></div>{state.activeRun ? <StatusPill state={state.activeRun.state} /> : <BarChart3 className="h-5 w-5 text-[hsl(var(--data))]" />}</div><div className="mt-5 grid gap-3 sm:grid-cols-3">{[["Profile", "Types, missingness, identifiers, sensitive fields"], ["Compute", "Registered methods, assumptions, versions, digests"], ["Verify", "Evidence-linked claims, limitations, no false causality"]].map(([title, body], index) => <div className="rounded-lg border border-border bg-muted/20 p-4" key={title}><span className="font-mono text-[10px] text-muted-foreground">0{index + 1}</span><p className="mt-2 text-xs font-semibold">{title}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{body}</p></div>)}</div></div>
-    </div>
-    <DataAnalystWorkspace profile={state.profile} run={state.activeRun} plan={plan} computations={computations} findings={findings} limitations={limitations} />
-  </PageShell>;
+  function resetBrief() {
+    setFile(null);
+    setQuestion("");
+    setPlan([]);
+    setComputations([]);
+    setFindings([]);
+    setLimitations([]);
+    window.location.assign("/analysis");
+  }
+
+  return (
+    <FocusCanvas ariaLabel="Analysis workspace">
+      <CanvasHeader
+        actions={
+          !hasRun ? (
+            <Button onClick={() => setGuardrailsOpen(true)} size="sm" variant="outline">
+              <Settings2 aria-hidden="true" className="mr-2 h-4 w-4" />
+              Method guardrails
+            </Button>
+          ) : undefined
+        }
+        description={hasRun ? state.activeRun?.question : "Bring one dataset and one decision. The studio profiles, computes, and verifies every published signal."}
+        eyebrow="Data Analyst Studio"
+        status={hasRun ? <span className="text-[11px] font-medium text-[hsl(var(--data))]">Live workspace</span> : undefined}
+        title={hasRun ? "Analysis in motion" : "See the signal inside the noise."}
+      />
+
+      <ContextRibbon label="Analysis context">
+        <ContextItem icon={<FileSpreadsheet className="h-3.5 w-3.5" />} label={file?.name ?? (hasRun ? "Immutable snapshot" : "No dataset selected")} />
+        <ContextItem icon={<BarChart3 className="h-3.5 w-3.5" />} label="Evidence-linked output" />
+        <ContextItem label="No causal overclaiming" />
+      </ContextRibbon>
+
+      <AnimatePresence mode="wait">
+        {!hasRun ? (
+          <motion.section
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-auto flex w-full max-w-4xl flex-1 items-center py-8 sm:py-12 lg:py-16"
+            exit={{ opacity: 0, y: reduceMotion ? 0 : -12 }}
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 16 }}
+            key="brief"
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="w-full border-y border-border/70 bg-background/62 px-5 py-6 backdrop-blur-xl sm:px-8 sm:py-9">
+              <div className="grid gap-7 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] lg:gap-10">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-muted-foreground">01 · Dataset</p>
+                  <h2 className="mt-2 text-xl font-semibold">Choose the evidence.</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">A snapshot is created before analysis so results remain reproducible.</p>
+                  <div className="mt-5">
+                    <FileDropzone onFileSelect={setFile} selectedFile={file} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-muted-foreground">02 · Objective</p>
+                  <label className="mt-2 block text-xl font-semibold" htmlFor="analysis-question">Name the decision.</label>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">Ask for a relationship, comparison, trend, or forecast that can be tested against the data.</p>
+                  <Textarea
+                    aria-label="Analysis question"
+                    className="mt-5 min-h-40 resize-none border-border/80 bg-background/75 text-base leading-7 shadow-none focus-visible:ring-[hsl(var(--data))]"
+                    id="analysis-question"
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="Which factors are associated with higher customer retention, and how stable is the evidence?"
+                    value={question}
+                  />
+                </div>
+              </div>
+              {state.error ? <p className="mt-6 border-l-2 border-destructive bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">{state.error}</p> : null}
+            </div>
+          </motion.section>
+        ) : (
+          <motion.div animate={{ opacity: 1 }} initial={{ opacity: 0 }} key="run">
+            <AnalysisRunCanvas
+              computations={computations}
+              findings={findings}
+              limitations={limitations}
+              plan={plan}
+              profile={state.profile}
+              recoveryAction={<Button onClick={resetBrief} variant="outline"><RotateCcw aria-hidden="true" className="mr-2 h-4 w-4" />New brief</Button>}
+              run={state.activeRun}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!hasRun ? (
+        <ActionDock
+          primary={<Button disabled={!file || question.trim().length < 3 || state.loading} onClick={start}>{state.loading ? "Preparing analysis…" : "Profile and analyze"}</Button>}
+          secondary={<span className="hidden text-xs text-muted-foreground sm:inline">CSV snapshot · verified methods</span>}
+        />
+      ) : state.activeRun && ["queued", "running"].includes(state.activeRun.state) ? (
+        <ActionDock primary={<Button onClick={cancel} variant="destructive"><StopCircle aria-hidden="true" className="mr-2 h-4 w-4" />Cancel run</Button>} />
+      ) : null}
+
+      <Inspector open={guardrailsOpen} onOpenChange={setGuardrailsOpen} title="Method guardrails">
+        <div className="space-y-7">
+          {[
+            ["Profile before compute", "Types, missingness, identifiers, and sensitive fields are inspected before a method can run."],
+            ["Registered methods only", "Every computation records its method version, assumptions, parameters, and evidence identifier."],
+            ["Verified language", "Claims distinguish observations, associations, predictions, and hypotheses. Association is never presented as causation."],
+          ].map(([title, body], index) => (
+            <section className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b border-border pb-6" key={title}>
+              <span className="font-mono text-[10px] text-[hsl(var(--data))]">0{index + 1}</span>
+              <div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p></div>
+            </section>
+          ))}
+        </div>
+      </Inspector>
+    </FocusCanvas>
+  );
+}
+
+function ContextItem({ icon, label }: { icon?: React.ReactNode; label: string }) {
+  return <span className="inline-flex h-8 items-center gap-2 border border-border/70 bg-background/65 px-3 text-xs text-muted-foreground">{icon}{label}</span>;
 }
 
 function normalizeProfile(profile: NormalizableDatasetProfile): DatasetProfile {

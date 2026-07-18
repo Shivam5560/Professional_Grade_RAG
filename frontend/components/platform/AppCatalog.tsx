@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAppCatalog } from "@/lib/apps/useAppCatalog";
 
 const stateFrame =
-  "relative flex min-h-[calc(100svh-2rem)] w-full items-center overflow-hidden px-5 pb-24 pt-16 md:pl-[7.5rem] md:pr-12 md:py-16";
+  "relative flex min-h-[calc(100svh-2rem)] w-full items-center overflow-hidden px-5 pb-24 pt-16 md:px-12 md:py-16";
 
 export function AppCatalog(): JSX.Element {
   const catalog = useAppCatalog();

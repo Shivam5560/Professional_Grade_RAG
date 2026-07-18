@@ -4,6 +4,7 @@ import {
   Database,
   FileText,
   History,
+  Layers3,
   Settings2,
 } from "lucide-react";
 
@@ -61,9 +62,14 @@ const presentations: readonly ApplicationPresentation[] = [
     },
     headline: "Ask the business. Inspect the truth.",
     localDestinations: [
-      destination("Query", "/aurasql", Database),
+      {
+        ...destination("Query", "/aurasql", Database),
+        matches: (pathname) => pathname === "/aurasql" || pathname === "/aurasql/query",
+      },
       destination("History", "/aurasql/history", History),
       destination("Connections", "/aurasql/connections", Settings2),
+      destination("Contexts", "/aurasql/contexts", Layers3),
+      destination("Settings", "/aurasql/settings", Settings2),
     ],
   },
   {
@@ -101,7 +107,6 @@ const presentations: readonly ApplicationPresentation[] = [
     headline: "Turn verified work into opportunity.",
     localDestinations: [
       destination("Workspace", "/career", Briefcase),
-      destination("Resumes", "/nexus/resumes", FileText),
       destination("Settings", "/career?panel=settings", Settings2),
     ],
   },

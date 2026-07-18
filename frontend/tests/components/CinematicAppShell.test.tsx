@@ -40,6 +40,7 @@ it("shows application navigation and only the active application's local submenu
     screen.getByRole("navigation", { name: "AuraSQL sections" }),
   ).toBeInTheDocument();
   expect(screen.getByText("AuraSQL work")).toBeInTheDocument();
+  expect(screen.getByTestId("shell-content")).toHaveClass("md:pl-20");
   expect(
     screen.queryByRole("link", { name: "Analysis history" }),
   ).not.toBeInTheDocument();

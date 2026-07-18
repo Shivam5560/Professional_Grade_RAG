@@ -1,10 +1,12 @@
 "use client";
 
 import { useReducer, useState } from "react";
-import { Briefcase, FileUp, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Briefcase, Check, FileUp, PanelRightOpen, ShieldCheck, Sparkles } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
+import { ActionDock } from "@/components/shell/ActionDock";
+import { ContextRibbon } from "@/components/shell/ContextRibbon";
+import { Inspector } from "@/components/shell/Inspector";
 import { CareerWorkspace } from "@/components/studios/career/CareerWorkspace";
-import { StudioPanel, StatusPill } from "@/components/studios/StudioPrimitives";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -35,6 +37,7 @@ export default function CareerStudioPage() {
   const [roleId, setRoleId] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [candidateEdges, setCandidateEdges] = useState<CandidateEdgeInput[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   async function ingest() {
     if (!source) return;
@@ -75,23 +78,42 @@ export default function CareerStudioPage() {
     catch (reason) { dispatch({ type: "failed", message: message(reason) }); }
   }
 
-  return <PageShell title="Career Studio" eyebrow="Truth-preserving career intelligence" description="Turn source-backed career claims into role coverage and publication-ready drafts without inventing experience." maxWidth="full">
-    <div className="mb-5 rounded-xl border border-border bg-card px-5 py-4 shadow-sm"><div className="flex flex-wrap items-center gap-2">{stages.map((stage, index) => { const current = stages.indexOf(state.stage); return <div className="flex items-center gap-2" key={stage}><span className={`flex h-7 w-7 items-center justify-center rounded-full border font-mono text-[10px] ${index <= current ? "border-primary bg-primary text-primary-foreground" : "border-border bg-muted text-muted-foreground"}`}>{index + 1}</span><span className={`hidden text-xs font-medium capitalize sm:inline ${index <= current ? "text-foreground" : "text-muted-foreground"}`}>{stage}</span>{index < stages.length - 1 ? <span className="h-px w-4 bg-border md:w-8" /> : null}</div>; })}</div></div>
-    <div className="mb-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-      <StudioPanel title="1 · Build verified evidence" description="Upload a resume or supporting document, then review every inferred claim before it can be published." action={<StatusPill state={state.claims.length ? "verified" : "pending"} />}>
-        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-4 hover:border-primary/40"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-background"><FileUp className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{source?.name ?? "Choose a structured evidence source"}</span><span className="text-xs text-muted-foreground">JSON claim bundle · exact source spans and verification status required</span></span><input className="sr-only" type="file" accept=".json,application/json" onChange={(event) => setSource(event.target.files?.[0] ?? null)} /></label>
-        <Button className="mt-3 w-full" disabled={!source || state.loading} onClick={ingest}><ShieldCheck className="mr-2 h-4 w-4" />Extract evidence graph</Button>
-      </StudioPanel>
-      <StudioPanel title="2 · Define the target role" description="Requirements remain typed as mandatory, preferred, responsibility, seniority, education, and constraints." action={<Briefcase className="h-5 w-5 text-[hsl(var(--data))]" />}>
-        <Textarea aria-label="Typed role requirements" className="min-h-28 resize-none font-mono text-xs" value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} placeholder={'{"role_id":"staff-data-lead","title":"Staff Data Lead","requirements":[...],"candidate_edges":[...]}' } />
-        <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Use typed requirement JSON from the role intake pipeline. Free-form extraction is intentionally unavailable until a verified parser is connected.</p>
-        <div className="mt-3 flex flex-wrap gap-2"><Button disabled={jobDescription.trim().length < 10 || state.loading} onClick={analyzeRole}>Load requirements</Button><Button variant="outline" disabled={!roleId || !state.claims.some((claim) => claim.status === "verified") || state.loading} onClick={match}>Build one-to-one coverage</Button><Button variant="outline" disabled={!matchId || state.loading} onClick={draft}><Sparkles className="mr-2 h-4 w-4" />Create evidence draft</Button></div>
-      </StudioPanel>
-    </div>
-    {state.error ? <p className="mb-5 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">{state.error}</p> : null}
-    <CareerWorkspace claims={state.claims} requirements={state.requirements} matches={state.matches} gaps={state.gaps} draft={state.draft} approvals={state.approvals} />
+  const current = stages.indexOf(state.stage);
+  const activeAction = state.stage === "sources"
+    ? <Button disabled={!source || state.loading} onClick={ingest}><ShieldCheck className="mr-2 h-4 w-4" />Extract evidence</Button>
+    : state.stage === "requirements"
+      ? <Button disabled={jobDescription.trim().length < 10 || state.loading} onClick={analyzeRole}><Briefcase className="mr-2 h-4 w-4" />Load requirements</Button>
+      : state.stage === "coverage"
+        ? <Button disabled={!roleId || !state.claims.some((claim) => claim.status === "verified") || state.loading} onClick={match}>Build coverage<ArrowRight className="ml-2 h-4 w-4" /></Button>
+        : state.stage === "draft"
+          ? <Button disabled={!matchId || state.loading} onClick={draft}><Sparkles className="mr-2 h-4 w-4" />Create draft</Button>
+          : <Button disabled>Awaiting approval</Button>;
+
+  return <PageShell title="Career Studio" eyebrow="Truth-preserving career intelligence" description="Move from verified evidence to a role-ready draft, one decision at a time." maxWidth="full">
+    <ContextRibbon label="Journey">{stages.map((stage, index) => <span className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium capitalize ${index === current ? "bg-foreground text-background" : index < current ? "text-foreground" : "text-muted-foreground"}`} key={stage}>{index < current ? <Check className="h-3.5 w-3.5" /> : <span className="font-mono text-[10px]">0{index + 1}</span>}{stage}</span>)}</ContextRibbon>
+    <main className="mx-auto flex min-h-[60svh] w-full max-w-5xl flex-col justify-center py-10 sm:py-16">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase text-muted-foreground">Step {current + 1} of {stages.length}</p>
+        <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">{stageTitle(state.stage)}</h2>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{stageDescription(state.stage)}</p>
+      </div>
+      <div className="mt-8 max-w-3xl border-y border-border/70 py-6">
+        {state.stage === "sources" ? <label className="group flex min-h-40 cursor-pointer items-center gap-5 border border-dashed border-border px-5 transition-colors hover:border-foreground/40"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted"><FileUp className="h-5 w-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-semibold">{source?.name ?? "Choose structured evidence"}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">Upload a JSON claim bundle with exact source spans and verification status.</span></span><input className="sr-only" type="file" accept=".json,application/json" onChange={(event) => setSource(event.target.files?.[0] ?? null)} /></label> : null}
+        {state.stage === "requirements" ? <Textarea aria-label="Typed role requirements" className="min-h-52 resize-none border-0 bg-muted/35 p-5 font-mono text-xs shadow-none focus-visible:ring-1" value={jobDescription} onChange={(event) => setJobDescription(event.target.value)} placeholder={'{"role_id":"staff-data-lead","title":"Staff Data Lead","requirements":[...],"candidate_edges":[...]}' } /> : null}
+        {state.stage === "coverage" ? <StageSummary value={`${state.claims.filter((claim) => claim.status === "verified").length} verified claims`} detail={`${state.requirements.length} role requirements are ready for one-to-one matching.`} /> : null}
+        {state.stage === "draft" ? <StageSummary value={`${state.matches.length} supported matches`} detail={`${state.gaps.length} truthful gaps remain visible and will not be fabricated.`} /> : null}
+        {state.stage === "approve" ? <StageSummary value={state.draft ? `Revision ${state.draft.revision} ready` : "Draft pending"} detail="Review every assertion and its source before publication." /> : null}
+      </div>
+      {state.error ? <p className="mt-5 max-w-3xl border-l-2 border-destructive py-2 pl-4 text-sm text-destructive">{state.error}</p> : null}
+    </main>
+    <ActionDock secondary={<Button variant="ghost" onClick={() => setReviewOpen(true)}><PanelRightOpen className="mr-2 h-4 w-4" />Review details</Button>} primary={activeAction} />
+    <Inspector open={reviewOpen} onOpenChange={setReviewOpen} title="Career evidence review"><CareerWorkspace claims={state.claims} requirements={state.requirements} matches={state.matches} gaps={state.gaps} draft={state.draft} approvals={state.approvals} /></Inspector>
   </PageShell>;
 }
+
+function StageSummary({ value, detail }: { value: string; detail: string }) { return <div className="flex items-start gap-4"><span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[hsl(var(--data))]" /><div><p className="text-lg font-semibold">{value}</p><p className="mt-1 text-sm text-muted-foreground">{detail}</p></div></div>; }
+function stageTitle(stage: typeof stages[number]) { return ({ sources: "Start with evidence you can prove", requirements: "Define the role you are targeting", coverage: "Connect evidence to requirements", draft: "Build an evidence-constrained draft", approve: "Review before publication" } as const)[stage]; }
+function stageDescription(stage: typeof stages[number]) { return ({ sources: "Career Studio only works from traceable claims, so every future bullet remains defensible.", requirements: "Load typed requirements and candidate edges for the exact role you want to evaluate.", coverage: "Each verified claim can support at most one requirement, keeping the match honest and readable.", draft: "Generate language only from supported matches while preserving all uncovered gaps.", approve: "The final artifact remains blocked until its assertions and sources receive human approval." } as const)[stage]; }
 
 function normalizeClaimRevisions(revisions: CareerClaimRevisionWire[]): CareerClaim[] {
   return revisions.map((revision) => {
