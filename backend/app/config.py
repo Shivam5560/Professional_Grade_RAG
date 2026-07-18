@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     aurasql_table_name: str = Field(default="aurasql_embeddings", alias="AURASQL_TABLE_NAME")
     nexus_resume_table_name: str = Field(default="nexus_resume_embeddings", alias="NEXUS_RESUME_TABLE_NAME")
 
+    # Messaging Configuration
+    rabbitmq_url: str = Field(
+        default="amqp://guest:guest@localhost:5672/",
+        alias="RABBITMQ_URL",
+    )
+
     # Auth & Encryption Configuration
     jwt_secret: str = Field(default="dev-secret", alias="JWT_SECRET")
     jwt_refresh_secret: str = Field(default="dev-refresh-secret", alias="JWT_REFRESH_SECRET")

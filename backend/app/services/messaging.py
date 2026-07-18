@@ -3,11 +3,11 @@ import asyncio
 import aio_pika
 from fastapi import WebSocket
 from typing import Dict, List, Any
+
+from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-RABBITMQ_URL = "amqp://guest:guest@localhost:5672/"
 
 class ConnectionManager:
     def __init__(self):
@@ -40,7 +40,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def get_rabbitmq_connection() -> aio_pika.RobustConnection:
-    return await aio_pika.connect_robust(RABBITMQ_URL)
+    return await aio_pika.connect_robust(settings.rabbitmq_url)
 
 async def publish_message(queue_name: str, message: dict):
     connection = await get_rabbitmq_connection()
@@ -75,4 +75,3 @@ async def consume_notifications():
         except Exception as e:
             logger.error(f"Error in consume_notifications: {e}")
             await asyncio.sleep(5)  # Retry after 5 seconds
-
