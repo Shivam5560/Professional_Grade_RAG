@@ -813,7 +813,7 @@ function AuraSqlQueryPageContent() {
                   aria-label="Generated SQL"
                   value={latestSqlMessage.editedSql || latestSqlMessage.sql}
                   onChange={(event) => setChatMessages((previous) => previous.map((message) => message.id === latestSqlMessage.id ? { ...message, editedSql: event.target.value } : message))}
-                  className="min-h-40 resize-y rounded-none border-0 bg-transparent p-4 font-mono text-xs leading-6 shadow-none focus-visible:ring-0"
+                  className="min-h-40 max-h-80 resize-none overflow-y-auto rounded-none border-0 bg-transparent p-4 font-mono text-xs leading-6 shadow-none focus-visible:ring-0"
                 />
                 <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">

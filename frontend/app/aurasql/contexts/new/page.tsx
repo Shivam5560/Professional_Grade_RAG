@@ -140,13 +140,14 @@ function NewAuraSqlContextPageContent() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Tables</Label>
+                  <div className="flex items-center justify-between gap-3"><Label>Tables</Label><span aria-live="polite" className="rounded-full border border-border bg-workspace-inset px-2.5 py-1 text-xs font-medium">{selectedTables.size} selected</span></div>
+                  {selectedTableList.length ? <p className="line-clamp-2 text-xs text-muted-foreground">Selected: {selectedTableList.join(', ')}</p> : <p className="text-xs text-muted-foreground">Choose only the tables needed for this context.</p>}
                   {loadingTables ? (
                     <p className="text-sm text-muted-foreground">Loading tables...</p>
                   ) : tables.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No tables found.</p>
                   ) : (
-                    <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border border-border p-2 md:grid-cols-2">
                       {tables.map((table) => (
                         <label key={table} className="flex items-center gap-2 rounded-lg border border-border bg-workspace-inset px-3 py-2">
                           <input

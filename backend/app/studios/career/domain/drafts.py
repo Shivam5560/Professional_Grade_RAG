@@ -27,7 +27,7 @@ class DraftTransformation(StrEnum):
 
 
 REGISTERED_PUBLICATION_TRANSFORMATIONS = frozenset(
-    {DraftTransformation.VERBATIM}
+    {DraftTransformation.VERBATIM, DraftTransformation.COMPRESSED}
 )
 
 

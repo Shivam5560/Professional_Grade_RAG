@@ -65,7 +65,6 @@ class ApiClient {
         descriptions: [
           ...(Array.isArray(p.descriptions) ? p.descriptions.filter(Boolean) : []),
           ...(typeof p.description === 'string' && p.description.trim() ? [p.description.trim()] : []),
-          p.technologies ? `Technologies: ${p.technologies}` : '',
         ].filter(Boolean),
         technologies: p.technologies || '',
         link: p.link || '',

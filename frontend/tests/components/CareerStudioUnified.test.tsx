@@ -6,16 +6,18 @@ import { ResumeIntake } from "@/components/studios/career/ResumeIntake";
 import { TailorWorkspace } from "@/components/studios/career/TailorWorkspace";
 import { ResumeCreator } from "@/components/studios/career/ResumeCreator";
 
-const { ingestStoredResume, decideClaim, prepareTailoring } = vi.hoisted(() => ({
+const { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval } = vi.hoisted(() => ({
   ingestStoredResume: vi.fn().mockResolvedValue({ source: { id: "source-1" }, claims: [{ logical_claim_id: "claim-1", claim: { object: { value: "Python" }, predicate: "has-skill", verification_status: "inferred" } }] }),
   decideClaim: vi.fn().mockResolvedValue({ logical_claim_id: "claim-1", claim: { object: { value: "Python" }, predicate: "has-skill", verification_status: "verified" } }),
   prepareTailoring: vi.fn().mockResolvedValue({ approval: { id: "approval-1", status: "pending" }, draft: { id: "draft-1", bullets: [] }, match: { unmatched_requirements: [] } }),
+  createSource: vi.fn().mockResolvedValue({ source: { id: "source-json" }, claims: [] }),
+  decideApproval: vi.fn().mockResolvedValue({ id: "approval-1", status: "revision_requested" }),
 }));
 
 vi.mock("@/lib/api", () => ({
   apiClient: {},
 }));
-vi.mock("@/lib/studios/career/client", () => ({ careerStudioClient: { ingestStoredResume, decideClaim, prepareTailoring } }));
+vi.mock("@/lib/studios/career/client", () => ({ careerStudioClient: { ingestStoredResume, decideClaim, prepareTailoring, createSource, decideApproval } }));
 
 it("presents score, explicit tailor, and create as separate Career workflows", async () => {
   const user = userEvent.setup();
@@ -33,13 +35,17 @@ it("presents score, explicit tailor, and create as separate Career workflows", a
 
 it("accepts normal resume files and keeps JSON under advanced import", async () => {
   const user = userEvent.setup();
-  render(<ResumeIntake file={null} onFileChange={() => undefined} />);
+  const onStructuredImport = vi.fn().mockResolvedValue(undefined);
+  render(<ResumeIntake file={null} onFileChange={() => undefined} onStructuredImport={onStructuredImport} />);
 
   expect(screen.getByLabelText("Upload resume")).toHaveAttribute("accept", ".pdf,.doc,.docx,.txt");
   expect(screen.queryByLabelText("Import structured JSON")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Advanced structured import" }));
-  expect(screen.getByLabelText("Import structured JSON")).toHaveAttribute("accept", ".json,application/json");
+  const input = screen.getByLabelText("Import structured JSON");
+  expect(input).toHaveAttribute("accept", ".json,application/json");
+  await user.upload(input, new File([JSON.stringify({ filename: "claims.json", claims: [{ id: "claim-1" }] })], "claims.json", { type: "application/json" }));
+  expect(onStructuredImport).toHaveBeenCalledWith(expect.objectContaining({ filename: "claims.json", claims: [{ id: "claim-1" }] }));
 });
 
 it("does not start tailoring until the reviewed plan is explicitly confirmed", async () => {
@@ -54,6 +60,11 @@ it("does not start tailoring until the reviewed plan is explicitly confirmed", a
   await user.click(await screen.findByRole("button", { name: "Verify" }));
   await user.click(screen.getByRole("button", { name: "Start tailoring" }));
   expect(prepareTailoring).toHaveBeenCalledWith("source-1", "A complete senior data engineering job description");
+
+  await user.type(await screen.findByLabelText("Revision note"), "Focus on platform ownership");
+  await user.click(screen.getByRole("button", { name: "Request changes" }));
+  expect(decideApproval).toHaveBeenCalledWith("approval-1", "revise", "Focus on platform ownership");
+  expect(await screen.findByRole("button", { name: "Start tailoring" })).toBeVisible();
 });
 
 it("scopes resume creator autosave to the signed-in owner", async () => {

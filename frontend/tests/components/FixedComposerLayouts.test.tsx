@@ -18,4 +18,5 @@ it("keeps the AuraSQL question composer visible while query output scrolls", () 
   expect(queryPage).toContain('data-fixed-composer="aurasql"');
   expect(queryPage).toContain('data-scroll-owner="query-results"');
   expect(queryPage).toMatch(/data-fixed-composer="aurasql"[\s\S]{0,400}sticky/);
+  expect(queryPage).toContain("max-h-80 resize-none overflow-y-auto");
 });

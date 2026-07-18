@@ -193,12 +193,18 @@ class LatexResumeGenerator:
             return ""
         out = "\\section{Education}\n  \\resumeSubHeadingListStart\n"
         for edu in edus:
+            detail = " --- ".join(
+                item for item in (
+                    self._escape(edu.get("location", "")),
+                    f"GPA {self._escape(edu.get('gpa', ''))}" if edu.get("gpa") else "",
+                ) if item
+            )
             out += (
                 f"    \\resumeSubheading\n"
                 f"      {{{self._escape(edu.get('institution', ''))}}}"
                 f"{{{self._escape(edu.get('graduation_date', ''))}}}\n"
                 f"      {{{self._escape(edu.get('degree', ''))}}}"
-                f"{{{self._escape(edu.get('gpa', ''))}}}\n"
+                f"{{{detail}}}\n"
             )
         out += "  \\resumeSubHeadingListEnd"
         return out
@@ -256,9 +262,11 @@ class LatexResumeGenerator:
             name = self._escape(record.get("name", ""))
             if not name:
                 continue
+            link = self._escape_url(record.get("link", ""))
+            display_name = f"\\href{{{link}}}{{{name}}}" if link else name
             details = [self._escape(record.get(key, "")) for key in ("issuer", "date", "proficiency")]
             suffix = " --- ".join(item for item in details if item)
-            items.append(f"  \\item \\textbf{{{name}}}" + (f" --- {suffix}" if suffix else ""))
+            items.append(f"  \\item \\textbf{{{display_name}}}" + (f" --- {suffix}" if suffix else ""))
         if not items:
             return ""
         return f"\\section{{{self._escape(title)}}}\n\\begin{{itemize}}\n" + "\n".join(items) + "\n\\end{itemize}"

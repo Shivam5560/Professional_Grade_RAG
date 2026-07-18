@@ -212,7 +212,7 @@ def test_structured_ingestion_claim_audit_role_match_and_approval_gated_publish(
     assert published_body["run"]["state"] == "succeeded"
     assert published_body["artifact"]["evidence_ids"] == [claim_id]
     assert all(
-        bullet["transformation"] == "verbatim"
+        bullet["transformation"] == "compressed"
         for bullet in published_body["draft"]["bullets"]
     )
 

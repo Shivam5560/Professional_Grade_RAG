@@ -22,6 +22,14 @@ it("does not use browser-native workflow navigation or dialogs", () => {
   }
 });
 
+it("bounds large schema lists and keeps the selected-table summary visible", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "app/aurasql/contexts/new/page.tsx"), "utf8");
+  expect(source).toContain("max-h-72");
+  expect(source).toContain("overflow-y-auto");
+  expect(source).toContain("{selectedTables.size} selected");
+  expect(source).toContain("Selected: {selectedTableList.join(', ')}");
+});
+
 it("names a selected table context inside an accessible product dialog", async () => {
   const user = userEvent.setup();
   const onSave = vi.fn();

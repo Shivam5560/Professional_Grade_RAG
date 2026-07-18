@@ -293,7 +293,6 @@ class CareerApplicationService:
             raise ValueError("draft is not truth-valid")
         if any(
             bullet.transformation not in REGISTERED_PUBLICATION_TRANSFORMATIONS
-            or bullet.transformation is not DraftTransformation.VERBATIM
             for bullet in saved.draft.bullets
         ):
             raise ValueError("draft uses an unregistered publication transformation")

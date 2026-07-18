@@ -149,9 +149,9 @@ def test_drafter_copies_selected_evidence_with_complete_provenance() -> None:
     assert len(draft.bullets) == 1
     assert draft.publication_ready is False
     assert draft.bullets[0].source_claim_ids == (python_claim.id,)
-    assert draft.bullets[0].transformation is DraftTransformation.VERBATIM
+    assert draft.bullets[0].transformation is DraftTransformation.COMPRESSED
     assert draft.bullets[0].before_text == ("Used Python in production.",)
-    assert draft.bullets[0].after_text == "Used Python in production."
+    assert draft.bullets[0].after_text == "Python."
     assert draft.bullets[0].asserted_facts == (fact(python_claim),)
 
 

@@ -10,6 +10,7 @@ def test_renders_extended_resume_sections() -> None:
             "phone": "+1 555 0100",
             "portfolio_url": "https://jane.dev",
             "summary": "Data leader focused on trustworthy systems.",
+            "education": [{"institution": "State University", "degree": "BS", "location": "Pune", "gpa": "3.8", "graduation_date": "2020"}],
             "experiences": [
                 {
                     "title": "Data Engineer",
@@ -19,7 +20,7 @@ def test_renders_extended_resume_sections() -> None:
                     "responsibilities": ["Built resilient pipelines"],
                 }
             ],
-            "certifications": [{"name": "AWS Solutions Architect", "issuer": "AWS", "date": "2025"}],
+            "certifications": [{"name": "AWS Solutions Architect", "issuer": "AWS", "date": "2025", "link": "https://example.com/credential"}],
             "awards": [{"name": "Engineering Excellence", "issuer": "Acme", "date": "2024"}],
             "languages": [{"name": "English", "proficiency": "Fluent"}],
             "custom_sections": [{"title": "Community", "items": ["Mentored new engineers"]}],
@@ -33,6 +34,8 @@ def test_renders_extended_resume_sections() -> None:
     assert "Languages" in latex
     assert "Community" in latex
     assert "Mentored new engineers" in latex
+    assert "Pune" in latex and "GPA 3.8" in latex
+    assert "https://example.com/credential" in latex
 
 
 def test_accepts_the_existing_resume_payload_aliases() -> None:

@@ -293,3 +293,4 @@ def test_tailoring_requires_reviewed_evidence_and_returns_an_approval_bound_draf
     assert prepared.json()["draft"]["bullets"]
     assert prepared.json()["approval"]["status"] == "pending"
     assert prepared.json()["draft"]["bullets"][0]["source_claim_ids"]
+    assert prepared.json()["draft"]["bullets"][0]["before_text"][0] != prepared.json()["draft"]["bullets"][0]["after_text"]
