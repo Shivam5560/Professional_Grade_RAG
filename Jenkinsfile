@@ -95,6 +95,10 @@ pipeline {
                         --label "org.opencontainers.image.source=${REPO_URL}" \
                         --tag "nexusmind-frontend:${IMAGE_TAG}" \
                         frontend
+                    docker run --rm \
+                        --entrypoint gunicorn \
+                        "nexusmind-backend:${IMAGE_TAG}" \
+                        --version
                 '''
             }
         }

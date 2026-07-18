@@ -1,6 +1,8 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
 
+ENV UV_HTTP_TIMEOUT=300
+
 WORKDIR /app
 
 # Install system build deps (only needed at build time, NOT copied to final image)
@@ -14,9 +16,11 @@ COPY requirements.txt .
 # Create venv and install all Python deps — no cache to keep layer small
 RUN uv venv /opt/venv && \
     uv pip install --no-cache --python /opt/venv -r requirements.txt && \
-    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /opt/venv -name "*.pyc" -delete && \
-    find /opt/venv -name "*.pyo" -delete
+    test -x /opt/venv/bin/gunicorn
+
+# Keep cleanup separate so it can never mask a failed dependency installation.
+RUN find /opt/venv -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
+    find /opt/venv -depth -type d -name "__pycache__" -empty -delete
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim
