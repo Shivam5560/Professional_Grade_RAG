@@ -59,7 +59,7 @@ export function CinematicBackdrop({ media }: CinematicBackdropProps) {
       </motion.div>
       <div
         data-testid="cinematic-veil"
-        className="absolute inset-0 bg-[linear-gradient(105deg,hsl(var(--background)/.98)_0%,hsl(var(--background)/.86)_48%,hsl(var(--background)/.48)_100%)]"
+        className="absolute inset-0 bg-[linear-gradient(105deg,hsl(var(--background))_0%,hsl(var(--background)/.98)_62%,hsl(var(--background)/.76)_100%)]"
       />
       <div className="absolute inset-0 bg-noise opacity-20 mix-blend-soft-light" />
     </div>

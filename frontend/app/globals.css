@@ -50,6 +50,10 @@
     --sidebar-ring: 148 89% 85%;
     --bubble-bot: 210 24% 99%;
     --bubble-user: 210 15% 90%;
+    --workspace: 210 20% 96%;
+    --workspace-raised: 210 24% 99%;
+    --workspace-inset: 210 15% 91%;
+    --overlay: 210 24% 99%;
     --radius: 0.75rem;
     color-scheme: light;
   }
@@ -92,6 +96,10 @@
     --sidebar-ring: 148 89% 85%;
     --bubble-bot: 225 14% 10%;
     --bubble-user: 225 12% 15%;
+    --workspace: 225 18% 6%;
+    --workspace-raised: 225 14% 10%;
+    --workspace-inset: 225 12% 14%;
+    --overlay: 225 14% 10%;
     color-scheme: dark;
   }
 }

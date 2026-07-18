@@ -55,6 +55,12 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        workspace: {
+          DEFAULT: "hsl(var(--workspace))",
+          raised: "hsl(var(--workspace-raised))",
+          inset: "hsl(var(--workspace-inset))",
+        },
+        overlay: "hsl(var(--overlay))",
       },
       borderRadius: {
         lg: "var(--radius)",

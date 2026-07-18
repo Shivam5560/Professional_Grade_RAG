@@ -19,7 +19,7 @@ export function FocusCanvas({
         className,
       )}
     >
-      <div className="mx-auto flex w-full max-w-[100rem] flex-col px-4 pb-28 pt-5 sm:px-6 md:min-h-[calc(100svh-2rem)] md:px-8 md:pb-8 md:pt-7 lg:px-10">
+      <div className="mx-auto flex w-full max-w-[100rem] flex-col bg-workspace px-4 pb-28 pt-5 sm:px-6 md:min-h-[calc(100svh-2rem)] md:px-8 md:pb-8 md:pt-7 lg:px-10">
         {children}
       </div>
     </main>

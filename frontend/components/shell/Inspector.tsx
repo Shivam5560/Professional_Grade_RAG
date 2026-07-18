@@ -74,7 +74,7 @@ export function Inspector({
       {open ? (
         <button
           aria-label={`Close ${title}`}
-          className="absolute inset-0 hidden cursor-default bg-background/35 backdrop-blur-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:block"
+          className="absolute inset-0 hidden cursor-default bg-background/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:block"
           onClick={() => onOpenChange(false)}
           type="button"
         />
@@ -83,7 +83,7 @@ export function Inspector({
         ref={panelRef}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="absolute inset-0 flex h-[100svh] w-full flex-col border-l border-border/70 bg-background/95 shadow-2xl backdrop-blur-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[min(30rem,42vw)]"
+        className="absolute inset-0 flex h-[100svh] w-full flex-col border-l border-border/70 bg-overlay shadow-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[min(30rem,42vw)]"
         hidden={!open}
         initial={false}
         animate={{ opacity: open ? 1 : 0, x: open ? 0 : 32 }}
