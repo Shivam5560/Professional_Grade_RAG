@@ -217,6 +217,7 @@ class CareerSpecialist:
         candidate_edges: tuple[CandidateEdge, ...],
         now: datetime,
         approval: ApprovalRequest | None = None,
+        refinement_note: str | None = None,
     ) -> CareerSpecialistResponse:
         if run.studio_id != "career":
             raise ValueError("CareerSpecialist requires a career studio run")
@@ -284,7 +285,7 @@ class CareerSpecialist:
             )
 
         match = match_requirements(requirements, claims, candidate_edges)
-        draft = draft_from_matches(match, requirements=requirements)
+        draft = draft_from_matches(match, requirements=requirements, refinement_note=refinement_note)
         is_approved_publication = approval is not None
         truth_result = validate_draft(
             draft,

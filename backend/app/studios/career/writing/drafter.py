@@ -13,7 +13,7 @@ from app.studios.career.domain.claims import ClaimPredicate
 from app.studios.career.domain.requirements import RoleRequirement
 
 
-def draft_from_matches(match_result: CareerMatchResult, *, requirements: tuple[RoleRequirement, ...] = ()) -> ResumeDraft:
+def draft_from_matches(match_result: CareerMatchResult, *, requirements: tuple[RoleRequirement, ...] = (), refinement_note: str | None = None) -> ResumeDraft:
     """Focus matched evidence into concise bullets without introducing facts."""
 
     claim_by_id = {claim.id: claim for claim in match_result.selected_evidence}
@@ -26,6 +26,7 @@ def draft_from_matches(match_result: CareerMatchResult, *, requirements: tuple[R
             claim.predicate,
             str(claim.object.value).strip() or source.exact_text,
             requirement_by_id.get(selected.requirement_id),
+            refinement_note=refinement_note,
         )
         bullets.append(
             DraftBullet(
@@ -48,19 +49,21 @@ def draft_from_matches(match_result: CareerMatchResult, *, requirements: tuple[R
     return ResumeDraft.create(bullets=tuple(bullets))
 
 
-def _role_focused_text(predicate: ClaimPredicate, value: str, requirement: RoleRequirement | None) -> str:
+def _role_focused_text(predicate: ClaimPredicate, value: str, requirement: RoleRequirement | None, *, refinement_note: str | None) -> str:
     """Create resume-style language using only supported and neutral words."""
+    prefix = "Focus: " if refinement_note else ""
     if predicate is ClaimPredicate.HAS_SKILL:
-        return f"Using {value.rstrip('.')}."
+        return f"{prefix}{value.rstrip('.')}." if refinement_note else f"Using {value.rstrip('.')}."
     if predicate is ClaimPredicate.WORKED_AT:
-        return f"At {value.rstrip('.')}."
+        return f"{prefix}At {value.rstrip('.')}."
     if predicate is ClaimPredicate.HELD_TITLE:
-        return f"As {value.rstrip('.')}."
+        return f"{prefix}As {value.rstrip('.')}."
     if requirement is not None and not re.search(r"\d", value):
         requirement_tokens = set(re.findall(r"[^\W\d_]+", requirement.description.lower()))
+        refinement_tokens = set(re.findall(r"[^\W\d_]+", (refinement_note or "").lower()))
         words = value.rstrip(".").split()
-        relevant = [word for word in words if re.sub(r"[^\w-]", "", word).lower() in requirement_tokens]
+        relevant = [word for word in words if re.sub(r"[^\w-]", "", word).lower() in (requirement_tokens | refinement_tokens)]
         remaining = [word for word in words if word not in relevant]
         if relevant and remaining:
-            return f"{' '.join(relevant)} — {' '.join(remaining)}."
-    return value.rstrip(".") + "."
+            return f"{prefix}{' '.join(relevant)} — {' '.join(remaining)}."
+    return f"{prefix}{value.rstrip('.')}."

@@ -60,6 +60,7 @@ _NEUTRAL_PROSE_TOKENS = frozenset(
         "during",
         "via",
         "per",
+        "focus",
     }
 )
 _UNIT_ALIAS_FAMILIES = (

@@ -245,6 +245,7 @@ class CareerApplicationService:
             requirements=requirements,
             candidate_edges=edges,
             now=now,
+            refinement_note=refinement_note,
         )
         if response.result.output is None or response.approval is None or response.match is None:
             raise ValueError("career specialist abstained before producing a draft")

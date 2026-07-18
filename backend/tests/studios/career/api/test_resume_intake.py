@@ -307,3 +307,4 @@ def test_tailoring_requires_reviewed_evidence_and_returns_an_approval_bound_draf
     assert refined.status_code == 201, refined.text
     assert refined.json()["supersedes_run_id"] == prepared.json()["run"]["id"]
     assert refined.json()["run"]["id"] != prepared.json()["run"]["id"]
+    assert refined.json()["draft"]["bullets"] != prepared.json()["draft"]["bullets"]
